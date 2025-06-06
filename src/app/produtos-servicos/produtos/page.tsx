@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -25,11 +24,9 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
 import { db, auth } from "@/lib/firebase";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
 import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import Link from 'next/link'; // Importado para manter funcionalidade que pode ter sido removida
 
-// Schema para validação do formulário
 const itemSchema = z.object({
   id: z.string().optional(),
   nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
@@ -142,8 +139,10 @@ export default function ProdutosServicosPage() {
   }, [user, toast, bypassAuth]);
 
   useEffect(() => {
-    fetchProdutosServicos();
-  }, [fetchProdutosServicos]);
+    if (user || bypassAuth) {
+      fetchProdutosServicos();
+    }
+  }, [fetchProdutosServicos, user, bypassAuth]);
 
 
   useEffect(() => {
@@ -253,10 +252,7 @@ export default function ProdutosServicosPage() {
 
   const handleExcluirItem = async (itemId: string) => {
     if (!user && !bypassAuth) return;
-    // Adicionar confirmação antes de excluir
-    const confirmDelete = window.confirm("Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.");
-    if (!confirmDelete) return;
-
+    
     setIsSubmitting(true);
     try {
       await deleteDoc(doc(db, "produtosServicos", itemId));
@@ -309,7 +305,6 @@ export default function ProdutosServicosPage() {
               <CardTitle>Produtos e Serviços</CardTitle>
               <CardDescription>Cadastre e gerencie seus produtos, serviços e respectivos estoques (para produtos).</CardDescription>
             </div>
-            {/* Botão "Adicionar Novo" que abre o modal */}
             <Button onClick={handleAbrirModalParaNovo}>
               <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo
             </Button>
@@ -325,7 +320,6 @@ export default function ProdutosServicosPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {isLoading && (!user && !bypassAuth) && <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>}
           {isLoading && (user || bypassAuth) && <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando itens...</p></div>}
           
           {showContent && (
@@ -426,8 +420,8 @@ export default function ProdutosServicosPage() {
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
                     <Select 
-                        onValueChange={(value: 'Produto' | 'Serviço') => { // Ensure value type
-                            field.onChange(value);
+                        onValueChange={(value) => {
+                            field.onChange(value as 'Produto' | 'Serviço'); // Cast to ensure type safety
                             if (value === 'Serviço') {
                                 form.setValue('custoUnitario', undefined); 
                                 form.setValue('quantidadeEstoque', undefined);
@@ -540,5 +534,4 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
-
     

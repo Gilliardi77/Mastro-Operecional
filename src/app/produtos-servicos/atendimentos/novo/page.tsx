@@ -1,4 +1,3 @@
-
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,7 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
@@ -293,15 +292,15 @@ export default function OrdemServicoPage() {
 
       try {
         const productionOrderData = {
-          agendamentoId: osDocRefId,
+          agendamentoId: osDocRefId, // Aqui usamos o ID da OS como referência
           clienteId: osDataToSave.clienteId,
           clienteNome: osDataToSave.clienteNome,
-          servicoNome: osDataToSave.descricao,
-          servicoId: null,
-          dataAgendamento: osDataToSave.dataEntrega,
-          status: "Pendente" as ProductionOrderStatusOSPage,
+          servicoNome: osDataToSave.descricao, // A descrição da OS se torna o "serviço" na produção
+          servicoId: null, // OS não tem um "serviçoId" de um catálogo pré-definido
+          dataAgendamento: osDataToSave.dataEntrega, // Data de entrega da OS é a data para produção
+          status: "Pendente" as ProductionOrderStatusOSPage, // Status inicial da produção
           progresso: 0,
-          observacoesAgendamento: osDataToSave.observacoes,
+          observacoesAgendamento: osDataToSave.observacoes, // Observações da OS
           userId: userIdToSave,
           criadoEm: Timestamp.now(),
           atualizadoEm: Timestamp.now(),
@@ -466,6 +465,7 @@ Enviado por: Meu Negócio App
 
     setIsSendingEmail(true);
     try {
+      // A URL da função será um placeholder até ser configurada.
       const functionUrl = "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/sendOrderEmail"; 
       if (functionUrl.includes("YOUR_REGION-YOUR_PROJECT_ID")) {
         console.warn("URL da função de e-mail é placeholder. O e-mail não será enviado de verdade.");
@@ -474,10 +474,12 @@ Enviado por: Meu Negócio App
         setIsSendingEmail(false);
         return;
       }
+      // O código abaixo só executaria se a URL fosse real.
       const response = await fetch(functionUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: recipientEmail, subject: emailSubject, htmlBody: emailHtmlBody, orderDetails: {  } }),
+        // O corpo do request precisaria ser ajustado para o que sua Cloud Function espera
+        body: JSON.stringify({ to: recipientEmail, subject: emailSubject, htmlBody: emailHtmlBody, orderDetails: { /* ... */ } }),
       });
 
       if (!response.ok) {
@@ -501,7 +503,7 @@ Enviado por: Meu Negócio App
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
 
-  if (!bypassAuth && !user && isLoadingClients && !isSaving && !isSavingNewClient) {
+  if (!bypassAuth && !user && isLoadingClients && !isSaving && !isSavingNewClient) { // Ajustado para !isLoadingClients
     return (
       <Card><CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent><p>Você precisa estar logado para criar Ordens de Serviço.</p><Button onClick={() => auth.signOut().then(() => {  window.location.href = '/login'; })} className="mt-4">Fazer Login</Button></CardContent>
@@ -606,5 +608,4 @@ Enviado por: Meu Negócio App
     </div>
   );
 }
-
     

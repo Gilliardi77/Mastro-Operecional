@@ -1,31 +1,31 @@
-
 'use client';
 
 import type { User as FirebaseUser } from 'firebase/auth';
-import React, { createContext, useState, useEffect, type ReactNode } from 'react';
-import { auth, getFirebaseInstances } from '@/lib/firebase'; // getFirebaseInstances para garantir init
+import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { getFirebaseInstances } from '@/lib/firebase';
 import { Loader2 } from 'lucide-react';
 
 export interface AuthContextType {
   user: FirebaseUser | null;
   isLoading: boolean;
-  isAuthenticating: boolean; // Adicionado para um estado de carregamento mais granular
+  isAuthenticating: boolean;
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// 1. Definir o Contexto aqui
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
+// 2. Definir o Provider aqui
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Carregamento inicial da verificação do estado de auth
-  const [isAuthenticating, setIsAuthenticating] = useState(true); // Estado para quando o Firebase está verificando
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticating, setIsAuthenticating] = useState(true);
 
   useEffect(() => {
-    // Garante que o Firebase seja inicializado antes de tentar usar 'auth'
-    const { auth: firebaseAuthInstance } = getFirebaseInstances(); 
+    const { auth: firebaseAuthInstance } = getFirebaseInstances();
 
     if (!firebaseAuthInstance) {
       console.warn("[AuthProvider] Instância do Firebase Auth não disponível na montagem. Verifique firebase.ts");
@@ -34,10 +34,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       return;
     }
     
-    console.log("[AuthProvider] Configurando onAuthStateChanged listener...");
     const unsubscribe = firebaseAuthInstance.onAuthStateChanged(
       (firebaseUser) => {
-        console.log("[AuthProvider] onAuthStateChanged disparado. Usuário:", firebaseUser ? firebaseUser.uid : 'null');
         setUser(firebaseUser);
         setIsLoading(false);
         setIsAuthenticating(false);
@@ -50,14 +48,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       }
     );
 
-    // Cleanup subscription on unmount
     return () => {
-      console.log("[AuthProvider] Limpando onAuthStateChanged listener.");
       unsubscribe();
     };
   }, []);
 
-  // Renderiza um loader enquanto o Firebase verifica o estado de autenticação
   if (isAuthenticating) {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background text-foreground">
@@ -73,3 +68,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     </AuthContext.Provider>
   );
 }
+
+// 3. Definir e exportar o hook useAuth aqui
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

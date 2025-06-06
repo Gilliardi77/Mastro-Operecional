@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -29,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
 import { useSearchParams } from 'next/navigation';
 import {
   collection,
@@ -475,5 +474,4 @@ Equipe Meu Negócio App
     </div>
   );
 }
-
     

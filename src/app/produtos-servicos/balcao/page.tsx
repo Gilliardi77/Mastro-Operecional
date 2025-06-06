@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
 import { db } from "@/lib/firebase";
 import { collection, addDoc, Timestamp, getDocs, query, where, orderBy } from "firebase/firestore";
 
@@ -605,5 +604,4 @@ export default function BalcaoPage() {
     </div>
   );
 }
-
     

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -37,8 +36,8 @@ import { z } from "zod";
 import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase"; // Assuming firebase.ts will be created
-import { useAuth } from "@/hooks/use-auth"; // Assuming use-auth.ts will be created
+import { db, auth } from "@/lib/firebase";
+import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
 import { useRouter } from "next/navigation";
 import {
   collection,
@@ -100,7 +99,6 @@ const appointmentSchema = z.object({
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema>;
 
-// Sample services, clients will be fetched from Firestore
 const sampleServices: Servico[] = [
   { id: "s1", nome: "Corte de Cabelo" },
   { id: "s2", nome: "Manutenção de Motor" },
@@ -388,7 +386,7 @@ export default function AgendaPage() {
   const handleGoToProduction = (appointmentId: string) => {
     const app = appointments.find(a => a.id === appointmentId);
     if (app && app.geraOrdemProducao) {
-      router.push(`/producao?agendamentoId=${appointmentId}`); // Placeholder, route to be defined
+      router.push(`/produtos-servicos/producao?agendamentoId=${appointmentId}`); // Placeholder, route to be defined
     } else {
       toast({ title: "Ação Indisponível", description: `Este agendamento não gerou uma ordem de produção.`, variant: "default" });
     }

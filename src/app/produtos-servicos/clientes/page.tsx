@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -42,7 +41,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
 import {
   collection,
   addDoc,
@@ -55,7 +54,6 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
-import Link from 'next/link';
 
 interface ClienteFirestore {
   id: string;
@@ -86,13 +84,14 @@ type ClientFormValues = z.infer<typeof clientSchema>;
 
 export default function ClientesPage() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth(); // Adicionado isAuthLoading
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(true); // Renomeado para evitar conflito
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [firebaseInitialized, setFirebaseInitialized] = useState(false);
 
   const bypassAuthInStudioEnv = process.env.NEXT_PUBLIC_BYPASS_AUTH_IN_STUDIO;
   const bypassAuth = bypassAuthInStudioEnv === 'true';
@@ -107,23 +106,31 @@ export default function ClientesPage() {
     },
   });
 
-  const fetchClientes = useCallback(async () => {
-    if (!db) {
-      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente.", variant: "destructive" });
-      setIsLoading(false);
-      return;
+ useEffect(() => {
+    if (db && auth) {
+      setFirebaseInitialized(true);
+    } else if (typeof window !== 'undefined' && !firebaseInitialized) {
+      // Apenas mostra o toast se o Firebase ainda não foi marcado como inicializado
+      // e db não está disponível (significa que a inicialização em firebase.ts falhou)
+      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente e a consola.", variant: "destructive" });
     }
+  }, [firebaseInitialized, toast]);
+
+
+  const fetchClientes = useCallback(async () => {
+    if (!firebaseInitialized || isAuthLoading) return; // Aguarda Firebase e autenticação
+
     if (!user && !bypassAuth) {
       setClientes([]);
-      setIsLoading(false);
+      setIsLoadingData(false);
       return;
     }
-    setIsLoading(true);
+    setIsLoadingData(true);
     try {
       const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-      if (!userIdToQuery && !bypassAuth) {
+      if (!userIdToQuery) { // Removido !bypassAuth, pois placeholder é válido
         setClientes([]);
-        setIsLoading(false);
+        setIsLoadingData(false);
         return;
       }
       const q = query(collection(db, "clientes"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
@@ -143,20 +150,15 @@ export default function ClientesPage() {
       console.error("Erro ao buscar clientes:", error);
       toast({ title: "Erro ao buscar clientes", description: "Não foi possível carregar os dados.", variant: "destructive" });
     } finally {
-      setIsLoading(false);
+      setIsLoadingData(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast, bypassAuth, firebaseInitialized, isAuthLoading]); // Adicionado firebaseInitialized e isAuthLoading
 
   useEffect(() => {
-    if (db) { // Only fetch if db is available
-      fetchClientes();
-    } else if (typeof window !== 'undefined') { // Ensure this only runs client-side for the initial check
-      // db might not be initialized on first render if env vars are missing
-      // The console error from firebase.ts will appear, this toast is an additional UX improvement.
-      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente.", variant: "destructive" });
-      setIsLoading(false);
-    }
-  }, [fetchClientes]); // db removed from deps, fetchClientes checks it
+     if (firebaseInitialized && !isAuthLoading) { // Só busca se Firebase init e auth verificado
+        fetchClientes();
+     }
+  }, [fetchClientes, firebaseInitialized, isAuthLoading]);
 
   useEffect(() => {
     if (editingClient) {
@@ -167,24 +169,26 @@ export default function ClientesPage() {
   }, [editingClient, form, isModalOpen]);
 
   const handleOpenModal = (clientToEdit: Cliente | null = null) => {
+    if (!firebaseInitialized) {
+        toast({ title: "Erro de Configuração", description: "Firebase não está pronto. Verifique as configurações.", variant: "destructive"});
+        return;
+    }
     setEditingClient(clientToEdit);
     setIsModalOpen(true);
   };
 
   const handleSaveClient = async (values: ClientFormValues) => {
-    if (!db) {
-      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Não é possível salvar.", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
+    if (!firebaseInitialized) {
+        toast({ title: "Erro de Configuração", description: "Firebase não está pronto. Não é possível salvar.", variant: "destructive"});
+        return;
     }
     if (!user && !bypassAuth) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
-      setIsSubmitting(false);
       return;
     }
     setIsSubmitting(true);
     const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToSave && !bypassAuth) {
+    if (!userIdToSave) {
         toast({ title: "Erro: ID do usuário não encontrado", variant: "destructive" });
         setIsSubmitting(false);
         return;
@@ -212,7 +216,7 @@ export default function ClientesPage() {
         });
         toast({ title: "Cliente Adicionado!", description: `Cliente ${values.nome} adicionado com sucesso.` });
       }
-      await fetchClientes();
+      await fetchClientes(); // Re-fetch após salvar
       setIsModalOpen(false);
       setEditingClient(null);
       form.reset();
@@ -225,20 +229,16 @@ export default function ClientesPage() {
   };
 
   const handleDeleteClient = async (clientId: string) => {
-    if (!db) {
-      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Não é possível excluir.", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
-    }
-    if (!user && !bypassAuth) {
-        setIsSubmitting(false);
+     if (!firebaseInitialized) {
+        toast({ title: "Erro de Configuração", description: "Firebase não está pronto. Não é possível excluir.", variant: "destructive"});
         return;
     }
+    if (!user && !bypassAuth) return;
     setIsSubmitting(true);
     try {
       await deleteDoc(doc(db, "clientes", clientId));
       toast({ title: "Cliente Excluído!", description: "O cliente foi removido com sucesso." });
-      await fetchClientes();
+      await fetchClientes(); // Re-fetch após excluir
     } catch (error) {
       console.error("Erro ao excluir cliente:", error);
       toast({ title: "Erro ao Excluir", description: "Não foi possível excluir o cliente.", variant: "destructive" });
@@ -254,34 +254,18 @@ export default function ClientesPage() {
   );
 
   const handleSignOutAndRedirect = () => {
-    if (!auth) {
-      toast({ title: "Erro de Configuração", description: "Firebase Auth não inicializado. Não é possível deslogar.", variant: "destructive" });
+    if (!auth) { // auth pode ser undefined se Firebase não inicializou
+      toast({ title: "Erro de Configuração", description: "Firebase Auth não inicializado.", variant: "destructive" });
       return;
     }
     auth.signOut().then(() => window.location.href = '/login');
   }
 
-  if (isLoading && !user && !bypassAuth) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
-  }
-  if (isLoading && (user || bypassAuth)) { // This isLoading is for client data fetching
-    // If db isn't available, fetchClientes would have set isLoading to false and shown a toast.
-    // So, if isLoading is true here, it means db was available and we are fetching.
-     if (!db && typeof window !== 'undefined' && !isLoading) { // Check again, in case initial check in useEffect failed to set isLoading false
-        // This case should ideally be caught by the useEffect, but as a safeguard:
-        return (
-          <Card>
-            <CardHeader><CardTitle>Erro de Configuração</CardTitle></CardHeader>
-            <CardContent>
-              <p>O Firebase não está configurado corretamente. Por favor, verifique as variáveis de ambiente e recarregue a página.</p>
-            </CardContent>
-          </Card>
-        );
-     }
-     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>;
+  if (isAuthLoading || (!firebaseInitialized && typeof window !== 'undefined')) {
+    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Inicializando...</p></div>;
   }
 
-   if (!bypassAuth && !user && !isLoading) { // User not logged in, and not in bypassAuth mode, and client data loading is complete (or failed due to config)
+  if (!bypassAuth && !user && !isAuthLoading) { // Usuário não logado, e não em modo bypass
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
@@ -292,6 +276,11 @@ export default function ClientesPage() {
       </Card>
     );
   }
+  
+  if (isLoadingData && (user || bypassAuth)) {
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>;
+  }
+
 
   return (
     <div className="space-y-6">
@@ -375,7 +364,7 @@ export default function ClientesPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                 {filteredClientes.length === 0 && !isLoading && (
+                 {filteredClientes.length === 0 && !isLoadingData && (
                   <TableRow>
                     <TableCell colSpan={5} className="h-24 text-center">
                       {clientes.length === 0 ? "Nenhum cliente cadastrado." : "Nenhum cliente encontrado para a busca."}
