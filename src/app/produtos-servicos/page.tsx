@@ -1,5 +1,5 @@
 
-import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot, Calculator, FilePlus2, ShoppingBag, Settings } from 'lucide-react';
+import { CalendarDays, PlusCircle, BarChart3, Users, Package, Settings, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
@@ -112,29 +112,13 @@ export default function ProdutosServicosPage() {
               <Settings className="mr-3 h-7 w-7" /> Produção
             </Button>
           </Link>
-          <Link href="/produtos-servicos/precificacao" passHref>
+          <Link href="/produtos-servicos/historico-entregas" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
-              <Calculator className="mr-3 h-7 w-7" /> Precificação
+              <History className="mr-3 h-7 w-7" /> Histórico de Entregas
             </Button>
           </Link>
         </div>
       </section>
-
-      {/* Botão Flutuante IA - Placeholder Visual */}
-      {/* Este será um componente global, mas adicionando um placeholder visual aqui por enquanto */}
-      <div className="fixed bottom-6 right-6">
-        <Button
-          size="lg"
-          className="rounded-full shadow-xl w-auto h-auto p-4"
-          aria-label="Ajuda da IA"
-        >
-          <Bot className="h-7 w-7 mr-2" />
-          Me Ajuda com isso
-        </Button>
-      </div>
-
     </div>
   );
 }
-
-    
