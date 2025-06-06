@@ -17,37 +17,6 @@ export default function Home() {
         </p>
       </section>
 
-      {/* Image Optimization Section */}
-      <section id="image-optimization" aria-labelledby="image-optimization-title">
-        <Card className="shadow-xl">
-          <CardHeader>
-            <CardTitle id="image-optimization-title" className="flex items-center gap-2 font-headline text-2xl text-primary">
-              <ImageIcon className="h-7 w-7" />
-              Otimização de Imagem
-            </CardTitle>
-            <CardDescription>
-              Usando `next/image` para imagens otimizadas e placeholders.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center">
-            <div className="relative h-64 w-full max-w-md overflow-hidden rounded-lg shadow-md sm:h-80 md:h-96">
-              <Image
-                src="https://placehold.co/600x400.png"
-                alt="Placeholder Equipe de Negócios"
-                layout="fill"
-                objectFit="cover"
-                data-ai-hint="business team"
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <p className="text-sm text-muted-foreground">
-              Imagens de placeholder incluem `data-ai-hint` para sugestões de imagens relevantes.
-            </p>
-          </CardFooter>
-        </Card>
-      </section>
-
       {/* AI Content Generation Section */}
       <section id="ai-generation" aria-labelledby="ai-generation-title">
         <div className="text-center mb-8">
