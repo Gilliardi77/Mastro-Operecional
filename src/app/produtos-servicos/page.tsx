@@ -1,5 +1,5 @@
 
-import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot, Calculator, FilePlus2 } from 'lucide-react';
+import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot, Calculator, FilePlus2, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
@@ -46,14 +46,14 @@ export default function ProdutosServicosPage() {
             <CardDescription>Inicie um novo atendimento.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+             <Button className="w-full" asChild>
+                <Link href="/produtos-servicos/balcao">Balcão de Vendas</Link>
+            </Button>
             <Button className="w-full" asChild>
                 <Link href="/produtos-servicos/atendimentos/novo?tipo=orcamento">Novo Orçamento</Link>
             </Button>
             <Button className="w-full" asChild>
                 <Link href="/produtos-servicos/atendimentos/novo?tipo=os">Nova Ordem de Serviço</Link>
-            </Button>
-            <Button variant="secondary" className="w-full" asChild>
-                <Link href="/produtos-servicos/atendimentos/novo?tipo=rapido">Atendimento Rápido</Link>
             </Button>
           </CardContent>
         </Card>
@@ -136,3 +136,5 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
+
+    
