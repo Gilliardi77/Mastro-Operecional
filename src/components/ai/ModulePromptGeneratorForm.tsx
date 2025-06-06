@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { generateModulePrompt, type ModulePromptInput, type ModulePromptOutput } from "@/ai/flows/module-prompt-generator";
 
 const ModulePromptGeneratorSchema = z.object({
-  moduleDescription: z.string().min(20, "Module description must be at least 20 characters long.").max(1000),
+  moduleDescription: z.string().min(20, "A descrição do módulo deve ter pelo menos 20 caracteres.").max(1000),
 });
 
 type ModulePromptGeneratorFormValues = z.infer<typeof ModulePromptGeneratorSchema>;
@@ -46,14 +46,14 @@ export default function ModulePromptGeneratorForm() {
       const response = await generateModulePrompt(data);
       setResult(response);
       toast({
-        title: "Prompt Generated",
-        description: "AI module prompt has been successfully generated.",
+        title: "Prompt Gerado",
+        description: "O prompt do módulo de IA foi gerado com sucesso.",
       });
     } catch (error) {
-      console.error("Error generating module prompt:", error);
+      console.error("Erro ao gerar prompt do módulo:", error);
       toast({
-        title: "Error",
-        description: "Failed to generate module prompt. Please try again.",
+        title: "Erro",
+        description: "Falha ao gerar o prompt do módulo. Por favor, tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -66,10 +66,10 @@ export default function ModulePromptGeneratorForm() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 font-headline">
           <FileText className="h-6 w-6 text-primary" />
-          AI Module Prompt Generator
+          Gerador de Prompt de Módulo com IA
         </CardTitle>
         <CardDescription>
-          Generate a detailed development prompt for a new module based on its description.
+          Gere um prompt de desenvolvimento detalhado para um novo módulo com base na sua descrição.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -80,16 +80,16 @@ export default function ModulePromptGeneratorForm() {
               name="moduleDescription"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Module Description</FormLabel>
+                  <FormLabel>Descrição do Módulo</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="e.g., A module to manage customer invoices, allowing creation, viewing, and sending of PDF invoices."
+                      placeholder="Ex: Um módulo para gerenciar faturas de clientes, permitindo criação, visualização e envio de faturas em PDF."
                       {...field}
                       className="min-h-[150px]"
                     />
                   </FormControl>
                   <FormDescription>
-                    Provide a detailed description of the module you want to build.
+                    Forneça uma descrição detalhada do módulo que você deseja construir.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -99,10 +99,10 @@ export default function ModulePromptGeneratorForm() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  Gerando...
                 </>
               ) : (
-                "Generate Prompt"
+                "Gerar Prompt"
               )}
             </Button>
           </form>
@@ -110,12 +110,12 @@ export default function ModulePromptGeneratorForm() {
 
         {result && (
           <div className="mt-8 space-y-4 rounded-lg border bg-secondary/50 p-6 shadow-inner">
-            <h3 className="font-headline text-lg font-semibold text-primary">Generated Module Prompt:</h3>
+            <h3 className="font-headline text-lg font-semibold text-primary">Prompt do Módulo Gerado:</h3>
             <Textarea
               readOnly
               value={result.modulePrompt}
               className="min-h-[200px] text-sm bg-background"
-              aria-label="Generated module prompt"
+              aria-label="Prompt do módulo gerado"
             />
           </div>
         )}

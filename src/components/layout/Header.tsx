@@ -8,10 +8,10 @@ export default function Header() {
         <Link href="/" className="flex items-center gap-2">
           <Briefcase className="h-8 w-8" />
           <h1 className="font-headline text-xl font-semibold sm:text-2xl">
-            Business Maestro Module Extension
+            Extensão de Módulo Business Maestro
           </h1>
         </Link>
-        {/* Navigation items can be added here */}
+        {/* Itens de navegação podem ser adicionados aqui */}
       </div>
     </header>
   );

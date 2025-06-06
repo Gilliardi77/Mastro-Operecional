@@ -21,10 +21,10 @@ export default function Home() {
     <div className="space-y-12">
       <section className="text-center">
         <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-          Welcome to Business Maestro Module Extension
+          Bem-vindo à Extensão de Módulo Business Maestro
         </h2>
         <p className="mt-4 text-lg text-muted-foreground">
-          Leverage powerful tools and AI to build consistent and professional modules for your Business Maestro application.
+          Aproveite ferramentas poderosas e IA para construir módulos consistentes e profissionais para sua aplicação Business Maestro.
         </p>
       </section>
 
@@ -34,30 +34,30 @@ export default function Home() {
           <CardHeader>
             <CardTitle id="ui-showcase-title" className="flex items-center gap-2 font-headline text-2xl text-primary">
               <Palette className="h-7 w-7" />
-              ShadCN UI Showcase
+              Demonstração ShadCN UI
             </CardTitle>
             <CardDescription>
-              Explore a variety of pre-styled ShadCN UI components.
+              Explore uma variedade de componentes ShadCN UI pré-estilizados.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-4">
-                <h4 className="font-semibold">Buttons</h4>
+                <h4 className="font-semibold">Botões</h4>
                 <div className="flex flex-wrap gap-2">
-                  <Button>Default</Button>
-                  <Button variant="destructive">Destructive</Button>
-                  <Button variant="outline">Outline</Button>
-                  <Button variant="secondary">Secondary</Button>
-                  <Button variant="ghost">Ghost</Button>
+                  <Button>Padrão</Button>
+                  <Button variant="destructive">Destrutivo</Button>
+                  <Button variant="outline">Contorno</Button>
+                  <Button variant="secondary">Secundário</Button>
+                  <Button variant="ghost">Fantasma</Button>
                   <Button variant="link">Link</Button>
                 </div>
               </div>
               <div className="space-y-4">
-                <h4 className="font-semibold">Input with Label</h4>
+                <h4 className="font-semibold">Input com Rótulo</h4>
                 <div className="space-y-2">
-                  <Label htmlFor="name-input">Name</Label>
-                  <Input id="name-input" type="text" placeholder="Enter your name" />
+                  <Label htmlFor="name-input">Nome</Label>
+                  <Input id="name-input" type="text" placeholder="Digite seu nome" />
                 </div>
               </div>
             </div>
@@ -66,32 +66,32 @@ export default function Home() {
                 <h4 className="font-semibold">Checkbox & Switch</h4>
                 <div className="flex items-center space-x-2">
                   <Checkbox id="terms-checkbox" />
-                  <Label htmlFor="terms-checkbox">Accept terms and conditions</Label>
+                  <Label htmlFor="terms-checkbox">Aceitar termos e condições</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Switch id="notifications-switch" />
-                  <Label htmlFor="notifications-switch">Enable notifications</Label>
+                  <Label htmlFor="notifications-switch">Ativar notificações</Label>
                 </div>
               </div>
               <div className="space-y-4">
                 <h4 className="font-semibold">Select</h4>
                 <Select>
                   <SelectTrigger className="w-full md:w-[280px]">
-                    <SelectValue placeholder="Select a fruit" />
+                    <SelectValue placeholder="Selecione uma fruta" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="apple">Apple</SelectItem>
+                    <SelectItem value="apple">Maçã</SelectItem>
                     <SelectItem value="banana">Banana</SelectItem>
-                    <SelectItem value="blueberry">Blueberry</SelectItem>
-                    <SelectItem value="grapes">Grapes</SelectItem>
-                    <SelectItem value="pineapple">Pineapple</SelectItem>
+                    <SelectItem value="blueberry">Mirtilo</SelectItem>
+                    <SelectItem value="grapes">Uvas</SelectItem>
+                    <SelectItem value="pineapple">Abacaxi</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </CardContent>
           <CardFooter>
-            <Button variant="outline">Learn More</Button>
+            <Button variant="outline">Saiba Mais</Button>
           </CardFooter>
         </Card>
       </section>
@@ -102,17 +102,17 @@ export default function Home() {
           <CardHeader>
             <CardTitle id="image-optimization-title" className="flex items-center gap-2 font-headline text-2xl text-primary">
               <ImageIcon className="h-7 w-7" />
-              Image Optimization
+              Otimização de Imagem
             </CardTitle>
             <CardDescription>
-              Using `next/image` for optimized images and placeholders.
+              Usando `next/image` para imagens otimizadas e placeholders.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
             <div className="relative h-64 w-full max-w-md overflow-hidden rounded-lg shadow-md sm:h-80 md:h-96">
               <Image
                 src="https://placehold.co/600x400.png"
-                alt="Placeholder Business Team"
+                alt="Placeholder Equipe de Negócios"
                 layout="fill"
                 objectFit="cover"
                 data-ai-hint="business team"
@@ -121,7 +121,7 @@ export default function Home() {
           </CardContent>
           <CardFooter>
             <p className="text-sm text-muted-foreground">
-              Placeholder images include `data-ai-hint` for relevant image suggestions.
+              Imagens de placeholder incluem `data-ai-hint` para sugestões de imagens relevantes.
             </p>
           </CardFooter>
         </Card>
@@ -132,10 +132,10 @@ export default function Home() {
         <div className="text-center mb-8">
             <h2 id="ai-generation-title" className="flex items-center justify-center gap-2 font-headline text-2xl text-primary">
               <Brain className="h-7 w-7" />
-              AI Powered Generation Tools
+              Ferramentas de Geração com IA
             </h2>
             <p className="mt-2 text-muted-foreground">
-                Utilize Genkit integration for intelligent content and prompt creation.
+                Utilize a integração Genkit para criação inteligente de conteúdo e prompts.
             </p>
         </div>
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

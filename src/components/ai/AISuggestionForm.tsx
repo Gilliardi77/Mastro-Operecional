@@ -29,8 +29,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getContentSuggestions, type ContentSuggestionsInput, type ContentSuggestionsOutput } from "@/ai/flows/ai-content-suggestions";
 
 const AISuggestionFormSchema = z.object({
-  modulePurpose: z.string().min(10, "Module purpose must be at least 10 characters long.").max(500),
-  moduleContext: z.string().min(10, "Module context must be at least 10 characters long.").max(500),
+  modulePurpose: z.string().min(10, "O propósito do módulo deve ter pelo menos 10 caracteres.").max(500),
+  moduleContext: z.string().min(10, "O contexto do módulo deve ter pelo menos 10 caracteres.").max(500),
   desiredContentLength: z.enum(["Short", "Medium", "Long"]),
 });
 
@@ -45,7 +45,7 @@ export default function AISuggestionForm() {
     resolver: zodResolver(AISuggestionFormSchema),
     defaultValues: {
       modulePurpose: "",
-      moduleContext: "Business Maestro application",
+      moduleContext: "Aplicação Business Maestro",
       desiredContentLength: "Medium",
     },
   });
@@ -57,14 +57,14 @@ export default function AISuggestionForm() {
       const response = await getContentSuggestions(data);
       setResult(response);
       toast({
-        title: "Suggestions Generated",
-        description: "AI content suggestions have been successfully generated.",
+        title: "Sugestões Geradas",
+        description: "As sugestões de conteúdo por IA foram geradas com sucesso.",
       });
     } catch (error) {
-      console.error("Error generating AI suggestions:", error);
+      console.error("Erro ao gerar sugestões de IA:", error);
       toast({
-        title: "Error",
-        description: "Failed to generate AI suggestions. Please try again.",
+        title: "Erro",
+        description: "Falha ao gerar sugestões de IA. Por favor, tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -77,10 +77,10 @@ export default function AISuggestionForm() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 font-headline">
           <Lightbulb className="h-6 w-6 text-primary" />
-          AI Content Suggestions
+          Sugestões de Conteúdo com IA
         </CardTitle>
         <CardDescription>
-          Generate content ideas for your module using AI.
+          Gere ideias de conteúdo para o seu módulo usando IA.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -91,16 +91,16 @@ export default function AISuggestionForm() {
               name="modulePurpose"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Module Purpose</FormLabel>
+                  <FormLabel>Propósito do Módulo</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="e.g., User profile page, Sales dashboard, Settings panel"
+                      placeholder="Ex: Página de perfil do usuário, painel de vendas, painel de configurações"
                       {...field}
                       className="min-h-[100px]"
                     />
                   </FormControl>
                   <FormDescription>
-                    Describe the main goal or function of this module.
+                    Descreva o objetivo principal ou função deste módulo.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -111,16 +111,16 @@ export default function AISuggestionForm() {
               name="moduleContext"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Module Context</FormLabel>
+                  <FormLabel>Contexto do Módulo</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="e.g., Business Maestro application for small business owners"
+                      placeholder="Ex: Aplicação Business Maestro para proprietários de pequenas empresas"
                       {...field}
                       className="min-h-[100px]"
                     />
                   </FormControl>
                   <FormDescription>
-                    Provide context like application name, target audience, data domain.
+                    Forneça contexto como nome da aplicação, público-alvo, domínio dos dados.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -131,17 +131,17 @@ export default function AISuggestionForm() {
               name="desiredContentLength"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Desired Content Length</FormLabel>
+                  <FormLabel>Tamanho Desejado do Conteúdo</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select content length" />
+                        <SelectValue placeholder="Selecione o tamanho do conteúdo" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Short">Short (a few sentences)</SelectItem>
-                      <SelectItem value="Medium">Medium (a paragraph)</SelectItem>
-                      <SelectItem value="Long">Long (several paragraphs)</SelectItem>
+                      <SelectItem value="Short">Curto (algumas frases)</SelectItem>
+                      <SelectItem value="Medium">Médio (um parágrafo)</SelectItem>
+                      <SelectItem value="Long">Longo (vários parágrafos)</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -152,10 +152,10 @@ export default function AISuggestionForm() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  Gerando...
                 </>
               ) : (
-                "Get Suggestions"
+                "Obter Sugestões"
               )}
             </Button>
           </form>
@@ -163,7 +163,7 @@ export default function AISuggestionForm() {
 
         {result && (
           <div className="mt-8 space-y-4 rounded-lg border bg-secondary/50 p-6 shadow-inner">
-            <h3 className="font-headline text-lg font-semibold text-primary">Generated Suggestions:</h3>
+            <h3 className="font-headline text-lg font-semibold text-primary">Sugestões Geradas:</h3>
             {result.suggestions.length > 0 ? (
               <ul className="list-disc space-y-2 pl-5">
                 {result.suggestions.map((suggestion, index) => (
@@ -171,9 +171,9 @@ export default function AISuggestionForm() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">No suggestions generated.</p>
+              <p className="text-sm text-muted-foreground">Nenhuma sugestão gerada.</p>
             )}
-            <h4 className="font-headline text-md font-semibold pt-2">Reasoning:</h4>
+            <h4 className="font-headline text-md font-semibold pt-2">Justificativa:</h4>
             <p className="text-sm text-muted-foreground">{result.reasoning}</p>
           </div>
         )}
