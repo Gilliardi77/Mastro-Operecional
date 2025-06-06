@@ -1,5 +1,5 @@
 
-import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot } from 'lucide-react';
+import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot, Calculator, FilePlus2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
@@ -31,7 +31,9 @@ export default function ProdutosServicosPage() {
             <div className="p-4 text-center border-2 border-dashed rounded-md border-muted">
               <p className="text-sm text-muted-foreground">Nenhum atendimento agendado para hoje.</p>
             </div>
-            <Button variant="outline" className="w-full">Ver Agenda Completa</Button>
+            <Button variant="outline" className="w-full" asChild>
+                <Link href="/produtos-servicos/agenda">Ver Agenda Completa</Link>
+            </Button>
           </CardContent>
         </Card>
 
@@ -44,9 +46,15 @@ export default function ProdutosServicosPage() {
             <CardDescription>Inicie um novo atendimento.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button className="w-full">Novo Orçamento</Button>
-            <Button className="w-full">Nova Ordem de Serviço</Button>
-            <Button variant="secondary" className="w-full">Atendimento Rápido</Button>
+            <Button className="w-full" asChild>
+                <Link href="/produtos-servicos/atendimentos/novo?tipo=orcamento">Novo Orçamento</Link>
+            </Button>
+            <Button className="w-full" asChild>
+                <Link href="/produtos-servicos/atendimentos/novo?tipo=os">Nova Ordem de Serviço</Link>
+            </Button>
+            <Button variant="secondary" className="w-full" asChild>
+                <Link href="/produtos-servicos/atendimentos/novo?tipo=rapido">Atendimento Rápido</Link>
+            </Button>
           </CardContent>
         </Card>
 
@@ -83,7 +91,7 @@ export default function ProdutosServicosPage() {
       {/* Atalhos de Gestão Básica */}
       <section>
         <h3 className="mb-4 text-xl font-semibold text-center text-primary">Gestão</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Link href="/produtos-servicos/clientes" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
               <Users className="mr-3 h-7 w-7" /> Clientes
@@ -97,6 +105,16 @@ export default function ProdutosServicosPage() {
           <Link href="/produtos-servicos/servicos" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
               <Wrench className="mr-3 h-7 w-7" /> Serviços
+            </Button>
+          </Link>
+          <Link href="/produtos-servicos/agenda" passHref>
+            <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
+              <CalendarDays className="mr-3 h-7 w-7" /> Agenda
+            </Button>
+          </Link>
+          <Link href="/produtos-servicos/precificacao" passHref>
+            <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
+              <Calculator className="mr-3 h-7 w-7" /> Precificação
             </Button>
           </Link>
         </div>
