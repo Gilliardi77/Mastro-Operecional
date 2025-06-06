@@ -1,1 +1,5 @@
-// Flows will be imported for their side effects in this file.
+import { config } from 'dotenv';
+config();
+
+import '@/ai/flows/module-prompt-generator.ts';
+import '@/ai/flows/ai-content-suggestions.ts';
