@@ -1,5 +1,5 @@
 
-import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot, Calculator, FilePlus2, ShoppingBag } from 'lucide-react';
+import { CalendarDays, PlusCircle, BarChart3, Users, Package, Wrench, Bot, Calculator, FilePlus2, ShoppingBag, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
@@ -99,17 +99,17 @@ export default function ProdutosServicosPage() {
           </Link>
           <Link href="/produtos-servicos/produtos" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
-              <Package className="mr-3 h-7 w-7" /> Produtos
-            </Button>
-          </Link>
-          <Link href="/produtos-servicos/servicos" passHref>
-            <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
-              <Wrench className="mr-3 h-7 w-7" /> Serviços
+              <Package className="mr-3 h-7 w-7" /> Produtos e Serviços
             </Button>
           </Link>
           <Link href="/produtos-servicos/agenda" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
               <CalendarDays className="mr-3 h-7 w-7" /> Agenda
+            </Button>
+          </Link>
+           <Link href="/produtos-servicos/producao" passHref>
+            <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
+              <Settings className="mr-3 h-7 w-7" /> Produção
             </Button>
           </Link>
           <Link href="/produtos-servicos/precificacao" passHref>
