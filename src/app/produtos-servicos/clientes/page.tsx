@@ -55,7 +55,7 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
-import Link from 'next/link'; // Importado para manter a funcionalidade do botão que pode ter sido removida
+import Link from 'next/link';
 
 interface ClienteFirestore {
   id: string;
@@ -63,7 +63,7 @@ interface ClienteFirestore {
   email?: string;
   telefone?: string;
   endereco?: string;
-  temDebitos?: boolean; 
+  temDebitos?: boolean;
   userId: string;
   criadoEm: Timestamp;
   atualizadoEm: Timestamp;
@@ -108,6 +108,11 @@ export default function ClientesPage() {
   });
 
   const fetchClientes = useCallback(async () => {
+    if (!db) {
+      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
     if (!user && !bypassAuth) {
       setClientes([]);
       setIsLoading(false);
@@ -116,7 +121,7 @@ export default function ClientesPage() {
     setIsLoading(true);
     try {
       const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-      if (!userIdToQuery && !bypassAuth) { // Corrigido: !bypassAuth deve estar aqui para não bloquear quando bypassAuth é true e user é null.
+      if (!userIdToQuery && !bypassAuth) {
         setClientes([]);
         setIsLoading(false);
         return;
@@ -128,7 +133,7 @@ export default function ClientesPage() {
         return {
           id: docSnap.id,
           ...data,
-          temDebitos: data.temDebitos || false, 
+          temDebitos: data.temDebitos || false,
           criadoEm: data.criadoEm?.toDate(),
           atualizadoEm: data.atualizadoEm?.toDate(),
         } as Cliente;
@@ -143,8 +148,15 @@ export default function ClientesPage() {
   }, [user, toast, bypassAuth]);
 
   useEffect(() => {
-    fetchClientes();
-  }, [fetchClientes]);
+    if (db) { // Only fetch if db is available
+      fetchClientes();
+    } else if (typeof window !== 'undefined') { // Ensure this only runs client-side for the initial check
+      // db might not be initialized on first render if env vars are missing
+      // The console error from firebase.ts will appear, this toast is an additional UX improvement.
+      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente.", variant: "destructive" });
+      setIsLoading(false);
+    }
+  }, [fetchClientes]); // db removed from deps, fetchClientes checks it
 
   useEffect(() => {
     if (editingClient) {
@@ -160,8 +172,14 @@ export default function ClientesPage() {
   };
 
   const handleSaveClient = async (values: ClientFormValues) => {
+    if (!db) {
+      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Não é possível salvar.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
     if (!user && !bypassAuth) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
     setIsSubmitting(true);
@@ -179,7 +197,7 @@ export default function ClientesPage() {
       endereco: values.endereco || "",
       userId: userIdToSave,
       atualizadoEm: Timestamp.now(),
-      temDebitos: editingClient?.temDebitos || false, 
+      temDebitos: editingClient?.temDebitos || false,
     };
 
     try {
@@ -207,7 +225,15 @@ export default function ClientesPage() {
   };
 
   const handleDeleteClient = async (clientId: string) => {
-    if (!user && !bypassAuth) return;
+    if (!db) {
+      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Não é possível excluir.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+    if (!user && !bypassAuth) {
+        setIsSubmitting(false);
+        return;
+    }
     setIsSubmitting(true);
     try {
       await deleteDoc(doc(db, "clientes", clientId));
@@ -227,19 +253,41 @@ export default function ClientesPage() {
     (cliente.telefone && cliente.telefone.includes(searchTerm))
   );
 
+  const handleSignOutAndRedirect = () => {
+    if (!auth) {
+      toast({ title: "Erro de Configuração", description: "Firebase Auth não inicializado. Não é possível deslogar.", variant: "destructive" });
+      return;
+    }
+    auth.signOut().then(() => window.location.href = '/login');
+  }
+
   if (isLoading && !user && !bypassAuth) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
   }
-  if (isLoading && (user || bypassAuth)) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>;
+  if (isLoading && (user || bypassAuth)) { // This isLoading is for client data fetching
+    // If db isn't available, fetchClientes would have set isLoading to false and shown a toast.
+    // So, if isLoading is true here, it means db was available and we are fetching.
+     if (!db && typeof window !== 'undefined' && !isLoading) { // Check again, in case initial check in useEffect failed to set isLoading false
+        // This case should ideally be caught by the useEffect, but as a safeguard:
+        return (
+          <Card>
+            <CardHeader><CardTitle>Erro de Configuração</CardTitle></CardHeader>
+            <CardContent>
+              <p>O Firebase não está configurado corretamente. Por favor, verifique as variáveis de ambiente e recarregue a página.</p>
+            </CardContent>
+          </Card>
+        );
+     }
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>;
   }
-   if (!bypassAuth && !user && !isLoading) {
+
+   if (!bypassAuth && !user && !isLoading) { // User not logged in, and not in bypassAuth mode, and client data loading is complete (or failed due to config)
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent>
           <p>Você precisa estar logado para acessar a lista de clientes.</p>
-          <Button onClick={() => auth.signOut().then(() => window.location.href = '/login')} className="mt-4">Fazer Login</Button>
+          <Button onClick={handleSignOutAndRedirect} className="mt-4">Fazer Login</Button>
         </CardContent>
       </Card>
     );
@@ -254,7 +302,6 @@ export default function ClientesPage() {
               <CardTitle>Gerenciamento de Clientes</CardTitle>
               <CardDescription>Adicione, visualize e gerencie seus clientes. Informações de endereço e débitos disponíveis.</CardDescription>
             </div>
-            {/* Botão "Novo Cliente" que abre o modal */}
             <Button onClick={() => handleOpenModal()}>
               <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Cliente
             </Button>
@@ -263,8 +310,8 @@ export default function ClientesPage() {
         <CardContent>
           <div className="mb-4 flex items-center gap-2">
             <UserSearch className="h-5 w-5 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar cliente por nome, email ou telefone..." 
+            <Input
+              placeholder="Buscar cliente por nome, email ou telefone..."
               className="max-w-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -344,7 +391,7 @@ export default function ClientesPage() {
       <Dialog open={isModalOpen} onOpenChange={(isOpen) => {
           setIsModalOpen(isOpen);
           if (!isOpen) {
-            setEditingClient(null); 
+            setEditingClient(null);
             form.reset({ nome: "", email: "", telefone: "", endereco: "" });
           }
       }}>
@@ -415,5 +462,3 @@ export default function ClientesPage() {
     </div>
   );
 }
-
-    
