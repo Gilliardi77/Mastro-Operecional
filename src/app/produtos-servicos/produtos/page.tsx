@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import Link from 'next/link'; // Importado para manter funcionalidade que pode ter sido removida
 
 // Schema para validação do formulário
 const itemSchema = z.object({
@@ -77,7 +78,7 @@ interface ProdutoServico extends Omit<ProdutoServicoFirestore, 'criadoEm' | 'atu
 }
 
 
-export default function ProdutosServicosManagementPage() {
+export default function ProdutosServicosPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [allProdutosServicos, setAllProdutosServicos] = useState<ProdutoServico[]>([]);
@@ -308,6 +309,7 @@ export default function ProdutosServicosManagementPage() {
               <CardTitle>Produtos e Serviços</CardTitle>
               <CardDescription>Cadastre e gerencie seus produtos, serviços e respectivos estoques (para produtos).</CardDescription>
             </div>
+            {/* Botão "Adicionar Novo" que abre o modal */}
             <Button onClick={handleAbrirModalParaNovo}>
               <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo
             </Button>
