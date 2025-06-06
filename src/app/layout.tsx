@@ -26,7 +26,8 @@ export default function RootLayout({
       <body className="font-body antialiased flex flex-col min-h-screen bg-background">
         <AuthProvider>
           <Header />
-          <div className="flex-1 overflow-y-auto pt-16 pb-12"> {/* Adjust pt-16 and pb-12 based on actual Header/Footer height */}
+          {/* Aumentado pt-16 para pt-20 e pb-12 para pb-16 */}
+          <div className="flex-1 overflow-y-auto pt-20 pb-16"> {/* Adjust pt-20 and pb-16 based on actual Header/Footer height + desired spacing */}
             <main className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
               {children}
             </main>
