@@ -1,5 +1,7 @@
-import { Briefcase } from 'lucide-react';
+
+import { Briefcase, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export default function Header() {
   return (
@@ -11,7 +13,27 @@ export default function Header() {
             Extensão de Módulo Business Maestro
           </h1>
         </Link>
-        {/* Itens de navegação podem ser adicionados aqui */}
+        <nav>
+          <ul className="flex items-center gap-2">
+            <li>
+              <Button variant="ghost" asChild>
+                <Link href="/" className="flex items-center gap-1">
+                  <LayoutDashboard className="h-5 w-5" />
+                  Início
+                </Link>
+              </Button>
+            </li>
+            <li>
+              <Button variant="ghost" asChild>
+                <Link href="/produtos-servicos" className="flex items-center gap-1">
+                  {/* Ícone pode ser PackageSearch, ShoppingCart, etc. Usando Briefcase por ora */}
+                  <Briefcase className="h-5 w-5" /> 
+                  Produtos/Serviços
+                </Link>
+              </Button>
+            </li>
+          </ul>
+        </nav>
       </div>
     </header>
   );
