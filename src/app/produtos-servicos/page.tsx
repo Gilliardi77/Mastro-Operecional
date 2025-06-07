@@ -1,5 +1,5 @@
 
-import { CalendarDays, PlusCircle, BarChart3, Users, Package, Settings, History, ActivitySquare } from 'lucide-react';
+import { CalendarDays, PlusCircle, BarChart3, Users, Package, Settings, ActivitySquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
@@ -91,7 +91,7 @@ export default function ProdutosServicosPage() {
       {/* Atalhos de Gestão Básica */}
       <section>
         <h3 className="mb-4 text-xl font-semibold text-center text-primary">Gestão</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"> {/* Ajustado para xl:grid-cols-6 */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"> {/* Ajustado para xl:grid-cols-5 após remoção */}
           <Link href="/produtos-servicos/clientes" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
               <Users className="mr-3 h-7 w-7" /> Clientes
@@ -112,14 +112,9 @@ export default function ProdutosServicosPage() {
               <Settings className="mr-3 h-7 w-7" /> Produção
             </Button>
           </Link>
-          <Link href="/produtos-servicos/estoque" passHref> {/* Novo Link */}
+          <Link href="/produtos-servicos/estoque" passHref>
             <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
               <ActivitySquare className="mr-3 h-7 w-7" /> Estoque
-            </Button>
-          </Link>
-          <Link href="/produtos-servicos/historico-entregas" passHref>
-            <Button variant="outline" className="w-full h-16 text-lg justify-start p-4 shadow-md hover:shadow-lg transition-shadow">
-              <History className="mr-3 h-7 w-7" /> Histórico de Entregas
             </Button>
           </Link>
         </div>
