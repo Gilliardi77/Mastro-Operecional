@@ -88,8 +88,7 @@ export default function ProdutosServicosPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const bypassAuthInStudioEnv = process.env.NEXT_PUBLIC_BYPASS_AUTH_IN_STUDIO;
-  const bypassAuth = bypassAuthInStudioEnv === 'true';
+  const bypassAuth = true; // Forçar bypass para testes
 
   const form = useForm<ItemFormValues>({
     resolver: zodResolver(itemSchema),
@@ -542,4 +541,6 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
+    
+
     

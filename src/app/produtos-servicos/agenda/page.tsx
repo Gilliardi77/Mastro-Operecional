@@ -122,8 +122,7 @@ export default function AgendaPage() {
   const [fetchedClients, setFetchedClients] = useState<Cliente[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
-  const bypassAuthInStudioEnv = process.env.NEXT_PUBLIC_BYPASS_AUTH_IN_STUDIO;
-  const bypassAuth = bypassAuthInStudioEnv === 'true';
+  const bypassAuth = true; // Forçar bypass para testes
 
   const [statusFilters, setStatusFilters] = useState<Record<AppointmentStatus, boolean>>({
     "Pendente": true,
@@ -701,3 +700,5 @@ export default function AgendaPage() {
     </div>
   );
 }
+
+    

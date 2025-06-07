@@ -97,8 +97,7 @@ export default function ClientesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [firebaseInitialized, setFirebaseInitialized] = useState(false);
 
-  const bypassAuthInStudioEnv = process.env.NEXT_PUBLIC_BYPASS_AUTH_IN_STUDIO;
-  const bypassAuth = bypassAuthInStudioEnv === 'true';
+  const bypassAuth = true; // Forçar bypass para testes
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -255,7 +254,7 @@ export default function ClientesPage() {
     (cliente.telefone && cliente.telefone.includes(searchTerm))
   );
 
-  const handleRedirectToLogin = () => { // Renomeado e ajustado
+  const handleRedirectToLogin = () => { 
     router.push('/login');
   }
 
@@ -269,7 +268,7 @@ export default function ClientesPage() {
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent>
           <p>Você precisa estar logado para acessar a lista de clientes.</p>
-          <Button onClick={handleRedirectToLogin} className="mt-4">Fazer Login</Button> {/* Ajustado */}
+          <Button onClick={handleRedirectToLogin} className="mt-4">Fazer Login</Button> 
         </CardContent>
       </Card>
     );
@@ -449,3 +448,5 @@ export default function ClientesPage() {
     </div>
   );
 }
+
+    

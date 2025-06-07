@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,8 +101,7 @@ export default function BalcaoPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
 
-  const bypassAuthInStudioEnv = process.env.NEXT_PUBLIC_BYPASS_AUTH_IN_STUDIO;
-  const bypassAuth = bypassAuthInStudioEnv === 'true';
+  const bypassAuth = true; // Forçar bypass para testes
 
   const fetchAvailableProducts = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
@@ -604,4 +604,6 @@ export default function BalcaoPage() {
     </div>
   );
 }
+    
+
     

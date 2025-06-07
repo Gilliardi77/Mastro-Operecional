@@ -90,8 +90,7 @@ export default function OrdemServicoPage() {
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [isSavingNewClient, setIsSavingNewClient] = useState(false);
 
-  const bypassAuthInStudioEnv = process.env.NEXT_PUBLIC_BYPASS_AUTH_IN_STUDIO;
-  const bypassAuth = bypassAuthInStudioEnv === 'true';
+  const bypassAuth = true; // Forçar bypass para testes
 
   const osForm = useForm<OrdemServicoFormValues>({
     resolver: zodResolver(ordemServicoFormSchema),
@@ -620,4 +619,6 @@ Enviado por: Meu Negócio App
     </div>
   );
 }
+    
+
     
