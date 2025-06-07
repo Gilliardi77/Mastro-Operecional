@@ -1,9 +1,10 @@
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Palette, ImageIcon, Brain } from 'lucide-react';
+import { Palette, ImageIcon, Brain, Sparkles } from 'lucide-react';
 import AISuggestionForm from '@/components/ai/AISuggestionForm';
 import ModulePromptGeneratorForm from '@/components/ai/ModulePromptGeneratorForm';
+import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide';
 
 export default function Home() {
   return (
@@ -17,15 +18,20 @@ export default function Home() {
         </p>
       </section>
 
+      {/* Interactive Module Guide Section */}
+      <section id="interactive-guide" aria-labelledby="interactive-guide-title">
+         <InteractiveModuleGuide />
+      </section>
+
       {/* AI Content Generation Section */}
       <section id="ai-generation" aria-labelledby="ai-generation-title">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 mt-16">
             <h2 id="ai-generation-title" className="flex items-center justify-center gap-2 font-headline text-2xl text-primary">
               <Brain className="h-7 w-7" />
-              Ferramentas de Geração com IA
+              Outras Ferramentas de Geração com IA
             </h2>
             <p className="mt-2 text-muted-foreground">
-                Utilize a integração Genkit para criação inteligente de conteúdo e prompts.
+                Utilize a integração Genkit para criação inteligente de conteúdo e prompts de módulo mais diretos.
             </p>
         </div>
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
