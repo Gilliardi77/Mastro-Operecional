@@ -30,10 +30,9 @@ type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | 
 
 const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
 
-// Schema para um item individual na OS
 const itemOSSchema = z.object({
-  idTemp: z.string(), // ID temporário para react hook form key
-  produtoServicoId: z.string().optional(), // ID do catálogo, se aplicável
+  idTemp: z.string(),
+  produtoServicoId: z.string().optional(),
   nome: z.string().min(1, "Nome do item é obrigatório."),
   quantidade: z.coerce.number().positive("Quantidade deve ser positiva.").default(1),
   valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").default(0),
@@ -162,16 +161,34 @@ export default function OrdemServicoPage() {
 
   useEffect(() => {
     const subscription = osForm.watch((values, { name, type }) => {
-      if (name?.startsWith("itens") || name === "valorAdiantado") {
-        const currentItens = values.itens || [];
-        const totalItens = currentItens.reduce((sum, item) => sum + (item.valorTotal || 0), 0);
-        if (osForm.getValues("valorTotalOS") !== totalItens) {
-           osForm.setValue("valorTotalOS", totalItens, { shouldValidate: true });
+      const currentItens = values.itens || [];
+      let totalItens = 0;
+
+      // Se um campo de item específico mudou, recalculamos o total desse item primeiro
+      if (name && name.startsWith("itens.")) {
+        const itemIndexMatch = name.match(/itens\.(\d+)\.(quantidade|valorUnitario)/);
+        if (itemIndexMatch) {
+          const index = parseInt(itemIndexMatch[1], 10);
+          if (index < currentItens.length) {
+            const item = currentItens[index];
+            const newTotalItem = (item.quantidade || 0) * (item.valorUnitario || 0);
+            if (item.valorTotal !== newTotalItem) {
+              // Temporariamente atualiza para cálculo, mas a fonte da verdade deve ser handleItemChange/handleItemCatalogoSelect
+               currentItens[index] = { ...item, valorTotal: newTotalItem };
+            }
+          }
         }
+      }
+      
+      totalItens = currentItens.reduce((sum, item) => sum + (item.valorTotal || 0), 0);
+
+      if (osForm.getValues("valorTotalOS") !== totalItens) {
+        osForm.setValue("valorTotalOS", totalItens, { shouldValidate: true });
       }
     });
     return () => subscription.unsubscribe();
   }, [osForm]);
+
 
  useEffect(() => {
     const handleAiFormFill = (event: Event) => {
@@ -186,7 +203,7 @@ export default function OrdemServicoPage() {
         if (typeof detail.fieldName === 'string' && generalFieldNames.includes(detail.fieldName as FieldPath<OrdemServicoFormValues>)) {
           let valueToSet = detail.value;
           if (detail.fieldName === 'dataEntrega' && typeof valueToSet === 'string') {
-            const parsedDate = new Date(valueToSet + 'T00:00:00'); // Ensure time is considered for local timezone
+            const parsedDate = new Date(valueToSet + 'T00:00:00'); 
             if (!isNaN(parsedDate.getTime())) valueToSet = parsedDate;
             else { toast({ title: "Erro de Data", description: "Formato de data inválido da IA.", variant: "destructive"}); return; }
           } else if (detail.fieldName === 'valorAdiantado' && typeof valueToSet !== 'number') {
@@ -272,7 +289,7 @@ export default function OrdemServicoPage() {
       } else if (clienteIdParam === "avulso") {
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
       } else if (clienteIdParam !== "avulso" && !clientExists) {
-         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; // Could be a new client name from params
+         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; 
       }
     } else {
         prefillData.clienteId = "avulso";
@@ -283,7 +300,7 @@ export default function OrdemServicoPage() {
       const valorItem = valorTotalParam ? parseFloat(valorTotalParam) : 0;
       prefillData.itens.push({
         idTemp: `item-${Date.now()}`,
-        produtoServicoId: undefined, // When coming from balcão, it's treated as manual initially
+        produtoServicoId: undefined, 
         nome: descricaoParam,
         quantidade: 1,
         valorUnitario: valorItem,
@@ -456,7 +473,7 @@ export default function OrdemServicoPage() {
         nome: itemCatalogo.nome,
         quantidade: 1,
         valorUnitario: itemCatalogo.valorVenda,
-        valorTotal: itemCatalogo.valorVenda,
+        valorTotal: itemCatalogo.valorVenda, // Assumindo quantidade 1 inicialmente
         tipo: itemCatalogo.tipo,
     } : {
         idTemp: `item-${Date.now()}`,
@@ -472,38 +489,45 @@ export default function OrdemServicoPage() {
 
   const handleItemChange = (index: number, field: keyof ItemOSFormValues, value: any) => {
     const currentItem = fields[index];
-    let updatedItem = { ...currentItem, [field]: value };
+    let numericValue = value;
+    if (field === 'quantidade' || field === 'valorUnitario') {
+      numericValue = parseFloat(value) || 0;
+    }
+    
+    let updatedItem = { ...currentItem, [field]: numericValue };
 
     if (field === 'quantidade' || field === 'valorUnitario') {
-      const qtd = field === 'quantidade' ? parseFloat(value) || 0 : updatedItem.quantidade;
-      const vu = field === 'valorUnitario' ? parseFloat(value) || 0 : updatedItem.valorUnitario;
+      const qtd = updatedItem.quantidade;
+      const vu = updatedItem.valorUnitario;
       updatedItem.valorTotal = qtd * vu;
     }
     update(index, updatedItem);
   };
 
   const handleItemCatalogoSelect = (index: number, itemId: string) => {
+    const currentItem = fields[index];
     if (itemId === MANUAL_ITEM_PLACEHOLDER_VALUE) {
         update(index, {
-            ...fields[index],
-            produtoServicoId: undefined, // Clear if it was previously set
-            nome: fields[index].nome || "", // Keep manual name if user typed something
+            ...currentItem,
+            produtoServicoId: undefined,
+            nome: "", // Limpa nome para entrada manual
+            valorUnitario: 0,
+            valorTotal: 0, 
             tipo: 'Manual',
-            // valorUnitario and valorTotal would be manually entered
         });
-        return;
-    }
-
-    const selectedCatalogoItem = catalogoItens.find(c => c.id === itemId);
-    if (selectedCatalogoItem) {
-        update(index, {
-            ...fields[index],
-            produtoServicoId: selectedCatalogoItem.id,
-            nome: selectedCatalogoItem.nome,
-            valorUnitario: selectedCatalogoItem.valorVenda,
-            valorTotal: fields[index].quantidade * selectedCatalogoItem.valorVenda, 
-            tipo: selectedCatalogoItem.tipo,
-        });
+    } else {
+        const selectedCatalogoItem = catalogoItens.find(c => c.id === itemId);
+        if (selectedCatalogoItem) {
+            const currentQty = currentItem.quantidade || 1;
+            update(index, {
+                ...currentItem,
+                produtoServicoId: selectedCatalogoItem.id,
+                nome: selectedCatalogoItem.nome,
+                valorUnitario: selectedCatalogoItem.valorVenda,
+                valorTotal: currentQty * selectedCatalogoItem.valorVenda, 
+                tipo: selectedCatalogoItem.tipo,
+            });
+        }
     }
   };
 
@@ -594,7 +618,9 @@ export default function OrdemServicoPage() {
               <Card className="pt-4">
                 <CardHeader><CardTitle className="text-lg">Itens da Ordem de Serviço</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  {fields.map((item, index) => (
+                  {fields.map((item, index) => {
+                    const isCatalogoSelected = !!item.produtoServicoId && item.produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE;
+                    return (
                     <div key={item.idTemp} className="p-3 border rounded-md space-y-3 relative bg-muted/20">
                        <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => remove(index)} title="Remover Item">
                          <Trash2 className="h-4 w-4" />
@@ -609,25 +635,25 @@ export default function OrdemServicoPage() {
                                 >
                                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} /></SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value={MANUAL_ITEM_PLACEHOLDER_VALUE}>-- Item Manual (digite o nome abaixo) --</SelectItem>
+                                        <SelectItem value={MANUAL_ITEM_PLACEHOLDER_VALUE}>-- Item Manual --</SelectItem>
                                         {catalogoItens.map(catItem => <SelectItem key={catItem.id} value={catItem.id}>{catItem.nome} ({catItem.tipo}) - R${catItem.valorVenda.toFixed(2)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </FormItem>
                              <FormField name={`itens.${index}.nome`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Nome do Item (Manual/Catálogo)</FormLabel><FormControl><Input placeholder="Nome do produto/serviço" {...field} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Nome do Item</FormLabel><FormControl><Input placeholder="Nome do produto/serviço" {...field} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                              <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => handleItemChange(index, 'quantidade', e.target.value)} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => handleItemChange(index, 'quantidade', parseFloat(e.target.value) || 0)} min="1" /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" onChange={e => handleItemChange(index, 'valorUnitario', e.target.value)}/></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" onChange={e => handleItemChange(index, 'valorUnitario', parseFloat(e.target.value) || 0)} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormItem>
                                 <FormLabel>Val. Total (R$)</FormLabel>
-                                <Input type="number" value={item.valorTotal.toFixed(2)} readOnly disabled className="bg-muted/50" />
+                                <Input type="number" value={(item.valorTotal || 0).toFixed(2)} readOnly disabled className="bg-muted/50" />
                              </FormItem>
                         </div>
                          <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
@@ -636,7 +662,8 @@ export default function OrdemServicoPage() {
                             </FormItem>
                          )}/>
                     </div>
-                  ))}
+                  );
+                })}
                   <Button type="button" variant="outline" onClick={() => handleAddItem()} className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4"/> Adicionar Item</Button>
                   <FormMessage>{osForm.formState.errors.itens?.message || osForm.formState.errors.itens?.root?.message}</FormMessage>
                 </CardContent>
@@ -645,7 +672,7 @@ export default function OrdemServicoPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormItem>
                     <FormLabel>Valor Total da OS (R$)</FormLabel>
-                    <FormControl><Input type="number" value={osForm.watch('valorTotalOS').toFixed(2)} readOnly disabled className="font-bold text-lg bg-muted/50" /></FormControl>
+                    <FormControl><Input type="number" value={(osForm.watch('valorTotalOS') || 0).toFixed(2)} readOnly disabled className="font-bold text-lg bg-muted/50" /></FormControl>
                     <FormMessage />
                 </FormItem>
                 <FormField
@@ -654,7 +681,7 @@ export default function OrdemServicoPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Valor Adiantado (R$) (Opcional)</FormLabel>
-                      <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0" /></FormControl>
+                      <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
