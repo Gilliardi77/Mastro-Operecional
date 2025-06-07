@@ -1,9 +1,12 @@
 
+'use client'; // Necessário para hooks como useState e useEffect
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sparkles, FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid } from 'lucide-react';
 import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide';
+import React, { useState, useEffect } from 'react'; // Importar useState e useEffect
 
 interface QuickAccessCardProps {
   title: string;
@@ -36,6 +39,18 @@ function QuickAccessCard({ title, description, href, icon: Icon, cta }: QuickAcc
 }
 
 export default function Home() {
+  const [greeting, setGreeting] = useState('');
+
+  useEffect(() => {
+    const getCurrentGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour < 12) return 'Bom dia';
+      if (hour < 18) return 'Boa tarde';
+      return 'Boa noite';
+    };
+    setGreeting(getCurrentGreeting());
+  }, []);
+
   const quickAccessItems: QuickAccessCardProps[] = [
     {
       title: 'Nova Ordem de Serviço',
@@ -83,9 +98,9 @@ export default function Home() {
 
   return (
     <div className="space-y-16">
-      <section className="text-center py-8 bg-gradient-to-br from-primary/5 via-background to-background rounded-xl shadow-inner">
+      <section className="text-center py-12 bg-gradient-to-br from-primary/10 via-background to-background rounded-xl shadow-inner">
         <h2 className="font-headline text-4xl font-bold tracking-tight text-primary sm:text-5xl">
-          Bem-vindo ao Maestro Operacional
+          {greeting ? `${greeting}, bem-vindo(a) ao` : 'Bem-vindo(a) ao'} Maestro Operacional
         </h2>
         <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
           Sua plataforma completa para gerenciar clientes, serviços, agenda, vendas e muito mais, com o poder da Inteligência Artificial para otimizar suas operações.
@@ -107,10 +122,6 @@ export default function Home() {
       </section>
 
       <section id="ai-tools" className="mt-20">
-        {/* O título "Potencialize sua Criação com IA" e sua descrição foram removidos */}
-        {/* O subtítulo "Outras Ferramentas de Geração" e sua descrição foram removidos */}
-        {/* Os componentes AISuggestionForm e ModulePromptGeneratorForm foram removidos */}
-        
         <div className="mb-12">
           <InteractiveModuleGuide />
         </div>
