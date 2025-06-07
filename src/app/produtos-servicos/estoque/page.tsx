@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MinusCircle, Edit, Search, Loader2, PackageOpen, AlertTriangle, Package, CalendarIcon, FileText } from "lucide-react";
+import { PlusCircle, MinusCircle, Edit, Search, Loader2, PackageOpen, AlertTriangle, Package, CalendarIcon, FileText, SquarePlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -32,13 +32,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, runTransaction, writeBatch } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, runTransaction } from "firebase/firestore";
 import { cn } from '@/lib/utils';
 
 interface ProdutoEstoqueFirestore {
@@ -85,6 +85,17 @@ const ajusteSchema = z.object({
 });
 type AjusteFormValues = z.infer<typeof ajusteSchema>;
 
+const newProductSchema = z.object({
+  nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
+  descricao: z.string().optional(),
+  valorVenda: z.coerce.number().positive({ message: "Valor de venda deve ser positivo." }),
+  unidade: z.string().min(1, { message: "Unidade é obrigatória (Ex: UN, KG, HR, M²)." }),
+  custoUnitario: z.coerce.number().nonnegative({ message: "Custo Unitário é obrigatório e deve ser não-negativo." }).default(0),
+  quantidadeEstoque: z.coerce.number().nonnegative({ message: "Estoque Inicial é obrigatório e deve ser não-negativo." }).default(0),
+  estoqueMinimo: z.coerce.number().nonnegative({ message: "Estoque Mínimo é obrigatório e deve ser não-negativo." }).default(0),
+});
+type NewProductFormValues = z.infer<typeof newProductSchema>;
+
 
 export default function ControleEstoquePage() {
   const { toast } = useToast();
@@ -98,6 +109,7 @@ export default function ControleEstoquePage() {
   const [isEntradaModalOpen, setIsEntradaModalOpen] = useState(false);
   const [isSaidaModalOpen, setIsSaidaModalOpen] = useState(false);
   const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false);
+  const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProdutoEstoque | null>(null);
 
   const bypassAuth = true;
@@ -105,6 +117,18 @@ export default function ControleEstoquePage() {
   const entradaForm = useForm<EntradaFormValues>({ resolver: zodResolver(entradaSchema), defaultValues: { quantidade: 1, data: new Date(), custoUnitario: 0 } });
   const saidaForm = useForm<SaidaFormValues>({ resolver: zodResolver(saidaSchema), defaultValues: { quantidade: 1, data: new Date() } });
   const ajusteForm = useForm<AjusteFormValues>({ resolver: zodResolver(ajusteSchema), defaultValues: { novaQuantidade: 0 } });
+  const newProductForm = useForm<NewProductFormValues>({
+    resolver: zodResolver(newProductSchema),
+    defaultValues: {
+      nome: "",
+      descricao: "",
+      valorVenda: 0,
+      unidade: "UN",
+      custoUnitario: 0,
+      quantidadeEstoque: 0,
+      estoqueMinimo: 0,
+    },
+  });
 
   const fetchProdutos = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
@@ -118,7 +142,7 @@ export default function ControleEstoquePage() {
       const q = query(
         collection(db, "produtosServicos"), 
         where("userId", "==", userIdToQuery),
-        where("tipo", "==", "Produto"), // Apenas produtos têm estoque
+        where("tipo", "==", "Produto"), 
         orderBy("nome", "asc")
       );
       const querySnapshot = await getDocs(q);
@@ -149,7 +173,7 @@ export default function ControleEstoquePage() {
     }
   }, [fetchProdutos, user, bypassAuth]);
 
-  const openModal = (type: 'entrada' | 'saida' | 'ajuste', product?: ProdutoEstoque) => {
+  const openModal = (type: 'entrada' | 'saida' | 'ajuste' | 'newProduct', product?: ProdutoEstoque) => {
     setSelectedProductForModal(product || null);
     if (type === 'entrada') {
       entradaForm.reset({ produtoId: product?.id || "", quantidade: 1, data: new Date(), custoUnitario: product?.custoUnitario || 0, observacoes: "" });
@@ -160,6 +184,9 @@ export default function ControleEstoquePage() {
     } else if (type === 'ajuste') {
       ajusteForm.reset({ produtoId: product?.id || "", novaQuantidade: product?.quantidadeEstoque || 0, observacoes: "" });
       setIsAjusteModalOpen(true);
+    } else if (type === 'newProduct') {
+      newProductForm.reset({ nome: "", descricao: "", valorVenda: 0, unidade: "UN", custoUnitario: 0, quantidadeEstoque: 0, estoqueMinimo: 0 });
+      setIsNewProductModalOpen(true);
     }
   };
 
@@ -175,10 +202,9 @@ export default function ControleEstoquePage() {
         const currentStock = currentData.quantidadeEstoque ?? 0;
         const newStock = currentStock + values.quantidade;
         
-        // Futuramente, recalcular custo médio aqui se values.custoUnitario for informado
         transaction.update(productRef, { 
           quantidadeEstoque: newStock,
-          custoUnitario: values.custoUnitario, // Atualiza o custo unitário com o da última entrada
+          custoUnitario: values.custoUnitario, 
           atualizadoEm: Timestamp.now() 
         });
       });
@@ -227,13 +253,42 @@ export default function ControleEstoquePage() {
       await updateDoc(productRef, {
         quantidadeEstoque: values.novaQuantidade,
         atualizadoEm: Timestamp.now(),
-        // Poderíamos adicionar um log de ajuste aqui
       });
       toast({ title: "Estoque Ajustado!", description: `Estoque atualizado para ${values.novaQuantidade} unidades.` });
       fetchProdutos();
       setIsAjusteModalOpen(false);
     } catch (error: any) {
       toast({ title: "Erro ao Ajustar Estoque", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveNewProduct = async (data: NewProductFormValues) => {
+    if (!user && !bypassAuth) {
+      toast({ title: "Usuário não autenticado", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
+    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
+    const now = Timestamp.now();
+
+    const newProductData = {
+      ...data,
+      tipo: 'Produto' as 'Produto' | 'Serviço',
+      userId: userIdToSave,
+      criadoEm: now,
+      atualizadoEm: now,
+    };
+
+    try {
+      await addDoc(collection(db, "produtosServicos"), newProductData);
+      toast({ title: "Produto Cadastrado!", description: `${data.nome} foi adicionado ao catálogo e ao estoque.` });
+      fetchProdutos();
+      setIsNewProductModalOpen(false);
+    } catch (error: any) {
+      console.error("Erro ao salvar novo produto:", error);
+      toast({ title: "Erro ao Salvar Produto", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -301,7 +356,8 @@ export default function ControleEstoquePage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Buscar produto..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
-            <div className="flex gap-2 mt-2 sm:mt-0 w-full sm:w-auto">
+            <div className="flex flex-wrap gap-2 mt-2 sm:mt-0 w-full sm:w-auto justify-end">
+              <Button onClick={() => openModal('newProduct')} variant="default" className="w-full sm:w-auto"><SquarePlus className="mr-2 h-4 w-4" /> Cadastrar Produto</Button>
               <Button onClick={() => openModal('entrada')} className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" /> Nova Entrada</Button>
               <Button onClick={() => openModal('saida')} variant="outline" className="w-full sm:w-auto"><MinusCircle className="mr-2 h-4 w-4" /> Registrar Saída</Button>
               <Button onClick={() => openModal('ajuste')} variant="secondary" className="w-full sm:w-auto"><Edit className="mr-2 h-4 w-4" /> Ajustar Estoque</Button>
@@ -321,7 +377,7 @@ export default function ControleEstoquePage() {
                   <TableHead className="text-center">Estoque Atual</TableHead>
                   <TableHead className="text-center hidden md:table-cell">Est. Mínimo</TableHead>
                   <TableHead className="hidden sm:table-cell">Unidade</TableHead>
-                  <TableHead className="hidden lg:table-cell text-right">Custo (Médio)</TableHead>
+                  <TableHead className="hidden lg:table-cell text-right">Custo (Ref.)</TableHead>
                   <TableHead className="hidden lg:table-cell text-right">Últ. Mov.</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -351,8 +407,55 @@ export default function ControleEstoquePage() {
         </CardContent>
       </Card>
 
+      {/* Modal Novo Produto */}
+      <Dialog open={isNewProductModalOpen} onOpenChange={(isOpen) => {
+          setIsNewProductModalOpen(isOpen);
+          if (!isOpen) newProductForm.reset();
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Novo Produto</DialogTitle>
+            <DialogPrimitiveDescription>Preencha os dados do novo produto para o catálogo e estoque.</DialogPrimitiveDescription>
+          </DialogHeader>
+          <Form {...newProductForm}>
+            <form onSubmit={newProductForm.handleSubmit(handleSaveNewProduct)} className="space-y-3 py-2 max-h-[70vh] overflow-y-auto pr-2">
+              <FormField control={newProductForm.control} name="nome" render={({ field }) => (
+                <FormItem><FormLabel>Nome do Produto</FormLabel><FormControl><Input placeholder="Ex: Parafuso Sextavado 1/4" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={newProductForm.control} name="valorVenda" render={({ field }) => (
+                <FormItem><FormLabel>Preço de Venda (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0"/></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={newProductForm.control} name="unidade" render={({ field }) => (
+                <FormItem><FormLabel>Unidade</FormLabel><FormControl><Input placeholder="UN, KG, Caixa, Peça" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={newProductForm.control} name="custoUnitario" render={({ field }) => (
+                <FormItem><FormLabel>Custo Unitário (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0"/></FormControl><FormMessage /></FormItem>
+              )} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={newProductForm.control} name="quantidadeEstoque" render={({ field }) => (
+                  <FormItem><FormLabel>Estoque Inicial</FormLabel><FormControl><Input type="number" placeholder="0" {...field} step="1" min="0"/></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={newProductForm.control} name="estoqueMinimo" render={({ field }) => (
+                  <FormItem><FormLabel>Estoque Mínimo</FormLabel><FormControl><Input type="number" placeholder="0" {...field} step="1" min="0"/></FormControl><FormMessage /></FormItem>
+                )} />
+              </div>
+              <FormField control={newProductForm.control} name="descricao" render={({ field }) => (
+                <FormItem><FormLabel>Descrição (Opcional)</FormLabel><FormControl><Textarea placeholder="Detalhes adicionais do produto..." {...field} rows={2} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <DialogFooter className="pt-3">
+                <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button></DialogClose>
+                <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Cadastrar Produto</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Nova Entrada */}
-      <Dialog open={isEntradaModalOpen} onOpenChange={setIsEntradaModalOpen}>
+      <Dialog open={isEntradaModalOpen} onOpenChange={(isOpen) => {
+          setIsEntradaModalOpen(isOpen);
+          if (!isOpen) entradaForm.reset();
+      }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Registrar Nova Entrada de Estoque</DialogTitle></DialogHeader>
           <Form {...entradaForm}>
@@ -396,7 +499,10 @@ export default function ControleEstoquePage() {
       </Dialog>
 
       {/* Modal Registrar Saída */}
-      <Dialog open={isSaidaModalOpen} onOpenChange={setIsSaidaModalOpen}>
+      <Dialog open={isSaidaModalOpen} onOpenChange={(isOpen) => {
+          setIsSaidaModalOpen(isOpen);
+          if (!isOpen) saidaForm.reset();
+      }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Registrar Saída de Estoque</DialogTitle></DialogHeader>
           <Form {...saidaForm}>
@@ -444,7 +550,10 @@ export default function ControleEstoquePage() {
       </Dialog>
 
       {/* Modal Ajustar Estoque */}
-      <Dialog open={isAjusteModalOpen} onOpenChange={setIsAjusteModalOpen}>
+      <Dialog open={isAjusteModalOpen} onOpenChange={(isOpen) => {
+          setIsAjusteModalOpen(isOpen);
+          if (!isOpen) ajusteForm.reset();
+      }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Ajustar Estoque Manualmente</DialogTitle></DialogHeader>
           <Form {...ajusteForm}>
@@ -474,3 +583,6 @@ export default function ControleEstoquePage() {
     </div>
   );
 }
+
+
+    
