@@ -524,7 +524,7 @@ Enviado por: Meu Negócio App
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2"><FileText className="h-6 w-6 text-primary" />
-            <div><CardTitle>Nova Ordem de Serviço</CardTitle><DialogPrimitiveDescription>Preencha os dados para criar uma nova OS. O ID da OS é gerado automaticamente ao salvar.</DialogPrimitiveDescription></div>
+            <div><CardTitle>Nova Ordem de Serviço</CardTitle><CardDescription>Preencha os dados para criar uma nova OS. O ID da OS é gerado automaticamente ao salvar.</CardDescription></div>
           </div>
         </CardHeader>
         <CardContent>
