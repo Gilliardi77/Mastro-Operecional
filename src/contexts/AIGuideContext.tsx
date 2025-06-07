@@ -1,10 +1,11 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { contextualAIGuideFlow, type ContextualAIGuideInput, type ContextualAIGuideOutput } from '@/ai/flows/contextual-ai-guide-flow';
+import { contextualAIGuideFlow } from '@/ai/flows/contextual-ai-guide-flow';
+import type { ContextualAIGuideInput, ContextualAIGuideOutput } from '@/ai/schemas/contextual-ai-guide-schema';
+
 
 interface ChatMessage {
   id: string;
@@ -29,7 +30,6 @@ interface AIGuideContextType {
   updateAICurrentPageContext: (pageName: string) => void; // Simplified for now
   sendQueryToAIGuide: (userQuery: string) => Promise<void>;
   isAILoading: boolean;
-  // TODO: Add methods for proactive AI, context updates from forms, etc.
 }
 
 const AIGuideContext = createContext<AIGuideContextType | undefined>(undefined);

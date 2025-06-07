@@ -1,38 +1,21 @@
-
 'use server';
 /**
  * @fileOverview Um Guia de IA Contextual que ajuda os usuários dentro da aplicação Business Maestro.
  *
  * - contextualAIGuideFlow - Função que interage com o usuário com base no contexto da aplicação.
- * - ContextualAIGuideInput - Tipo de entrada para a função contextualAIGuideFlow.
- * - ContextualAIGuideOutput - Tipo de saída para a função contextualAIGuideFlow.
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+// Import schemas and types from the new file
+import {
+  ContextualAIGuideInputSchema,
+  type ContextualAIGuideInput,
+  ContextualAIGuideOutputSchema,
+  type ContextualAIGuideOutput
+} from '@/ai/schemas/contextual-ai-guide-schema';
 
-export const ContextualAIGuideInputSchema = z.object({
-  pageName: z.string().describe('O nome ou rota da página atual que o usuário está visualizando. Ex: "/produtos-servicos/agenda", "HomePage", "PrecificacaoPage".'),
-  userQuery: z.string().min(1, {message: 'A consulta do usuário não pode estar vazia.'}).describe('A pergunta ou comando do usuário para a IA Guia.'),
-  currentAction: z.string().optional().describe('A ação específica que o usuário está tentando realizar. Ex: "criando_novo_atendimento", "cadastrando_cliente", "editando_os".'),
-  formSnapshotJSON: z.string().optional().describe('Um JSON stringificado do estado atual de um formulário que o usuário pode estar preenchendo. Inclui campos e seus valores.'),
-  // userHistorySnippet: z.string().optional().describe('Um breve resumo das ações recentes do usuário no app para dar mais contexto à IA.'), // Poderia ser adicionado futuramente
-});
-export type ContextualAIGuideInput = z.infer<typeof ContextualAIGuideInputSchema>;
 
-export const ContextualAIGuideOutputSchema = z.object({
-  aiResponseText: z.string().describe('A resposta textual da IA para o usuário, formatada de forma amigável e útil.'),
-  suggestedActions: z.array(
-      z.object({
-        label: z.string().describe('O texto a ser exibido no botão de ação sugerida.'),
-        actionId: z.string().describe('Um identificador único para a ação (ex: "preencher_campo_nome", "calcular_preco_sugerido", "navegar_para_ajuda_clientes").'),
-        payload: z.any().optional().describe('Dados adicionais necessários para executar a ação sugerida (ex: { campo: "nome", valor: "Sugestão da IA" }).'),
-      })
-    ).optional().describe('Uma lista de ações que a IA sugere que o usuário ou o sistema podem tomar.'),
-  confidenceScore: z.number().min(0).max(1).optional().describe('Um score de confiança (0-1) sobre a relevância e precisão da resposta/sugestão.'),
-});
-export type ContextualAIGuideOutput = z.infer<typeof ContextualAIGuideOutputSchema>;
-
+// Export only the async function
 export async function contextualAIGuideFlow(
   input: ContextualAIGuideInput
 ): Promise<ContextualAIGuideOutput> {
@@ -41,8 +24,8 @@ export async function contextualAIGuideFlow(
 
 const prompt = ai.definePrompt({
   name: 'contextualAIGuidePrompt',
-  input: {schema: ContextualAIGuideInputSchema},
-  output: {schema: ContextualAIGuideOutputSchema},
+  input: {schema: ContextualAIGuideInputSchema}, // Use imported schema
+  output: {schema: ContextualAIGuideOutputSchema}, // Use imported schema
   prompt: `Você é um Guia de IA assistente para a aplicação "Business Maestro". Seu objetivo é ajudar os usuários de forma proativa e contextual enquanto eles utilizam o sistema.
 Seu tom deve ser: Simples, Humano, Direto e Levemente Consultivo.
 
@@ -75,12 +58,10 @@ Responda SEMPRE no formato JSON especificado pelo ContextualAIGuideOutputSchema.
 const contextualAIGuideInternalFlow = ai.defineFlow(
   {
     name: 'contextualAIGuideInternalFlow',
-    inputSchema: ContextualAIGuideInputSchema,
-    outputSchema: ContextualAIGuideOutputSchema,
+    inputSchema: ContextualAIGuideInputSchema,   // Use imported schema
+    outputSchema: ContextualAIGuideOutputSchema, // Use imported schema
   },
   async (input) => {
-    // Simulação de lógica mais complexa baseada no contexto pode vir aqui no futuro.
-    // Por enquanto, passamos diretamente para o prompt.
     const {output} = await prompt(input);
     if (!output) {
       // Fallback em caso de erro da IA em gerar a estrutura correta
