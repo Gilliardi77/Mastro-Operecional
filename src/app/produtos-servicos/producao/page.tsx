@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { useAuth } from '@/components/auth/auth-provider';
@@ -242,8 +243,11 @@ export default function ProducaoPage() {
                     }
                     const produtoData = produtoDoc.data() as any; 
                     const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
+                    
+                    // A política de permitir estoque negativo é confirmada.
+                    // Apenas calculamos o novo estoque.
                     const novoEstoque = estoqueAtual - itemOS.quantidade;
-                    transaction.update(produtoCatalogoRef, {
+                    transaction.update(produtoCatalogoRef, { 
                       quantidadeEstoque: novoEstoque,
                       atualizadoEm: Timestamp.now()
                     });
@@ -545,3 +549,4 @@ export default function ProducaoPage() {
     </div>
   );
 }
+
