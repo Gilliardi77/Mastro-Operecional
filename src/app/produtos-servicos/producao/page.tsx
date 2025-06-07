@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -27,9 +28,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase";
-import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
-import { useSearchParams } from 'next/navigation';
+import { db } from "@/lib/firebase";
+import { useAuth } from '@/components/auth/auth-provider'; 
+import { useSearchParams, useRouter } from 'next/navigation'; // Adicionado useRouter
 import {
   collection,
   query,
@@ -93,7 +94,8 @@ const getStatusFromProgress = (progress: number): ProductionOrderStatus => {
 
 export default function ProducaoPage() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const router = useRouter(); // Instanciado useRouter
   const searchParams = useSearchParams();
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -261,10 +263,8 @@ Atenciosamente,
 Equipe Meu Negócio App
     `.trim().replace(/^\s+/gm, "");
 
-    // Simulação de envio ou integração com função de e-mail
     console.log("Simulando envio de e-mail:", { to: "cliente@example.com", subject, body });
     toast({ title: "E-mail (Simulado) Pronto", description: "O conteúdo do e-mail foi gerado (ver console)." });
-    // Em uma implementação real, aqui você chamaria sua Cloud Function de envio de e-mail
   };
 
 
@@ -284,22 +284,24 @@ Equipe Meu Negócio App
     });
   }, [productionOrders, statusFilters, searchTerm]);
 
-  if (!bypassAuth && !user && isLoading) {
+  if (isAuthLoading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
   }
-  if ((user || bypassAuth) && isLoading) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando ordens de produção...</p></div>;
-  }
-   if (!bypassAuth && !user && !isLoading) {
+  
+  if (!bypassAuth && !user) {
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent>
           <p>Você precisa estar logado para acessar o controle de produção.</p>
-          <Button onClick={() => auth.signOut().then(() => window.location.href = '/login')} className="mt-4">Fazer Login</Button>
+          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
         </CardContent>
       </Card>
     );
+  }
+  
+  if (isLoading && (user || bypassAuth)) {
+    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando ordens de produção...</p></div>;
   }
 
   return (

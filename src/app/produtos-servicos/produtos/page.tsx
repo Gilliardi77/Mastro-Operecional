@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -23,8 +24,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
-import { db, auth } from "@/lib/firebase";
-import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
+import { db } from "@/lib/firebase";
+import { useAuth } from '@/components/auth/auth-provider'; 
+import { useRouter } from "next/navigation"; // Adicionado useRouter
 import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, deleteDoc } from "firebase/firestore";
 
 const itemSchema = z.object({
@@ -77,7 +79,8 @@ interface ProdutoServico extends Omit<ProdutoServicoFirestore, 'criadoEm' | 'atu
 
 export default function ProdutosServicosPage() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const router = useRouter(); // Instanciado useRouter
   const [allProdutosServicos, setAllProdutosServicos] = useState<ProdutoServico[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ProdutoServico | null>(null);
@@ -283,17 +286,24 @@ export default function ProdutosServicosPage() {
 
   const showContent = !isLoading || (bypassAuth && allProdutosServicos.length > 0);
 
-
-  if (!bypassAuth && !user && !isLoading) {
+  if (isAuthLoading) {
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
+  }
+  
+  if (!bypassAuth && !user) {
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent>
           <p>Você precisa estar logado para gerenciar produtos e serviços.</p>
-          <Button onClick={() => auth.signOut().then(() => window.location.href = '/login')} className="mt-4">Fazer Login</Button>
+          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
         </CardContent>
       </Card>
     );
+  }
+  
+  if (isLoading && (user || bypassAuth)) {
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando itens...</p></div>;
   }
 
   return (
@@ -320,8 +330,6 @@ export default function ProdutosServicosPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {isLoading && (user || bypassAuth) && <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando itens...</p></div>}
-          
           {showContent && (
             <div className="rounded-md border">
               <Table>
@@ -421,7 +429,7 @@ export default function ProdutosServicosPage() {
                     <FormLabel>Tipo</FormLabel>
                     <Select 
                         onValueChange={(value) => {
-                            field.onChange(value as 'Produto' | 'Serviço'); // Cast to ensure type safety
+                            field.onChange(value as 'Produto' | 'Serviço'); 
                             if (value === 'Serviço') {
                                 form.setValue('custoUnitario', undefined); 
                                 form.setValue('quantidadeEstoque', undefined);

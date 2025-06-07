@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -36,8 +37,8 @@ import { z } from "zod";
 import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase";
-import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
+import { db } from "@/lib/firebase";
+import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
 import {
   collection,
@@ -108,7 +109,7 @@ const sampleServices: Servico[] = [
 
 export default function AgendaPage() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(new Date());
@@ -386,29 +387,32 @@ export default function AgendaPage() {
   const handleGoToProduction = (appointmentId: string) => {
     const app = appointments.find(a => a.id === appointmentId);
     if (app && app.geraOrdemProducao) {
-      router.push(`/produtos-servicos/producao?agendamentoId=${appointmentId}`); // Placeholder, route to be defined
+      router.push(`/produtos-servicos/producao?agendamentoId=${appointmentId}`); 
     } else {
       toast({ title: "Ação Indisponível", description: `Este agendamento não gerou uma ordem de produção.`, variant: "default" });
     }
   };
 
-  if (!bypassAuth && !user && (isLoading || isLoadingClients)) {
+  if (isAuthLoading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
   }
-  if ((user || bypassAuth ) && (isLoading || isLoadingClients)) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados da agenda...</p></div>;
-  }
-   if (!bypassAuth && !user && !isLoading && !isLoadingClients) {
+
+  if (!bypassAuth && !user) {
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent>
           <p>Você precisa estar logado para acessar a agenda.</p>
-          <Button onClick={() => auth.signOut().then(() => window.location.href = '/login')} className="mt-4">Fazer Login</Button>
+          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
         </CardContent>
       </Card>
     );
   }
+  
+  if (isLoading || isLoadingClients) {
+    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados da agenda...</p></div>;
+  }
+
 
   return (
     <div className="grid lg:grid-cols-3 gap-6">

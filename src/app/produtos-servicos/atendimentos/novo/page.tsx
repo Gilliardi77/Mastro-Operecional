@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,7 +7,7 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, FileText, MessageSquare, Mail, Loader2, UserPlus } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation"; // Adicionado useRouter
 import React, { useState, useEffect, useCallback } from "react";
 import { collection, addDoc, Timestamp, query, where, getDocs, orderBy, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 
@@ -21,8 +22,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogPrimitiveDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase";
-import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
+import { db } from "@/lib/firebase";
+import { useAuth } from '@/components/auth/auth-provider';
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
@@ -77,7 +78,8 @@ const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null 
 
 export default function OrdemServicoPage() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const router = useRouter(); // Instanciado useRouter
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [lastSavedOsData, setLastSavedOsData] = useState<LastSavedOsDataType | null>(null);
@@ -157,15 +159,16 @@ export default function OrdemServicoPage() {
       const clientExists = clients.some(c => c.id === clienteIdParam);
       if (clientExists && clienteNomeParam) {
         prefillData.clienteNome = clienteNomeParam;
-      } else if (clienteIdParam === "avulso" && clienteNomeParam) {
-        prefillData.clienteNome = clienteNomeParam;
-      } else if (clienteIdParam !== "avulso" && !clientExists) {
+      } else if (clienteIdParam === "avulso") {
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
+      } else if (clienteIdParam !== "avulso" && !clientExists) {
+         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; // Default if param name is also missing
       }
     } else {
         prefillData.clienteId = "avulso";
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
     }
+
 
     if (descricaoParam) prefillData.descricao = descricaoParam;
     if (valorTotalParam) {
@@ -195,7 +198,7 @@ export default function OrdemServicoPage() {
         const nomeForm = osForm.getValues('clienteNome');
         if (nomeParam && nomeParam !== nomeForm) {
              osForm.setValue('clienteNome', nomeParam);
-        } else if (!nomeForm && !nomeParam) {
+        } else if (!nomeForm && !nomeParam) { // if both are empty, set default
              osForm.setValue('clienteNome', "Cliente Avulso");
         }
     }
@@ -292,15 +295,15 @@ export default function OrdemServicoPage() {
 
       try {
         const productionOrderData = {
-          agendamentoId: osDocRefId, // Aqui usamos o ID da OS como referência
+          agendamentoId: osDocRefId, 
           clienteId: osDataToSave.clienteId,
           clienteNome: osDataToSave.clienteNome,
-          servicoNome: osDataToSave.descricao, // A descrição da OS se torna o "serviço" na produção
-          servicoId: null, // OS não tem um "serviçoId" de um catálogo pré-definido
-          dataAgendamento: osDataToSave.dataEntrega, // Data de entrega da OS é a data para produção
-          status: "Pendente" as ProductionOrderStatusOSPage, // Status inicial da produção
+          servicoNome: osDataToSave.descricao, 
+          servicoId: null, 
+          dataAgendamento: osDataToSave.dataEntrega, 
+          status: "Pendente" as ProductionOrderStatusOSPage, 
           progresso: 0,
-          observacoesAgendamento: osDataToSave.observacoes, // Observações da OS
+          observacoesAgendamento: osDataToSave.observacoes, 
           userId: userIdToSave,
           criadoEm: Timestamp.now(),
           atualizadoEm: Timestamp.now(),
@@ -465,7 +468,6 @@ Enviado por: Meu Negócio App
 
     setIsSendingEmail(true);
     try {
-      // A URL da função será um placeholder até ser configurada.
       const functionUrl = "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/sendOrderEmail"; 
       if (functionUrl.includes("YOUR_REGION-YOUR_PROJECT_ID")) {
         console.warn("URL da função de e-mail é placeholder. O e-mail não será enviado de verdade.");
@@ -474,11 +476,9 @@ Enviado por: Meu Negócio App
         setIsSendingEmail(false);
         return;
       }
-      // O código abaixo só executaria se a URL fosse real.
       const response = await fetch(functionUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // O corpo do request precisaria ser ajustado para o que sua Cloud Function espera
         body: JSON.stringify({ to: recipientEmail, subject: emailSubject, htmlBody: emailHtmlBody, orderDetails: { /* ... */ } }),
       });
 
@@ -502,14 +502,22 @@ Enviado por: Meu Negócio App
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
+  if (isAuthLoading) {
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
+  }
 
-  if (!bypassAuth && !user && isLoadingClients && !isSaving && !isSavingNewClient) { // Ajustado para !isLoadingClients
+  if (!bypassAuth && !user) { 
     return (
       <Card><CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent><p>Você precisa estar logado para criar Ordens de Serviço.</p><Button onClick={() => auth.signOut().then(() => {  window.location.href = '/login'; })} className="mt-4">Fazer Login</Button></CardContent>
+        <CardContent><p>Você precisa estar logado para criar Ordens de Serviço.</p><Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button></CardContent>
       </Card>
     );
   }
+  
+  if (isLoadingClients && (user || bypassAuth)) {
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
+  }
+
 
   return (
     <div className="space-y-6">
