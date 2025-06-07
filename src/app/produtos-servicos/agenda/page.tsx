@@ -89,13 +89,25 @@ interface Appointment extends Omit<AppointmentFirestore, 'dataHora' | 'criadoEm'
 }
 
 const appointmentSchema = z.object({
-  clienteId: z.string().min(1, "Cliente é obrigatório."),
-  servicoId: z.string().min(1, "Serviço é obrigatório."),
+  clienteId: z.string().optional(),
+  clienteNomeInput: z.string().optional(),
+  servicoId: z.string().optional(),
+  servicoNomeInput: z.string().optional(),
   data: z.date({ required_error: "Data é obrigatória." }),
   hora: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Hora inválida (HH:MM)."),
   observacoes: z.string().optional(),
   status: z.enum(["Pendente", "Em Andamento", "Concluído", "Cancelado"], { required_error: "Status inicial é obrigatório." }),
   geraOrdemProducao: z.boolean().optional().default(false),
+}).refine(data => {
+  return (data.clienteId && data.clienteId.trim() !== "") || (data.clienteNomeInput && data.clienteNomeInput.trim() !== "");
+}, {
+  message: "Selecione um cliente ou informe o nome manualmente.",
+  path: ["clienteId"], 
+}).refine(data => {
+  return (data.servicoId && data.servicoId.trim() !== "") || (data.servicoNomeInput && data.servicoNomeInput.trim() !== "");
+}, {
+  message: "Selecione um serviço/produto ou informe o nome manualmente.",
+  path: ["servicoId"], 
 });
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema>;
@@ -135,7 +147,9 @@ export default function AgendaPage() {
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       clienteId: "",
+      clienteNomeInput: "",
       servicoId: "",
+      servicoNomeInput: "",
       data: new Date(),
       hora: "09:00",
       observacoes: "",
@@ -170,9 +184,11 @@ export default function AgendaPage() {
       setFetchedClients(clientsData);
     } catch (error: any) {
       console.error("[DEBUG AgendaPage] Erro ao buscar clientes para agenda:", error);
+      const firestoreErrorCode = error.code;
+      const detailedMessage = `Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${firestoreErrorCode || 'N/A'})`;
       toast({ 
-        title: "Erro ao buscar clientes", 
-        description: `Não foi possível carregar os dados. Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${error.code || 'N/A'})`, 
+        title: `Erro ao buscar clientes (Code: ${firestoreErrorCode || 'N/A'})`, 
+        description: `Não foi possível carregar os dados. ${detailedMessage}`, 
         variant: "destructive" 
       });
     } finally {
@@ -194,7 +210,7 @@ export default function AgendaPage() {
     setIsLoading(true);
     try {
       const collectionRef = collection(db, "agendamentos");
-      console.log("[DEBUG AgendaPage] fetchAppointments: Attempting to query collection 'agendamentos'");
+      console.log("[DEBUG AgendaPage] fetchAppointments: Attempting to query collection 'agendamentos', Query: where('userId', '==', '", userIdToQuery, "').orderBy('dataHora', 'asc')");
       const q = query(
         collectionRef,
         where("userId", "==", userIdToQuery),
@@ -217,9 +233,11 @@ export default function AgendaPage() {
       setAppointments(fetchedAppointments);
     } catch (error: any) {
       console.error("[DEBUG AgendaPage] Erro ao buscar agendamentos:", error);
+      const firestoreErrorCode = error.code;
+      const detailedMessage = `Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${firestoreErrorCode || 'N/A'})`;
       toast({ 
-        title: "Erro ao buscar agendamentos", 
-        description: `Não foi possível carregar os dados. Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${error.code || 'N/A'})`, 
+        title: `Erro ao buscar agendamentos (Code: ${firestoreErrorCode || 'N/A'})`, 
+        description: `Não foi possível carregar os dados. ${detailedMessage}`, 
         variant: "destructive" 
       });
     } finally {
@@ -237,9 +255,25 @@ export default function AgendaPage() {
   useEffect(() => {
     if (editingAppointment) {
       const data = new Date(editingAppointment.dataHora);
+      let clienteIdForm = editingAppointment.clienteId;
+      let clienteNomeInputForm = "";
+      if (editingAppointment.clienteId.startsWith("manual_cliente_")) {
+        clienteIdForm = ""; 
+        clienteNomeInputForm = editingAppointment.clienteNome;
+      }
+
+      let servicoIdForm = editingAppointment.servicoId;
+      let servicoNomeInputForm = "";
+      if (editingAppointment.servicoId.startsWith("manual_servico_")) {
+        servicoIdForm = ""; 
+        servicoNomeInputForm = editingAppointment.servicoNome;
+      }
+
       form.reset({
-        clienteId: editingAppointment.clienteId,
-        servicoId: editingAppointment.servicoId,
+        clienteId: clienteIdForm,
+        clienteNomeInput: clienteNomeInputForm,
+        servicoId: servicoIdForm,
+        servicoNomeInput: servicoNomeInputForm,
         data: data,
         hora: format(data, "HH:mm"),
         observacoes: editingAppointment.observacoes || "",
@@ -249,7 +283,9 @@ export default function AgendaPage() {
     } else {
       form.reset({
         clienteId: "",
+        clienteNomeInput: "",
         servicoId: "",
+        servicoNomeInput: "",
         data: selectedCalendarDate || new Date(),
         hora: "09:00",
         observacoes: "",
@@ -315,23 +351,68 @@ export default function AgendaPage() {
         return;
     }
 
+    let finalClienteId = "";
+    let finalClienteNome = "";
+    if (values.clienteId && values.clienteId.trim() !== "") {
+        const selectedClientObj = fetchedClients.find(c => c.id === values.clienteId);
+        if (selectedClientObj) {
+            finalClienteId = selectedClientObj.id;
+            finalClienteNome = selectedClientObj.nome;
+        } else {
+            // Fallback para nome manual se ID não for encontrado (pode ser ID antigo/inválido)
+            if (values.clienteNomeInput && values.clienteNomeInput.trim() !== "") {
+                finalClienteId = `manual_cliente_${Date.now()}`;
+                finalClienteNome = values.clienteNomeInput.trim();
+            } else {
+                 toast({ title: "Erro", description: "Cliente selecionado inválido e nenhum nome manual fornecido.", variant: "destructive"});
+                 setIsSubmitting(false);
+                 return;
+            }
+        }
+    } else if (values.clienteNomeInput && values.clienteNomeInput.trim() !== "") {
+        finalClienteId = `manual_cliente_${Date.now()}`;
+        finalClienteNome = values.clienteNomeInput.trim();
+    } else {
+        toast({ title: "Erro de Validação", description: "É necessário selecionar um cliente ou informar o nome manualmente.", variant: "destructive"});
+        setIsSubmitting(false);
+        return;
+    }
+
+    let finalServicoId = "";
+    let finalServicoNome = "";
+    if (values.servicoId && values.servicoId.trim() !== "") {
+        const selectedServiceObj = sampleServices.find(s => s.id === values.servicoId);
+         if (selectedServiceObj) {
+            finalServicoId = selectedServiceObj.id;
+            finalServicoNome = selectedServiceObj.nome;
+        } else {
+            if (values.servicoNomeInput && values.servicoNomeInput.trim() !== "") {
+                finalServicoId = `manual_servico_${Date.now()}`;
+                finalServicoNome = values.servicoNomeInput.trim();
+            } else {
+                 toast({ title: "Erro", description: "Serviço selecionado inválido e nenhum nome manual fornecido.", variant: "destructive"});
+                 setIsSubmitting(false);
+                 return;
+            }
+        }
+    } else if (values.servicoNomeInput && values.servicoNomeInput.trim() !== "") {
+        finalServicoId = `manual_servico_${Date.now()}`;
+        finalServicoNome = values.servicoNomeInput.trim();
+    } else {
+        toast({ title: "Erro de Validação", description: "É necessário selecionar um serviço/produto ou informar o nome manualmente.", variant: "destructive"});
+        setIsSubmitting(false);
+        return;
+    }
+
+
     const [hours, minutesValue] = values.hora.split(':').map(Number);
     const dataHoraCombined = setMilliseconds(setSeconds(setMinutes(setHours(values.data, hours), minutesValue),0),0);
 
-    const selectedClient = fetchedClients.find(c => c.id === values.clienteId);
-    const selectedService = sampleServices.find(s => s.id === values.servicoId);
-
-    if (!selectedClient || !selectedService) {
-      toast({ title: "Erro", description: "Cliente ou serviço inválido.", variant: "destructive"});
-      setIsSubmitting(false);
-      return;
-    }
-
     const appointmentData: Omit<AppointmentFirestore, 'id' | 'criadoEm'> = {
-      clienteId: values.clienteId,
-      clienteNome: selectedClient.nome,
-      servicoId: values.servicoId,
-      servicoNome: selectedService.nome,
+      clienteId: finalClienteId,
+      clienteNome: finalClienteNome,
+      servicoId: finalServicoId,
+      servicoNome: finalServicoNome,
       dataHora: Timestamp.fromDate(dataHoraCombined),
       observacoes: values.observacoes || "",
       status: values.status,
@@ -345,23 +426,23 @@ export default function AgendaPage() {
       if (editingAppointment) {
         const docRef = doc(db, "agendamentos", editingAppointment.id);
         await updateDoc(docRef, appointmentData);
-        toast({ title: "Agendamento Atualizado!", description: `Agendamento para ${selectedService.nome} atualizado.` });
+        toast({ title: "Agendamento Atualizado!", description: `Agendamento para ${finalServicoNome} atualizado.` });
       } else {
         const docRefGenerated = await addDoc(collection(db, "agendamentos"), {
           ...appointmentData,
           criadoEm: Timestamp.now(),
         });
         agendamentoId = docRefGenerated.id;
-        toast({ title: "Agendamento Criado!", description: `Novo agendamento para ${selectedService.nome} criado.` });
+        toast({ title: "Agendamento Criado!", description: `Novo agendamento para ${finalServicoNome} criado.` });
       }
 
       if (values.geraOrdemProducao && agendamentoId && userIdToSave) {
         const productionOrderData = {
           agendamentoId: agendamentoId,
-          clienteId: values.clienteId,
-          clienteNome: selectedClient.nome,
-          servicoId: values.servicoId,
-          servicoNome: selectedService.nome,
+          clienteId: finalClienteId,
+          clienteNome: finalClienteNome,
+          servicoId: finalServicoId,
+          servicoNome: finalServicoNome,
           dataAgendamento: Timestamp.fromDate(dataHoraCombined),
           status: "Pendente" as ProductionOrderStatusAgenda,
           progresso: 0,
@@ -371,7 +452,7 @@ export default function AgendaPage() {
           atualizadoEm: Timestamp.now(),
         };
         await addDoc(collection(db, "ordensDeProducao"), productionOrderData);
-        toast({ title: "Ordem de Produção Iniciada!", description: `Uma ordem de produção para ${selectedService.nome} foi criada.` });
+        toast({ title: "Ordem de Produção Iniciada!", description: `Uma ordem de produção para ${finalServicoNome} foi criada.` });
       }
 
       await fetchAppointments();
@@ -556,7 +637,8 @@ export default function AgendaPage() {
           if (!isOpen) {
             setEditingAppointment(null);
             form.reset({
-                clienteId: "", servicoId: "", data: selectedCalendarDate || new Date(), hora: "09:00",
+                clienteId: "", clienteNomeInput: "", servicoId: "", servicoNomeInput: "",
+                data: selectedCalendarDate || new Date(), hora: "09:00",
                 observacoes: "", status: "Pendente", geraOrdemProducao: false,
             });
           }
@@ -575,11 +657,12 @@ export default function AgendaPage() {
                 name="clienteId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cliente</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingClients}>
+                    <FormLabel>Cliente (Seleção)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingClients}>
                       <FormControl><SelectTrigger><SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} /></SelectTrigger></FormControl>
                       <SelectContent>
                         {isLoadingClients && <SelectItem value="loading" disabled>Carregando clientes...</SelectItem>}
+                         <SelectItem value="" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
                         {fetchedClients.map(client => <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>)}
                         {!isLoadingClients && fetchedClients.length === 0 && <SelectItem value="no-clients" disabled>Nenhum cliente cadastrado</SelectItem>}
                       </SelectContent>
@@ -588,18 +671,42 @@ export default function AgendaPage() {
                   </FormItem>
                 )}
               />
+               <FormField
+                control={form.control}
+                name="clienteNomeInput"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ou Nome do Cliente (Manual)</FormLabel>
+                    <FormControl><Input placeholder="Digite o nome se não estiver na lista" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="servicoId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Serviço/Produto</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel>Serviço/Produto (Seleção)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecione o serviço/produto" /></SelectTrigger></FormControl>
                       <SelectContent>
+                        <SelectItem value="" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
                         {sampleServices.map(service => <SelectItem key={service.id} value={service.id}>{service.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="servicoNomeInput"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ou Nome do Serviço/Produto (Manual)</FormLabel>
+                    <FormControl><Input placeholder="Digite o nome se não estiver na lista" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -719,5 +826,6 @@ export default function AgendaPage() {
     </div>
   );
 }
+    
 
     
