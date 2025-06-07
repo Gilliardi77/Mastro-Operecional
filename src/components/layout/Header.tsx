@@ -1,5 +1,5 @@
 
-import { Briefcase, LayoutDashboard } from 'lucide-react';
+import { Briefcase, LayoutDashboard, DollarSign } from 'lucide-react'; // Adicionado DollarSign
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -26,9 +26,16 @@ export default function Header() {
             <li>
               <Button variant="ghost" asChild>
                 <Link href="/produtos-servicos" className="flex items-center gap-1">
-                  {/* Ícone pode ser PackageSearch, ShoppingCart, etc. Usando Briefcase por ora */}
                   <Briefcase className="h-5 w-5" /> 
-                  Produtos/Serviços
+                  Operacional
+                </Link>
+              </Button>
+            </li>
+            <li>
+              <Button variant="ghost" asChild>
+                <Link href="/financeiro/dashboard" className="flex items-center gap-1">
+                  <DollarSign className="h-5 w-5" />
+                  Financeiro
                 </Link>
               </Button>
             </li>
