@@ -2,9 +2,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Brain, Sparkles, FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid } from 'lucide-react';
-import AISuggestionForm from '@/components/ai/AISuggestionForm';
-import ModulePromptGeneratorForm from '@/components/ai/ModulePromptGeneratorForm';
+import { Sparkles, FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid } from 'lucide-react';
 import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide';
 
 interface QuickAccessCardProps {
@@ -108,33 +106,13 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="ai-tools" aria-labelledby="ai-tools-title">
-        <div className="text-center mb-10 mt-20">
-            <h3 id="ai-tools-title" className="flex items-center justify-center gap-3 font-headline text-3xl text-foreground">
-              <Sparkles className="h-8 w-8 text-primary" />
-              Potencialize sua Criação com IA
-            </h3>
-            <p className="mt-2 text-muted-foreground">
-                Utilize nossas ferramentas de Inteligência Artificial para construir e personalizar módulos para o Maestro Operacional.
-            </p>
-        </div>
+      <section id="ai-tools" className="mt-20">
+        {/* O título "Potencialize sua Criação com IA" e sua descrição foram removidos */}
+        {/* O subtítulo "Outras Ferramentas de Geração" e sua descrição foram removidos */}
+        {/* Os componentes AISuggestionForm e ModulePromptGeneratorForm foram removidos */}
         
         <div className="mb-12">
           <InteractiveModuleGuide />
-        </div>
-
-        <div className="text-center mb-8">
-            <h4 className="flex items-center justify-center gap-2 font-headline text-2xl text-primary">
-              <Brain className="h-7 w-7" />
-              Outras Ferramentas de Geração
-            </h4>
-            <p className="mt-1 text-sm text-muted-foreground">
-                Criação inteligente de conteúdo e prompts de módulo mais diretos.
-            </p>
-        </div>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          <AISuggestionForm />
-          <ModulePromptGeneratorForm />
         </div>
       </section>
     </div>
