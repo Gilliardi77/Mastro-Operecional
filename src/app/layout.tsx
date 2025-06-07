@@ -9,8 +9,8 @@ import { AIGuideProvider } from '@/contexts/AIGuideContext'; // Importado
 import ContextualAIGuide from '@/components/ai/ContextualAIGuide'; // Importado
 
 export const metadata: Metadata = {
-  title: 'Extensão de Módulo Business Maestro',
-  description: 'Gerado pelo Firebase Studio para Business Maestro',
+  title: 'Maestro Operacional',
+  description: 'Gerado pelo Firebase Studio para Maestro Operacional',
 };
 
 export default function RootLayout({

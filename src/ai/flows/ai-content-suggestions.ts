@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -18,7 +19,7 @@ const ContentSuggestionsInputSchema = z.object({
   moduleContext: z
     .string()
     .describe(
-      'The context in which the module will be used, including the application name (Business Maestro), target audience, and any relevant data domains.'
+      'The context in which the module will be used, including the application name (Maestro Operacional), target audience, and any relevant data domains.'
     ),
   desiredContentLength: z
     .string()
@@ -42,7 +43,7 @@ const prompt = ai.definePrompt({
   name: 'contentSuggestionsPrompt',
   input: {schema: ContentSuggestionsInputSchema},
   output: {schema: ContentSuggestionsOutputSchema},
-  prompt: `You are an AI assistant designed to provide content suggestions for modules within the Business Maestro application.
+  prompt: `You are an AI assistant designed to provide content suggestions for modules within the Maestro Operacional application.
 
   Given the module's purpose, context, and desired content length, generate a set of content suggestions that align with the application's style and branding.
 
@@ -52,7 +53,7 @@ const prompt = ai.definePrompt({
 
   Instructions:
 
-  1.  Adhere to the Business Maestro application's tech stack, including Next.js, TypeScript, ShadCN UI, and Tailwind CSS.
+  1.  Adhere to the Maestro Operacional application's tech stack, including Next.js, TypeScript, ShadCN UI, and Tailwind CSS.
   2.  Maintain the application's modern, clean, and professional design aesthetic, including rounded corners and subtle shadows.
   3.  Use the 'Poppins' font for all text.
   4.  Ensure that the content suggestions are relevant, informative, and engaging for the target audience.

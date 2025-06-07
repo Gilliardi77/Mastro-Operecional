@@ -2,8 +2,8 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Login - Business Maestro',
-  description: 'Acesse sua conta Business Maestro.',
+  title: 'Login - Maestro Operacional',
+  description: 'Acesse sua conta Maestro Operacional.',
 };
 
 export default function LoginLayout({

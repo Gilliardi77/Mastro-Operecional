@@ -94,8 +94,8 @@ export default function LoginPage() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-3xl font-bold text-primary">Business Maestro</CardTitle>
-        <CardDescription>Acesse sua extensão de módulo.</CardDescription>
+        <CardTitle className="text-3xl font-bold text-primary">Maestro Operacional</CardTitle>
+        <CardDescription>Acesse o Maestro Operacional.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>

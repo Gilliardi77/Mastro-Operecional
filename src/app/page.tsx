@@ -1,3 +1,4 @@
+
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,10 +12,10 @@ export default function Home() {
     <div className="space-y-12">
       <section className="text-center">
         <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-          Bem-vindo à Extensão de Módulo Business Maestro
+          Bem-vindo ao Maestro Operacional
         </h2>
         <p className="mt-4 text-lg text-muted-foreground">
-          Aproveite ferramentas poderosas e IA para construir módulos consistentes e profissionais para sua aplicação Business Maestro.
+          Aproveite ferramentas poderosas e IA para construir módulos consistentes e profissionais para o Maestro Operacional.
         </p>
       </section>
 

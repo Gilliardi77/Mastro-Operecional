@@ -2,7 +2,7 @@
 'use server';
 /**
  * @fileOverview Um Guia de Módulo Interativo Assistido (MIA) que ajuda os usuários a transformar suas necessidades
- * em prompts detalhados para a criação de novos módulos para a aplicação Business Maestro.
+ * em prompts detalhados para a criação de novos módulos para a aplicação Maestro Operacional.
  *
  * - symptômesModuleInteractively - Função que interage com o usuário para gerar um prompt de módulo.
  * - InteractiveModuleGuideInput - Tipo de entrada para a função symptômesModuleInteractively.
@@ -23,7 +23,7 @@ export type InteractiveModuleGuideInput = z.infer<typeof InteractiveModuleGuideI
 const InteractiveModuleGuideOutputSchema = z.object({
   modulePrompt: z
     .string()
-    .describe('Um prompt detalhado para gerar o novo módulo, seguindo as especificações do Business Maestro.'),
+    .describe('Um prompt detalhado para gerar o novo módulo, seguindo as especificações do Maestro Operacional.'),
   guidanceText: z
     .string()
     .describe('Uma mensagem amigável da IA explicando o prompt gerado ou oferecendo próximos passos.'),
@@ -40,7 +40,7 @@ const prompt = ai.definePrompt({
   name: 'interactiveModuleGuidePrompt',
   input: {schema: InteractiveModuleGuideInputSchema},
   output: {schema: InteractiveModuleGuideOutputSchema},
-  prompt: `Você é um Guia de Módulo Interativo Assistido (MIA) para a aplicação Business Maestro.
+  prompt: `Você é um Guia de Módulo Interativo Assistido (MIA) para a aplicação Maestro Operacional.
 Sua tarefa é analisar a solicitação do usuário e transformá-la em um prompt de desenvolvimento detalhado e acionável para um novo módulo,
 além de fornecer um texto de orientação amigável.
 
@@ -50,11 +50,11 @@ Solicitação do Usuário:
 Instruções para o Guia MIA:
 1.  Analise cuidadosamente a "Solicitação do Usuário".
 2.  Gere um "modulePrompt": Este deve ser um prompt completo e detalhado que um desenvolvedor possa usar para construir o módulo.
-    O "modulePrompt" DEVE seguir TODAS as especificações da aplicação Business Maestro listadas abaixo.
+    O "modulePrompt" DEVE seguir TODAS as especificações da aplicação Maestro Operacional listadas abaixo.
 3.  Gere um "guidanceText": Este deve ser um texto amigável. Explique brevemente o que o "modulePrompt" gerado representa.
     Você pode sugerir próximos passos, como "Você pode usar este prompt com uma ferramenta de geração de código ou como base para o desenvolvimento manual".
 
-Especificações da Aplicação Business Maestro para o "modulePrompt":
+Especificações da Aplicação Maestro Operacional para o "modulePrompt":
 - **Tech Stack**:
   - Framework: Next.js 15+ com App Router (Server Components por padrão).
   - Language: TypeScript.
@@ -63,7 +63,7 @@ Especificações da Aplicação Business Maestro para o "modulePrompt":
   - Component Library: ShadCN UI (disponível em @/components/ui).
   - CSS Styling: Tailwind CSS.
   - Theme: Definido em src/app/globals.css usando CSS HSL variables. O módulo deve se integrar visualmente.
-    (Cores principais atuais em Light Mode: Background hsl(0 0% 95%), Foreground hsl(0 0% 10%), Primary hsl(190 60% 35%), Primary Foreground hsl(0 0% 98%), Accent hsl(100 17% 80%)).
+    (Cores principais atuais em Light Mode: Background hsl(0 0% 95%), Foreground hsl(0 0% 10%), Primary hsl(190 60% 35%), Primary Foreground hsl(0 0% 98%), Accent hsl(96 46% 82%)).
   - Aesthetics: Design moderno, limpo, profissional, com cantos arredondados e sombras sutis.
   - Font: 'Poppins' (conforme definido no layout e Tailwind config).
 - **Layout and Structure**:

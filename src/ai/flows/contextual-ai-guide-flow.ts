@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Um Guia de IA Contextual que ajuda os usuários dentro da aplicação Business Maestro.
+ * @fileOverview Um Guia de IA Contextual que ajuda os usuários dentro da aplicação Maestro Operacional.
  *
  * - contextualAIGuideFlow - Função que interage com o usuário com base no contexto da aplicação.
  */
@@ -27,7 +27,7 @@ const prompt = ai.definePrompt({
   name: 'contextualAIGuidePrompt',
   input: {schema: ContextualAIGuideInputSchema},
   output: {schema: ContextualAIGuideOutputSchema},
-  prompt: `Você é um Guia de IA assistente para a aplicação "Business Maestro". Seu objetivo é ajudar os usuários de forma proativa e contextual enquanto eles utilizam o sistema.
+  prompt: `Você é um Guia de IA assistente para a aplicação "Maestro Operacional". Seu objetivo é ajudar os usuários de forma proativa e contextual enquanto eles utilizam o sistema.
 Seu tom deve ser: Simples, Humano, Direto e Levemente Consultivo.
 
 Contexto Atual do Usuário:

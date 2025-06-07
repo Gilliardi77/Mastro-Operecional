@@ -1,9 +1,10 @@
+
 // ModulePromptGenerator.ts
 'use server';
 
 /**
  * @fileOverview This file defines a Genkit flow for generating module prompts 
- * that adhere to the Business Maestro application's design and technical specifications.
+ * that adhere to the Maestro Operacional application's design and technical specifications.
  *
  * - generateModulePrompt - A function that generates module prompts based on input specifications.
  * - ModulePromptInput - The input type for the generateModulePrompt function.
@@ -24,7 +25,7 @@ const ModulePromptOutputSchema = z.object({
   modulePrompt: z
     .string()
     .describe(
-      'A detailed prompt for generating the new module, including UI components, layout, and functionality, tailored for consistency with the Business Maestro application.'
+      'A detailed prompt for generating the new module, including UI components, layout, and functionality, tailored for consistency with the Maestro Operacional application.'
     ),
 });
 export type ModulePromptOutput = z.infer<typeof ModulePromptOutputSchema>;
@@ -39,7 +40,7 @@ const prompt = ai.definePrompt({
   name: 'modulePromptGeneratorPrompt',
   input: {schema: ModulePromptInputSchema},
   output: {schema: ModulePromptOutputSchema},
-  prompt: `You are an AI assistant specialized in generating detailed module prompts for the Business Maestro application.
+  prompt: `You are an AI assistant specialized in generating detailed module prompts for the Maestro Operacional application.
 
 The goal is to create prompts that will guide developers in building new modules that seamlessly integrate with the existing application, maintaining a consistent look and feel, architecture, and tech stack.
 
