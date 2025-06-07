@@ -2,12 +2,12 @@
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldPath } from "react-hook-form"; // Adicionado FieldPath
 import { z } from "zod";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, FileText, MessageSquare, Mail, Loader2, UserPlus } from "lucide-react";
-import { useSearchParams, useRouter } from "next/navigation"; // Adicionado useRouter
+import { useSearchParams, useRouter } from "next/navigation"; 
 import React, { useState, useEffect, useCallback } from "react";
 import { collection, addDoc, Timestamp, query, where, getDocs, orderBy, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { useAuth } from '@/components/auth/auth-provider';
+import { useAIGuide } from '@/contexts/AIGuideContext'; // Importado AIGuideContext
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
@@ -61,6 +62,15 @@ interface LastSavedOsDataType extends OrdemServicoFormValues {
   clienteEmail?: string;
 }
 
+// Interface para o payload do evento da IA
+interface AIFillFormEventPayload {
+  formName: string;
+  fieldName: FieldPath<OrdemServicoFormValues>; // Usando FieldPath para segurança de tipo
+  value: any;
+  actionLabel?: string;
+}
+
+
 const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null => {
   if (!phone) return null;
   let digits = phone.replace(/\D/g, '');
@@ -79,11 +89,12 @@ const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null 
 export default function OrdemServicoPage() {
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
-  const router = useRouter(); // Instanciado useRouter
+  const router = useRouter(); 
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [lastSavedOsData, setLastSavedOsData] = useState<LastSavedOsDataType | null>(null);
   const searchParams = useSearchParams();
+  const { updateAICurrentPageContext } = useAIGuide(); // Obtendo função do contexto da IA
 
   const [clients, setClients] = useState<Cliente[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
@@ -109,6 +120,68 @@ export default function OrdemServicoPage() {
     resolver: zodResolver(newClientSchema),
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
+
+  // Efeito para atualizar o contexto da página da IA
+  useEffect(() => {
+    updateAICurrentPageContext("Nova Ordem de Serviço");
+  }, [updateAICurrentPageContext]);
+
+  // Efeito para escutar eventos de preenchimento de formulário da IA
+  useEffect(() => {
+    const handleAiFormFill = (event: Event) => {
+      const customEvent = event as CustomEvent<AIFillFormEventPayload>;
+      const { detail } = customEvent;
+
+      if (detail.formName === "ordemServicoForm") {
+        // Validar se fieldName é uma chave válida de OrdemServicoFormValues
+        // Isso é mais para type safety no TypeScript, o Zod já valida no submit
+        const validFieldNames: Array<FieldPath<OrdemServicoFormValues>> = [
+          "clienteId", "clienteNome", "descricao", "valorTotal", 
+          "valorAdiantado", "dataEntrega", "observacoes"
+        ];
+
+        if (validFieldNames.includes(detail.fieldName)) {
+          let valueToSet = detail.value;
+          if (detail.fieldName === 'dataEntrega') {
+            // Tentar converter para Date se for string, caso a IA envie AAAA-MM-DD
+            if (typeof valueToSet === 'string') {
+              const parsedDate = new Date(valueToSet + 'T00:00:00'); // Adiciona T00:00:00 para evitar problemas de fuso horário na conversão
+              if (!isNaN(parsedDate.getTime())) {
+                valueToSet = parsedDate;
+              } else {
+                toast({ title: "Formato de Data Inválido", description: `IA sugeriu data '${detail.value}' para ${detail.fieldName}, mas não pôde ser convertida. Use o seletor.`, variant: "destructive" });
+                return;
+              }
+            }
+          } else if (detail.fieldName === 'valorTotal' || detail.fieldName === 'valorAdiantado') {
+            const numValue = parseFloat(valueToSet);
+            if (!isNaN(numValue)) {
+              valueToSet = numValue;
+            } else {
+              toast({ title: "Formato de Número Inválido", description: `IA sugeriu valor '${detail.value}' para ${detail.fieldName}, mas não é um número válido.`, variant: "destructive" });
+              return;
+            }
+          }
+
+
+          osForm.setValue(detail.fieldName, valueToSet, { shouldValidate: true, shouldDirty: true });
+          toast({
+            title: "Campo Preenchido pela IA",
+            description: `${detail.actionLabel || `Campo ${detail.fieldName} preenchido com '${valueToSet}'.`}`,
+          });
+        } else {
+          console.warn(`IA tentou preencher campo inválido "${detail.fieldName}" no formulário "ordemServicoForm".`);
+          toast({ title: "Campo Inválido", description: `IA tentou preencher um campo desconhecido: ${detail.fieldName}.`, variant: "destructive"});
+        }
+      }
+    };
+
+    window.addEventListener('aiFillFormEvent', handleAiFormFill);
+    return () => {
+      window.removeEventListener('aiFillFormEvent', handleAiFormFill);
+    };
+  }, [osForm, toast]);
+
 
   const fetchClients = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
@@ -244,8 +317,8 @@ export default function OrdemServicoPage() {
       dataEntrega: Timestamp.fromDate(data.dataEntrega),
       observacoes: data.observacoes || "",
       status: "Pendente" as ProductionOrderStatusOSPage,
-      criadoPor: userIdToSave, // Este campo precisa ser userId para consistência, ou usar o nome que as regras esperam
-      userId: userIdToSave,    // Adicionando userId explicitamente para clareza com as regras
+      criadoPor: userIdToSave, 
+      userId: userIdToSave,    
       criadoEm: now,
       atualizadoEm: now,
       numeroOS: ""
@@ -642,8 +715,5 @@ Enviado por: Meu Negócio App
     </div>
   );
 }
-    
 
     
-
-

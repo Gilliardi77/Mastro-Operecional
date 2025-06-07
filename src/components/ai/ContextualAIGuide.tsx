@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation'; // Importado useRouter
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast'; // Importado useToast
 
 export default function ContextualAIGuide() {
   const {
@@ -23,7 +24,8 @@ export default function ContextualAIGuide() {
   } = useAIGuide();
   const [userInput, setUserInput] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const router = useRouter(); // Instanciado useRouter
+  const router = useRouter();
+  const { toast } = useToast(); // Instanciado useToast
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -42,13 +44,37 @@ export default function ContextualAIGuide() {
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
     setUserInput(''); 
 
-    if (actionId === 'navigate_to_page' && payload && typeof payload.path === 'string') {
-      router.push(payload.path);
-      closeAIGuide(); // Fecha o painel da IA após iniciar a navegação
-      // Não envia uma nova query para a IA, pois a ação é de navegação
-    } else {
-      // Para outras ações, podemos enviar uma query para a IA explicar ou confirmar
-      await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
+    switch (actionId) {
+      case 'navigate_to_page':
+        if (payload && typeof payload.path === 'string') {
+          router.push(payload.path);
+          closeAIGuide(); 
+        } else {
+          toast({ title: "Erro de Navegação", description: "Caminho inválido fornecido pela IA.", variant: "destructive"});
+        }
+        break;
+      case 'preencher_campo_formulario':
+        if (payload && payload.formName && payload.fieldName && payload.value !== undefined) {
+          const event = new CustomEvent('aiFillFormEvent', { 
+            detail: {
+              formName: payload.formName,
+              fieldName: payload.fieldName,
+              value: payload.value,
+              actionLabel: actionLabel // Passando o label para o toast
+            }
+          });
+          window.dispatchEvent(event);
+          // Não fecha o guia aqui, pode ser que o usuário queira preencher mais campos
+          // A IA pode dar um feedback como "Campo X preenchido. Algo mais?"
+          await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada. O campo ${payload.fieldName} foi preenchido com ${payload.value}.`);
+        } else {
+           toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
+        }
+        break;
+      default:
+        // Para outras ações, podemos enviar uma query para a IA explicar ou confirmar
+        await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
+        break;
     }
   };
 
@@ -99,7 +125,7 @@ export default function ContextualAIGuide() {
                     <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                       {msg.suggestedActions.map(action => (
                         <Button
-                          key={action.actionId}
+                          key={action.actionId + (action.payload?.fieldName || '')} // Chave mais única
                           variant="outline"
                           size="sm"
                           className="w-full justify-start text-left h-auto py-1.5 text-xs"
@@ -147,3 +173,5 @@ export default function ContextualAIGuide() {
     </>
   );
 }
+
+    
