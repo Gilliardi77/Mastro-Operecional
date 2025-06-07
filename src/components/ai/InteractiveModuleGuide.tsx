@@ -74,7 +74,7 @@ export default function InteractiveModuleGuide() {
           Guia Interativo para Criação de Módulos
         </CardTitle>
         <CardDescription>
-          Descreva a sua necessidade e a IA irá gerar um prompt detalhado para ajudar no desenvolvimento do seu novo módulo para o Business Maestro.
+          Descreva a sua necessidade e a IA irá gerar um prompt detalhado para ajudar no desenvolvimento do seu novo módulo para o Maestro Operacional.
         </CardDescription>
       </CardHeader>
       <CardContent>
