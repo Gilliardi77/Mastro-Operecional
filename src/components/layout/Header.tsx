@@ -1,5 +1,5 @@
 
-import { Briefcase, LayoutDashboard, DollarSign } from 'lucide-react'; // Adicionado DollarSign
+import { Briefcase, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -28,14 +28,6 @@ export default function Header() {
                 <Link href="/produtos-servicos" className="flex items-center gap-1">
                   <Briefcase className="h-5 w-5" /> 
                   Operacional
-                </Link>
-              </Button>
-            </li>
-            <li>
-              <Button variant="ghost" asChild>
-                <Link href="/financeiro/dashboard" className="flex items-center gap-1">
-                  <DollarSign className="h-5 w-5" />
-                  Financeiro
                 </Link>
               </Button>
             </li>
