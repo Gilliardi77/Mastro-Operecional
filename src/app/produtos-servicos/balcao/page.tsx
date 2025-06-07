@@ -312,11 +312,8 @@ export default function BalcaoPage() {
               const productData = productDoc.data() as ProductServicoFirestore;
               const estoqueAtual = productData.quantidadeEstoque ?? 0;
               
-              if (estoqueAtual < item.quantidade) {
-                 console.warn(`Estoque insuficiente para ${item.nome}. Vendendo ${item.quantidade}, disponível: ${estoqueAtual}. A venda será registrada, mas o estoque ficará negativo ou inalterado se não puder ficar negativo.`);
-                 // Decidir política: impedir venda, permitir estoque negativo, ou apenas avisar.
-                 // Por ora, vamos permitir que fique negativo para não bloquear a venda, mas logar um aviso.
-              }
+              // A política de permitir estoque negativo é confirmada.
+              // Apenas calculamos o novo estoque.
               const novoEstoque = estoqueAtual - item.quantidade;
               transaction.update(productRef, { 
                 quantidadeEstoque: novoEstoque,
@@ -647,3 +644,4 @@ export default function BalcaoPage() {
     
 
     
+
