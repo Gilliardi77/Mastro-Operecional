@@ -44,7 +44,7 @@ const ordemServicoFormSchema = z.object({
   clienteId: z.string().optional(),
   clienteNome: z.string().optional(),
   itens: z.array(itemOSSchema).min(1, { message: "Adicione pelo menos um item à Ordem de Serviço." }),
-  valorTotalOS: z.coerce.number().positive({ message: "O valor total da OS deve ser positivo." }).default(0), // Campo calculado
+  valorTotalOS: z.coerce.number().positive({ message: "O valor total da OS deve ser positivo." }).default(0),
   valorAdiantado: z.coerce.number().nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional().default(0),
   dataEntrega: z.date({ required_error: "A data de entrega é obrigatória." }),
   observacoes: z.string().optional(),
@@ -89,7 +89,7 @@ interface AIFillFormEventPayload {
   fieldName: FieldPath<OrdemServicoFormValues> | `itens.${number}.${keyof ItemOSFormValues}`;
   value: any;
   actionLabel?: string;
-  itemIndex?: number; // Para campos dentro do array de itens
+  itemIndex?: number;
 }
 
 interface AIOpenNewClientModalOSEventPayload {
@@ -101,6 +101,7 @@ const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null 
   if (!phone) return null;
   let digits = phone.replace(/\D/g, '');
   if (digits.startsWith('55') && digits.length > 11) {
+    // Already has 55, likely correct
   }
   if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
     return `55${digits}`;
@@ -157,8 +158,6 @@ export default function OrdemServicoPage() {
     updateAICurrentPageContext("Nova Ordem de Serviço");
   }, [updateAICurrentPageContext]);
 
-
-  // Calcular valorTotalOS sempre que itens, ou valorAdiantado mudar
   useEffect(() => {
     const subscription = osForm.watch((values, { name, type }) => {
       if (name?.startsWith("itens") || name === "valorAdiantado") {
@@ -172,15 +171,12 @@ export default function OrdemServicoPage() {
     return () => subscription.unsubscribe();
   }, [osForm]);
 
-
-  // Lógica de preenchimento pela IA (adaptada para itens)
  useEffect(() => {
     const handleAiFormFill = (event: Event) => {
       const customEvent = event as CustomEvent<AIFillFormEventPayload>;
       const { detail } = customEvent;
 
       if (detail.formName === "ordemServicoForm") {
-        // Campos gerais do formulário
         const generalFieldNames: Array<FieldPath<OrdemServicoFormValues>> = [
           "clienteId", "clienteNome", "valorAdiantado", "dataEntrega", "observacoes"
         ];
@@ -188,18 +184,17 @@ export default function OrdemServicoPage() {
         if (typeof detail.fieldName === 'string' && generalFieldNames.includes(detail.fieldName as FieldPath<OrdemServicoFormValues>)) {
           let valueToSet = detail.value;
           if (detail.fieldName === 'dataEntrega' && typeof valueToSet === 'string') {
-            const parsedDate = new Date(valueToSet + 'T00:00:00');
+            const parsedDate = new Date(valueToSet + 'T00:00:00'); // Ensure time is considered for local timezone
             if (!isNaN(parsedDate.getTime())) valueToSet = parsedDate;
-            else { /* toast erro */ return; }
+            else { toast({ title: "Erro de Data", description: "Formato de data inválido da IA.", variant: "destructive"}); return; }
           } else if (detail.fieldName === 'valorAdiantado' && typeof valueToSet !== 'number') {
             const numValue = parseFloat(valueToSet);
             if (!isNaN(numValue)) valueToSet = numValue;
-            else { /* toast erro */ return; }
+            else { toast({ title: "Erro de Valor", description: "Valor de adiantamento inválido da IA.", variant: "destructive"}); return; }
           }
           osForm.setValue(detail.fieldName as FieldPath<OrdemServicoFormValues>, valueToSet, { shouldValidate: true, shouldDirty: true });
           toast({ title: "Campo Preenchido pela IA", description: `${detail.actionLabel || `Campo ${detail.fieldName} preenchido.`}` });
         } else if (typeof detail.fieldName === 'string' && detail.fieldName.startsWith("itens.") && detail.itemIndex !== undefined) {
-            // Lógica para campos de item (ex: "itens.0.nome")
             const fieldNameParts = detail.fieldName.split('.');
             const itemIndex = parseInt(fieldNameParts[1], 10);
             const itemFieldName = fieldNameParts[2] as keyof ItemOSFormValues;
@@ -208,9 +203,6 @@ export default function OrdemServicoPage() {
                 update(itemIndex, { ...fields[itemIndex], [itemFieldName]: detail.value });
                 toast({ title: "Item da OS Atualizado pela IA", description: `${detail.actionLabel || `Item ${itemIndex + 1}, campo ${itemFieldName} atualizado.`}` });
             } else {
-                // Se a IA tentar adicionar um novo item, ou um item não existente, precisaria de uma lógica diferente
-                // Por exemplo, usando append() com dados da IA.
-                // Para simplificar, vamos assumir que a IA só preenche campos de itens existentes.
                 console.warn(`IA tentou preencher campo de item inválido: ${detail.fieldName}`);
                 toast({ title: "Campo de Item Inválido", variant: "destructive" });
             }
@@ -220,7 +212,6 @@ export default function OrdemServicoPage() {
         }
       }
     };
-    // ... (restante dos listeners)
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
     return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
  }, [osForm, toast, fields, update]);
@@ -265,11 +256,11 @@ export default function OrdemServicoPage() {
 
   useEffect(() => {
     const clienteIdParam = searchParams.get('clienteId');
-    const descricaoParam = searchParams.get('descricao'); // Este se tornará o nome do primeiro item
-    const valorTotalParam = searchParams.get('valorTotal'); // Este se tornará o valor do primeiro item
+    const descricaoParam = searchParams.get('descricao');
+    const valorTotalParam = searchParams.get('valorTotal');
     const clienteNomeParam = searchParams.get('clienteNome');
 
-    let prefillData: Partial<OrdemServicoFormValues> = { itens: [] };
+    let prefillData: Partial<OrdemServicoFormValues> & { itens: ItemOSFormValues[] } = { itens: [] };
 
     if (clienteIdParam) {
       prefillData.clienteId = clienteIdParam;
@@ -279,7 +270,7 @@ export default function OrdemServicoPage() {
       } else if (clienteIdParam === "avulso") {
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
       } else if (clienteIdParam !== "avulso" && !clientExists) {
-         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
+         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; // Could be a new client name from params
       }
     } else {
         prefillData.clienteId = "avulso";
@@ -288,7 +279,7 @@ export default function OrdemServicoPage() {
 
     if (descricaoParam) {
       const valorItem = valorTotalParam ? parseFloat(valorTotalParam) : 0;
-      prefillData.itens?.push({
+      prefillData.itens.push({
         idTemp: `item-${Date.now()}`,
         nome: descricaoParam,
         quantidade: 1,
@@ -298,12 +289,12 @@ export default function OrdemServicoPage() {
       });
     }
 
-    if (Object.keys(prefillData).length > 0 || (prefillData.itens && prefillData.itens.length > 0)) {
+    if (Object.keys(prefillData).length > 1 || prefillData.itens.length > 0) { // Check more than just items presence
       osForm.reset(currentValues => ({
         ...currentValues,
         ...prefillData,
-        dataEntrega: currentValues.dataEntrega || undefined,
-        valorTotalOS: prefillData.itens?.reduce((sum, item) => sum + item.valorTotal, 0) || 0,
+        dataEntrega: currentValues.dataEntrega || undefined, // Preserve existing or keep undefined
+        valorTotalOS: prefillData.itens.reduce((sum, item) => sum + item.valorTotal, 0) || 0,
       }));
     }
     setLastSavedOsData(null);
@@ -375,19 +366,21 @@ export default function OrdemServicoPage() {
       osDocRefId = docRef.id;
       await updateDoc(doc(db, "ordensServico", osDocRefId), { numeroOS: osDocRefId });
 
-      // Lógica de adiantamento e saldo (mantida)
       const valorAdiantado = data.valorAdiantado || 0;
-      if (valorAdiantado > 0) { /* ...salvar adiantamento... */ }
+      if (valorAdiantado > 0) {
+         // Lógica para registrar adiantamento no financeiro (futuro)
+      }
       const valorAReceber = data.valorTotalOS - valorAdiantado;
-      if (valorAReceber > 0) { /* ...salvar saldo pendente... */ }
+      if (valorAReceber > 0) {
+         // Lógica para registrar saldo pendente no financeiro (futuro)
+      }
 
-      // Criação da Ordem de Produção (adaptar o que é "servicoNome")
       const primeiroItemNome = data.itens[0]?.nome || "Serviço Detalhado na OS";
       const productionOrderData = {
-        agendamentoId: osDocRefId,
+        agendamentoId: osDocRefId, // agendamentoId é o ID da OS
         clienteId: osDataToSave.clienteId,
         clienteNome: osDataToSave.clienteNome,
-        servicoNome: primeiroItemNome + (data.itens.length > 1 ? " e outros" : ""), // Descrição para produção
+        servicoNome: primeiroItemNome + (data.itens.length > 1 ? " e outros" : ""),
         dataAgendamento: osDataToSave.dataEntrega,
         status: "Pendente" as ProductionOrderStatusOSPage,
         progresso: 0,
@@ -398,7 +391,7 @@ export default function OrdemServicoPage() {
       };
       await addDoc(collection(db, "ordensDeProducao"), productionOrderData);
       
-      toast({ title: "Ordem de Serviço Salva!", description: `OS #${osDocRefId.substring(0,6)}... salva.` });
+      toast({ title: "Ordem de Serviço Salva!", description: `OS #${osDocRefId.substring(0,6)}... salva e ordem de produção criada.` });
       setLastSavedOsData({
         ...data,
         numeroOS: osDocRefId,
@@ -418,7 +411,39 @@ export default function OrdemServicoPage() {
     }
   }
 
-  async function onSaveNewClient(data: NewClientFormValues) { /* ...mesma lógica anterior... */ }
+  async function onSaveNewClient(data: NewClientFormValues) {
+    if (!user && !bypassAuth) {
+      toast({ title: "Usuário não autenticado", variant: "destructive" });
+      return;
+    }
+    setIsSavingNewClient(true);
+    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
+    const now = Timestamp.now();
+
+    const newClientData = {
+      ...data,
+      userId: userIdToSave,
+      criadoEm: now,
+      atualizadoEm: now,
+      temDebitos: false, // Default for new client
+    };
+
+    try {
+      const docRef = await addDoc(collection(db, "clientes"), newClientData);
+      const newClientForSelect = { id: docRef.id, nome: data.nome, email: data.email, telefone: data.telefone };
+      setClients(prev => [...prev, newClientForSelect].sort((a,b) => a.nome.localeCompare(b.nome)));
+      osForm.setValue('clienteId', docRef.id); // Select the new client in the OS form
+      osForm.setValue('clienteNome', data.nome);
+      toast({ title: "Novo Cliente Salvo!", description: `${data.nome} foi adicionado e selecionado.` });
+      setIsNewClientModalOpen(false);
+      newClientForm.reset();
+    } catch (e: any) {
+      console.error("Erro ao salvar novo cliente:", e);
+      toast({ title: "Erro ao Salvar Cliente", variant: "destructive", description: e.message });
+    } finally {
+      setIsSavingNewClient(false);
+    }
+  }
 
 
   const handleAddItem = (itemCatalogo?: CatalogoItem) => {
@@ -461,23 +486,25 @@ export default function OrdemServicoPage() {
             produtoServicoId: selectedCatalogoItem.id,
             nome: selectedCatalogoItem.nome,
             valorUnitario: selectedCatalogoItem.valorVenda,
-            valorTotal: fields[index].quantidade * selectedCatalogoItem.valorVenda,
+            valorTotal: fields[index].quantidade * selectedCatalogoItem.valorVenda, // Recalculate based on current quantity
             tipo: selectedCatalogoItem.tipo,
         });
     }
   };
 
-
-  const handleEnviarWhatsApp = () => { /* ...adaptar para usar lastSavedOsData.itensSalvos ... */ }
-  const handleEnviarEmail = async () => { /* ...adaptar para usar lastSavedOsData.itensSalvos ... */ }
+  const handleEnviarWhatsApp = () => {
+    toast({ title: "WhatsApp", description: "Funcionalidade de envio por WhatsApp em desenvolvimento." });
+  }
+  const handleEnviarEmail = async () => {
+    toast({ title: "E-mail", description: "Funcionalidade de envio por E-mail em desenvolvimento." });
+  }
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
   if (isAuthLoading || isLoadingClients || isLoadingCatalogo) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
   }
-  if (!bypassAuth && !user) { /* ... acesso negado ... */ }
-
+  // if (!bypassAuth && !user) { /* ... acesso negado ... */ } // Assuming bypassAuth is true for now
 
   return (
     <div className="space-y-6">
@@ -494,17 +521,69 @@ export default function OrdemServicoPage() {
         <CardContent>
           <Form {...osForm}>
             <form onSubmit={osForm.handleSubmit(onOsSubmit)} className="space-y-6">
-              {/* Campos Cliente, Data Entrega, Observações (mantidos) */}
-              <FormField control={osForm.control} name="clienteId" render={({ field }) => ( /* ... */ )} />
-              {osForm.watch('clienteId') === 'avulso' && (<FormField control={osForm.control} name="clienteNome" render={({ field }) => ( /* ... */ )} /> )}
+              <FormField
+                control={osForm.control}
+                name="clienteId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cliente</FormLabel>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          if (value !== 'avulso') {
+                            const client = clients.find(c => c.id === value);
+                            if (client) osForm.setValue('clienteNome', client.nome);
+                          } else {
+                            osForm.setValue('clienteNome', 'Cliente Avulso');
+                          }
+                        }}
+                        value={field.value || "avulso"} // Default to avulso if undefined
+                        disabled={isLoadingClients}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="avulso">Cliente Avulso</SelectItem>
+                          {clients.map(client => (
+                            <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="icon" onClick={() => setIsNewClientModalOpen(true)} disabled={isLoadingClients} title="Adicionar Novo Cliente">
+                        <UserPlus className="h-4 w-4"/>
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              {/* Seção de Itens da OS */}
+              {osForm.watch('clienteId') === 'avulso' && (
+                <FormField
+                  control={osForm.control}
+                  name="clienteNome"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome do Cliente Avulso</FormLabel>
+                      <FormControl><Input placeholder="Nome para cliente avulso" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <Card className="pt-4">
                 <CardHeader><CardTitle className="text-lg">Itens da Ordem de Serviço</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   {fields.map((item, index) => (
-                    <div key={item.idTemp} className="p-3 border rounded-md space-y-3 relative">
-                       <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4" /></Button>
+                    <div key={item.idTemp} className="p-3 border rounded-md space-y-3 relative bg-muted/20">
+                       <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => remove(index)} title="Remover Item">
+                         <Trash2 className="h-4 w-4" />
+                       </Button>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormItem>
                                 <FormLabel>Item do Catálogo</FormLabel>
@@ -515,7 +594,7 @@ export default function OrdemServicoPage() {
                                 >
                                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} /></SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">-- Item Manual --</SelectItem>
+                                        <SelectItem value="">-- Item Manual (digite o nome abaixo) --</SelectItem>
                                         {catalogoItens.map(catItem => <SelectItem key={catItem.id} value={catItem.id}>{catItem.nome} ({catItem.tipo}) - R${catItem.valorVenda.toFixed(2)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -536,8 +615,8 @@ export default function OrdemServicoPage() {
                                 <Input type="number" value={item.valorTotal.toFixed(2)} readOnly disabled className="bg-muted/50" />
                              </FormItem>
                         </div>
-                         <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => (
-                            <FormItem className="hidden"> {/* Campo escondido, preenchido por handleItemCatalogoSelect ou default */}
+                         <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( // Hidden field, type is set by selection or default
+                            <FormItem className="hidden">
                                 <FormControl><Input {...field} /></FormControl>
                             </FormItem>
                          )}/>
@@ -554,11 +633,70 @@ export default function OrdemServicoPage() {
                     <FormControl><Input type="number" value={osForm.watch('valorTotalOS').toFixed(2)} readOnly disabled className="font-bold text-lg bg-muted/50" /></FormControl>
                     <FormMessage />
                 </FormItem>
-                <FormField control={osForm.control} name="valorAdiantado" render={({ field }) => ( /* ... */ )} />
+                <FormField
+                  control={osForm.control}
+                  name="valorAdiantado"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor Adiantado (R$) (Opcional)</FormLabel>
+                      <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              <FormField control={osForm.control} name="dataEntrega" render={({ field }) => ( /* ... */ )} />
-              <FormField control={osForm.control} name="observacoes" render={({ field }) => ( /* ... */ )} />
+              <FormField
+                control={osForm.control}
+                name="dataEntrega"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data de Entrega Prevista</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP", { locale: ptBR })
+                            ) : (
+                              <span>Escolha uma data</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))} // Disallow past dates
+                          initialFocus
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={osForm.control}
+                name="observacoes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações (Opcional)</FormLabel>
+                    <FormControl><Textarea placeholder="Detalhes importantes, instruções especiais, etc." {...field} rows={3} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="flex flex-col sm:flex-row gap-2 pt-4">
                 <Button type="submit" disabled={isSaving || isSendingEmail} className="w-full sm:w-auto">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Salvando...</> : "Salvar Ordem de Serviço"}</Button>
@@ -569,11 +707,56 @@ export default function OrdemServicoPage() {
           </Form>
         </CardContent>
       </Card>
-      {/* Modal Novo Cliente (mantido) */}
+
       <Dialog open={isNewClientModalOpen} onOpenChange={(isOpen) => { setIsNewClientModalOpen(isOpen); if (!isOpen) newClientForm.reset(); }}>
-        {/* ... conteúdo do modal ... */}
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+            <DialogPrimitiveDescription>
+              Preencha os dados para cadastrar um novo cliente rapidamente.
+            </DialogPrimitiveDescription>
+          </DialogHeader>
+          <Form {...newClientForm}>
+            <form onSubmit={newClientForm.handleSubmit(onSaveNewClient)} className="space-y-4 py-2">
+              <FormField control={newClientForm.control} name="nome" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome Completo</FormLabel>
+                  <FormControl><Input placeholder="Nome do cliente" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+               <FormField control={newClientForm.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email (Opcional)</FormLabel>
+                  <FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+               <FormField control={newClientForm.control} name="telefone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone (Opcional)</FormLabel>
+                  <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={newClientForm.control} name="endereco" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endereço Completo (Opcional)</FormLabel>
+                  <FormControl><Textarea placeholder="Rua ABC, 123, Bairro, Cidade - UF" {...field} rows={2} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline" disabled={isSavingNewClient}>Cancelar</Button></DialogClose>
+                <Button type="submit" disabled={isSavingNewClient}>
+                  {isSavingNewClient && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Novo Cliente
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
       </Dialog>
     </div>
   );
 }
-
