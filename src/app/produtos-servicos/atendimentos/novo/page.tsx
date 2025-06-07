@@ -36,7 +36,7 @@ const itemOSSchema = z.object({
   nome: z.string().min(1, "Nome do item é obrigatório."),
   quantidade: z.coerce.number().positive("Quantidade deve ser positiva.").default(1),
   valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").default(0),
-  valorTotal: z.coerce.number().nonnegative().default(0),
+  // valorTotal foi removido para simplificação, será calculado no backend
   tipo: z.enum(['Produto', 'Serviço', 'Manual']).default('Manual'),
 });
 type ItemOSFormValues = z.infer<typeof itemOSSchema>;
@@ -45,7 +45,7 @@ const ordemServicoFormSchema = z.object({
   clienteId: z.string().optional(),
   clienteNome: z.string().optional(),
   itens: z.array(itemOSSchema).min(1, { message: "Adicione pelo menos um item à Ordem de Serviço." }),
-  valorTotalOS: z.coerce.number().positive({ message: "O valor total da OS deve ser positivo." }).default(0),
+  valorTotalOS: z.coerce.number().nonnegative({ message: "O valor total da OS não pode ser negativo." }).optional().default(0), // Não será mais calculado automaticamente, entrada manual opcional
   valorAdiantado: z.coerce.number().nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional().default(0),
   dataEntrega: z.date({ required_error: "A data de entrega é obrigatória." }),
   observacoes: z.string().optional(),
@@ -76,18 +76,17 @@ interface CatalogoItem {
   unidade?: string;
 }
 
-interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens' | 'valorTotalOS'> {
+interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   numeroOS?: string;
   clienteNomeFinal?: string;
   clienteTelefone?: string;
   clienteEmail?: string;
-  itensSalvos: Array<Omit<ItemOSFormValues, 'idTemp'>>;
-  valorTotalOSSalvo: number;
+  itensSalvos: Array<Omit<ItemOSFormValues, 'idTemp'>>; // Sem valorTotal aqui
 }
 
 interface AIFillFormEventPayload {
   formName: string;
-  fieldName: FieldPath<OrdemServicoFormValues> | `itens.${number}.${keyof ItemOSFormValues}`;
+  fieldName: FieldPath<OrdemServicoFormValues> | `itens.${number}.${keyof Omit<ItemOSFormValues, 'valorTotal'>}`;
   value: any;
   actionLabel?: string;
   itemIndex?: number;
@@ -159,35 +158,8 @@ export default function OrdemServicoPage() {
     updateAICurrentPageContext("Nova Ordem de Serviço");
   }, [updateAICurrentPageContext]);
 
-  useEffect(() => {
-    const subscription = osForm.watch((_, { name, type }) => {
-      // Recalculate item total if quantity or unit price of an item changed
-      if (name && name.startsWith("itens.") && (name.endsWith(".quantidade") || name.endsWith(".valorUnitario"))) {
-        const parts = name.split('.');
-        const index = parseInt(parts[1], 10);
-        
-        const item = osForm.getValues(`itens.${index}`); // Get the LATEST values from form state
-        if (item && typeof item.quantidade === 'number' && typeof item.valorUnitario === 'number') {
-          const newTotalItem = item.quantidade * item.valorUnitario;
-          // Only update if it's actually different to avoid re-renders/potential loops
-          if (item.valorTotal !== newTotalItem) { 
-            osForm.setValue(`itens.${index}.valorTotal`, newTotalItem, { shouldValidate: false }); // Update specific item's total
-          }
-        }
-      }
-
-      // Always recalculate OS total based on all current item totals
-      // This will run after an individual item's total might have been updated by the block above
-      const currentItens = osForm.getValues("itens") || [];
-      const totalOS = currentItens.reduce((sum, itemEntry) => sum + (itemEntry.valorTotal || 0), 0);
-      
-      if (osForm.getValues("valorTotalOS") !== totalOS) {
-        osForm.setValue("valorTotalOS", totalOS, { shouldValidate: true });
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [osForm]);
-
+ // useEffect para cálculos foi removido para simplificação - totais serão calculados no backend.
+ // O usuário pode inserir o valorTotalOS manualmente se desejar.
 
  useEffect(() => {
     const handleAiFormFill = (event: Event) => {
@@ -196,7 +168,7 @@ export default function OrdemServicoPage() {
 
       if (detail.formName === "ordemServicoForm") {
         const generalFieldNames: Array<FieldPath<OrdemServicoFormValues>> = [
-          "clienteId", "clienteNome", "valorAdiantado", "dataEntrega", "observacoes"
+          "clienteId", "clienteNome", "valorAdiantado", "dataEntrega", "observacoes", "valorTotalOS"
         ];
 
         if (typeof detail.fieldName === 'string' && generalFieldNames.includes(detail.fieldName as FieldPath<OrdemServicoFormValues>)) {
@@ -205,25 +177,20 @@ export default function OrdemServicoPage() {
             const parsedDate = new Date(valueToSet + 'T00:00:00'); 
             if (!isNaN(parsedDate.getTime())) valueToSet = parsedDate;
             else { toast({ title: "Erro de Data", description: "Formato de data inválido da IA.", variant: "destructive"}); return; }
-          } else if (detail.fieldName === 'valorAdiantado' && typeof valueToSet !== 'number') {
+          } else if ((detail.fieldName === 'valorAdiantado' || detail.fieldName === 'valorTotalOS') && typeof valueToSet !== 'number') {
             const numValue = parseFloat(valueToSet);
             if (!isNaN(numValue)) valueToSet = numValue;
-            else { toast({ title: "Erro de Valor", description: "Valor de adiantamento inválido da IA.", variant: "destructive"}); return; }
+            else { toast({ title: "Erro de Valor", description: `Valor de ${detail.fieldName} inválido da IA.`, variant: "destructive"}); return; }
           }
           osForm.setValue(detail.fieldName as FieldPath<OrdemServicoFormValues>, valueToSet, { shouldValidate: true, shouldDirty: true });
           toast({ title: "Campo Preenchido pela IA", description: `${detail.actionLabel || `Campo ${detail.fieldName} preenchido.`}` });
         } else if (typeof detail.fieldName === 'string' && detail.fieldName.startsWith("itens.") && detail.itemIndex !== undefined) {
             const fieldNameParts = detail.fieldName.split('.');
             const itemIndex = parseInt(fieldNameParts[1], 10);
-            const itemFieldName = fieldNameParts[2] as keyof ItemOSFormValues;
+            const itemFieldName = fieldNameParts[2] as keyof Omit<ItemOSFormValues, 'valorTotal'>;
 
             if (itemIndex >= 0 && itemIndex < fields.length && itemFieldName) {
-                // Use handleItemChange for consistency if it's quantity or valorUnitario
-                if (itemFieldName === 'quantidade' || itemFieldName === 'valorUnitario') {
-                  handleItemChange(itemIndex, itemFieldName, detail.value);
-                } else {
-                  update(itemIndex, { ...fields[itemIndex], [itemFieldName]: detail.value });
-                }
+                update(itemIndex, { ...fields[itemIndex], [itemFieldName]: detail.value });
                 toast({ title: "Item da OS Atualizado pela IA", description: `${detail.actionLabel || `Item ${itemIndex + 1}, campo ${itemFieldName} atualizado.`}` });
             } else {
                 console.warn(`IA tentou preencher campo de item inválido: ${detail.fieldName}`);
@@ -280,7 +247,7 @@ export default function OrdemServicoPage() {
   useEffect(() => {
     const clienteIdParam = searchParams.get('clienteId');
     const descricaoParam = searchParams.get('descricao');
-    const valorTotalParam = searchParams.get('valorTotal');
+    const valorTotalParam = searchParams.get('valorTotal'); // Este valorTotalParam será usado para o valorTotalOS
     const clienteNomeParam = searchParams.get('clienteNome');
 
     let prefillData: Partial<OrdemServicoFormValues> & { itens: ItemOSFormValues[] } = { itens: [] };
@@ -301,24 +268,26 @@ export default function OrdemServicoPage() {
     }
 
     if (descricaoParam) {
-      const valorItem = valorTotalParam ? parseFloat(valorTotalParam) : 0;
       prefillData.itens.push({
         idTemp: `item-${Date.now()}`,
         produtoServicoId: undefined, 
         nome: descricaoParam,
         quantidade: 1,
-        valorUnitario: valorItem,
-        valorTotal: valorItem,
+        valorUnitario: valorTotalParam ? parseFloat(valorTotalParam) : 0, // Usar valorTotalParam como valorUnitario do item único
         tipo: 'Manual',
       });
     }
+    
+    if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
+      prefillData.valorTotalOS = parseFloat(valorTotalParam);
+    }
+
 
     if (Object.keys(prefillData).length > 1 || prefillData.itens.length > 0) { 
       osForm.reset(currentValues => ({
         ...currentValues,
         ...prefillData,
-        dataEntrega: currentValues.dataEntrega || undefined, 
-        valorTotalOS: prefillData.itens.reduce((sum, item) => sum + item.valorTotal, 0) || 0,
+        dataEntrega: currentValues.dataEntrega || undefined,
       }));
     }
     setLastSavedOsData(null);
@@ -364,7 +333,7 @@ export default function OrdemServicoPage() {
       nome: item.nome,
       quantidade: item.quantidade,
       valorUnitario: item.valorUnitario,
-      valorTotal: item.valorTotal,
+      // valorTotal do item não é mais salvo aqui, será calculado no backend
       tipo: item.tipo,
     }));
 
@@ -372,7 +341,7 @@ export default function OrdemServicoPage() {
       clienteId: data.clienteId && data.clienteId !== "avulso" ? data.clienteId : null,
       clienteNome: nomeClienteFinal,
       itens: itensParaSalvar,
-      valorTotal: data.valorTotalOS,
+      valorTotal: data.valorTotalOS || 0, // Valor total da OS é o que o usuário digitou (ou 0)
       valorAdiantado: data.valorAdiantado || 0,
       dataEntrega: Timestamp.fromDate(data.dataEntrega),
       observacoes: data.observacoes || "",
@@ -394,9 +363,9 @@ export default function OrdemServicoPage() {
       if (valorAdiantado > 0) {
          // Lógica para registrar adiantamento no financeiro (futuro)
       }
-      const valorAReceber = data.valorTotalOS - valorAdiantado;
-      if (valorAReceber > 0) {
-         // Lógica para registrar saldo pendente no financeiro (futuro)
+      const valorAReceber = (data.valorTotalOS || 0) - valorAdiantado;
+      if (valorAReceber > 0 || valorAReceber <=0 ) { // Considerar valorAReceber pode ser 0 ou negativo se adiantamento > total
+         // Lógica para registrar saldo pendente/crédito no financeiro (futuro)
       }
 
       const primeiroItemNome = data.itens[0]?.nome || "Serviço Detalhado na OS";
@@ -418,12 +387,12 @@ export default function OrdemServicoPage() {
       toast({ title: "Ordem de Serviço Salva!", description: `OS #${osDocRefId.substring(0,6)}... salva e ordem de produção criada.` });
       setLastSavedOsData({
         ...data,
+        valorTotalOS: data.valorTotalOS || 0,
         numeroOS: osDocRefId,
         clienteNomeFinal: nomeClienteFinal,
         clienteTelefone: selectedClient?.telefone,
         clienteEmail: selectedClient?.email,
         itensSalvos: itensParaSalvar,
-        valorTotalOSSalvo: data.valorTotalOS,
       });
       osForm.reset({ clienteId: "avulso", clienteNome: "Cliente Avulso", itens: [], valorTotalOS: 0, valorAdiantado: 0, observacoes: "", dataEntrega: undefined });
 
@@ -477,7 +446,6 @@ export default function OrdemServicoPage() {
         nome: itemCatalogo.nome,
         quantidade: 1,
         valorUnitario: itemCatalogo.valorVenda,
-        valorTotal: itemCatalogo.valorVenda, 
         tipo: itemCatalogo.tipo,
     } : {
         idTemp: `item-${Date.now()}`,
@@ -485,33 +453,21 @@ export default function OrdemServicoPage() {
         nome: "",
         quantidade: 1,
         valorUnitario: 0,
-        valorTotal: 0,
         tipo: 'Manual',
     };
     append(newItem);
   };
 
-  const handleItemChange = (index: number, field: keyof ItemOSFormValues, value: any) => {
-    const currentItem = fields[index]; // From useFieldArray
+  const handleItemChange = (index: number, field: keyof Omit<ItemOSFormValues, 'valorTotal'>, value: any) => {
+    const currentItem = fields[index]; 
     let numericValue = value;
 
     if (field === 'quantidade' || field === 'valorUnitario') {
-      numericValue = parseFloat(String(value)) || 0; // Ensure string conversion for parseFloat
+      numericValue = parseFloat(String(value)) || 0; 
     }
     
-    // Create a temporary object with the changed field
-    // This object is what will be passed to `update`
     const itemStateToUpdate = { ...currentItem, [field]: numericValue };
-
-    // Recalculate valorTotal for this item based on its own quantity and valorUnitario from the temp state
-    if (field === 'quantidade' || field === 'valorUnitario') {
-      const qtd = itemStateToUpdate.quantidade || 0;
-      const vu = itemStateToUpdate.valorUnitario || 0;
-      itemStateToUpdate.valorTotal = qtd * vu;
-    }
-    // For other fields, valorTotal remains as it was in currentItem unless explicitly set by this logic
-    
-    update(index, itemStateToUpdate); // Update the item in the form array, this will trigger the watch
+    update(index, itemStateToUpdate);
   };
 
   const handleItemCatalogoSelect = (index: number, itemId: string) => {
@@ -522,19 +478,16 @@ export default function OrdemServicoPage() {
             produtoServicoId: undefined,
             nome: "", 
             valorUnitario: 0,
-            valorTotal: 0, 
             tipo: 'Manual',
         });
     } else {
         const selectedCatalogoItem = catalogoItens.find(c => c.id === itemId);
         if (selectedCatalogoItem) {
-            const currentQty = currentItem.quantidade || 1;
             update(index, {
                 ...currentItem,
                 produtoServicoId: selectedCatalogoItem.id,
                 nome: selectedCatalogoItem.nome,
                 valorUnitario: selectedCatalogoItem.valorVenda,
-                valorTotal: currentQty * selectedCatalogoItem.valorVenda, 
                 tipo: selectedCatalogoItem.tipo,
             });
         }
@@ -654,17 +607,14 @@ export default function OrdemServicoPage() {
                                 <FormItem><FormLabel>Nome do Item</FormLabel><FormControl><Input placeholder="Nome do produto/serviço" {...field} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Alterado de sm:grid-cols-3 para sm:grid-cols-2 */}
                              <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
                                 <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => handleItemChange(index, 'quantidade', e.target.value)} min="1" /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
                                 <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" onChange={e => handleItemChange(index, 'valorUnitario', e.target.value)} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
-                             <FormItem>
-                                <FormLabel>Val. Total (R$)</FormLabel>
-                                <Input type="number" value={(item.valorTotal || 0).toFixed(2)} readOnly disabled className="bg-muted/50" />
-                             </FormItem>
+                             {/* Campo de Valor Total do Item removido */}
                         </div>
                          <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
                             <FormItem className="hidden">
@@ -680,11 +630,18 @@ export default function OrdemServicoPage() {
               </Card>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormItem>
-                    <FormLabel>Valor Total da OS (R$)</FormLabel>
-                    <FormControl><Input type="number" value={(osForm.watch('valorTotalOS') || 0).toFixed(2)} readOnly disabled className="font-bold text-lg bg-muted/50" /></FormControl>
-                    <FormMessage />
-                </FormItem>
+                <FormField
+                  control={osForm.control}
+                  name="valorTotalOS"
+                  render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Valor Total da OS (R$) (Opcional)</FormLabel>
+                        <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
+                        <FormDescription>Será calculado no backend se não informado.</FormDescription>
+                        <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={osForm.control}
                   name="valorAdiantado"
@@ -812,3 +769,5 @@ export default function OrdemServicoPage() {
     </div>
   );
 }
+
+    
