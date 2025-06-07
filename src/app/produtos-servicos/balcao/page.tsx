@@ -21,9 +21,9 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
+import { useAuth } from '@/components/auth/auth-provider';
 import { db } from "@/lib/firebase";
-import { collection, addDoc, Timestamp, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, addDoc, Timestamp, getDocs, query, where, orderBy, doc, runTransaction } from "firebase/firestore"; // Adicionado doc e runTransaction
 
 interface ProductServicoFirestore {
   id: string;
@@ -59,6 +59,7 @@ interface CartItem {
   manual?: boolean;
   imageHint?: string;
   productId?: string;
+  productType?: "Serviço" | "Produto"; // Adicionado para saber o tipo do item do catálogo
 }
 
 interface Cliente {
@@ -101,7 +102,7 @@ export default function BalcaoPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
 
-  const bypassAuth = true; // Forçar bypass para testes
+  const bypassAuth = true; 
 
   const fetchAvailableProducts = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
@@ -194,6 +195,7 @@ export default function BalcaoPage() {
             valorTotal: product.price,
             manual: false,
             imageHint: product.imageHint,
+            productType: product.type, // Adicionado tipo do produto
           },
         ];
       }
@@ -270,6 +272,7 @@ export default function BalcaoPage() {
             valorUnitario: item.valorUnitario,
             valorTotal: item.valorTotal,
             manual: item.manual || false,
+            productType: item.productType || null, // Salvar o tipo do item
         })),
         totalVenda: totalVenda,
         formaPagamento: paymentMethod,
@@ -280,6 +283,7 @@ export default function BalcaoPage() {
       };
       const vendaDocRef = await addDoc(collection(db, "vendas"), vendaData);
 
+      // Lançamento Financeiro
       const lancamentoReceita = {
         userId: userIdToSave,
         titulo: `Venda Balcão #${vendaDocRef.id.substring(0,6)} - ${clienteNome}`,
@@ -295,10 +299,46 @@ export default function BalcaoPage() {
       };
       await addDoc(collection(db, "lancamentosFinanceiros"), lancamentoReceita);
 
+      // Baixa de Estoque para Produtos
+      for (const item of cartItems) {
+        if (item.productId && !item.manual && item.productType === 'Produto') {
+          const productRef = doc(db, "produtosServicos", item.productId);
+          try {
+            await runTransaction(db, async (transaction) => {
+              const productDoc = await transaction.get(productRef);
+              if (!productDoc.exists()) {
+                throw new Error(`Produto ${item.nome} (ID: ${item.productId}) não encontrado no catálogo.`);
+              }
+              const productData = productDoc.data() as ProductServicoFirestore;
+              const estoqueAtual = productData.quantidadeEstoque ?? 0;
+              
+              if (estoqueAtual < item.quantidade) {
+                 console.warn(`Estoque insuficiente para ${item.nome}. Vendendo ${item.quantidade}, disponível: ${estoqueAtual}. A venda será registrada, mas o estoque ficará negativo ou inalterado se não puder ficar negativo.`);
+                 // Decidir política: impedir venda, permitir estoque negativo, ou apenas avisar.
+                 // Por ora, vamos permitir que fique negativo para não bloquear a venda, mas logar um aviso.
+              }
+              const novoEstoque = estoqueAtual - item.quantidade;
+              transaction.update(productRef, { 
+                quantidadeEstoque: novoEstoque,
+                atualizadoEm: Timestamp.now()
+              });
+            });
+            console.log(`Estoque do produto ${item.nome} atualizado.`);
+          } catch (stockError: any) {
+            console.error(`Erro ao atualizar estoque para ${item.nome} (ID: ${item.productId}):`, stockError);
+            toast({
+              title: `Erro de Estoque: ${item.nome}`,
+              description: `Não foi possível atualizar o estoque: ${stockError.message}. A venda foi registrada. Verifique o estoque manualmente.`,
+              variant: "destructive",
+              duration: 7000,
+            });
+          }
+        }
+      }
 
       toast({
         title: "Venda Finalizada!",
-        description: `Total: R$ ${totalVenda.toFixed(2)}. Lançamento financeiro criado.`,
+        description: `Total: R$ ${totalVenda.toFixed(2)}. Lançamento financeiro criado. Estoque de produtos atualizado.`,
       });
       setCartItems([]);
       setSelectedClient("avulso");
