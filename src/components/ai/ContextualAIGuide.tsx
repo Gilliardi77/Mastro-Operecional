@@ -2,12 +2,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquareQuestion, Send, X, Loader2, CornerDownLeft } from 'lucide-react';
+import { MessageCircleQuestion, Send, X, Loader2 } from 'lucide-react'; // Alterado aqui
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'; // SheetClose removido se não usado
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+// Badge removido se não usado
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { cn } from '@/lib/utils';
 
@@ -39,18 +39,12 @@ export default function ContextualAIGuide() {
   };
   
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
-    // For now, just send the actionLabel as a query to the AI.
-    // In the future, `actionId` and `payload` could trigger specific client-side or server-side functions.
-    setUserInput(''); // Clear input in case user was typing
+    setUserInput(''); 
     await sendQueryToAIGuide(`O que acontece se eu clicar em: "${actionLabel}"? (Contexto da ação: ${actionId})`);
-    // OR, if you want to simulate executing the action:
-    // addMessage('user', `*Clicou em: ${actionLabel}*`);
-    // Then, potentially, call another flow or client function based on actionId.
   };
 
 
   if (!currentAppContext.pageName) {
-    // Don't render the button until context is available (avoids flash of button in wrong place)
     return null;
   }
 
@@ -63,15 +57,14 @@ export default function ContextualAIGuide() {
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
-        {isAIGuideOpen ? <X className="h-7 w-7" /> : <MessageSquareQuestion className="h-7 w-7" />}
+        {isAIGuideOpen ? <X className="h-7 w-7" /> : <MessageCircleQuestion className="h-7 w-7" />} {/* Alterado aqui */}
       </Button>
 
       <Sheet open={isAIGuideOpen} onOpenChange={(open) => { if (!open) closeAIGuide(); else toggleAIGuide();}}>
-        {/* No SheetTrigger needed as we control open state externally */}
         <SheetContent side="right" className="w-[400px] sm:w-[540px] p-0 flex flex-col">
           <SheetHeader className="p-6 pb-2 border-b">
             <SheetTitle className="text-xl flex items-center gap-2">
-              <MessageSquareQuestion className="h-6 w-6 text-primary" />
+              <MessageCircleQuestion className="h-6 w-6 text-primary" /> {/* Alterado aqui */}
               Guia Inteligente Business Maestro
             </SheetTitle>
             <SheetDescription>
@@ -130,6 +123,7 @@ export default function ContextualAIGuide() {
                 disabled={isAILoading}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !isAILoading && userInput.trim()) {
+                    e.preventDefault(); // Prevenir nova linha no Enter
                     handleSendMessage();
                   }
                 }}
