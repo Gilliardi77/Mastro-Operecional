@@ -28,6 +28,8 @@ import { useAIGuide } from '@/contexts/AIGuideContext';
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
+const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
+
 // Schema para um item individual na OS
 const itemOSSchema = z.object({
   idTemp: z.string(), // ID temporário para react hook form key
@@ -281,6 +283,7 @@ export default function OrdemServicoPage() {
       const valorItem = valorTotalParam ? parseFloat(valorTotalParam) : 0;
       prefillData.itens.push({
         idTemp: `item-${Date.now()}`,
+        produtoServicoId: undefined, // When coming from balcão, it's treated as manual initially
         nome: descricaoParam,
         quantidade: 1,
         valorUnitario: valorItem,
@@ -289,11 +292,11 @@ export default function OrdemServicoPage() {
       });
     }
 
-    if (Object.keys(prefillData).length > 1 || prefillData.itens.length > 0) { // Check more than just items presence
+    if (Object.keys(prefillData).length > 1 || prefillData.itens.length > 0) { 
       osForm.reset(currentValues => ({
         ...currentValues,
         ...prefillData,
-        dataEntrega: currentValues.dataEntrega || undefined, // Preserve existing or keep undefined
+        dataEntrega: currentValues.dataEntrega || undefined, 
         valorTotalOS: prefillData.itens.reduce((sum, item) => sum + item.valorTotal, 0) || 0,
       }));
     }
@@ -336,7 +339,7 @@ export default function OrdemServicoPage() {
     const nomeClienteFinal = selectedClient ? selectedClient.nome : (data.clienteNome || "Cliente Avulso");
 
     const itensParaSalvar = data.itens.map(item => ({
-      produtoServicoId: item.produtoServicoId || null,
+      produtoServicoId: (item.produtoServicoId && item.produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE) ? item.produtoServicoId : null,
       nome: item.nome,
       quantidade: item.quantidade,
       valorUnitario: item.valorUnitario,
@@ -377,7 +380,7 @@ export default function OrdemServicoPage() {
 
       const primeiroItemNome = data.itens[0]?.nome || "Serviço Detalhado na OS";
       const productionOrderData = {
-        agendamentoId: osDocRefId, // agendamentoId é o ID da OS
+        agendamentoId: osDocRefId, 
         clienteId: osDataToSave.clienteId,
         clienteNome: osDataToSave.clienteNome,
         servicoNome: primeiroItemNome + (data.itens.length > 1 ? " e outros" : ""),
@@ -425,14 +428,14 @@ export default function OrdemServicoPage() {
       userId: userIdToSave,
       criadoEm: now,
       atualizadoEm: now,
-      temDebitos: false, // Default for new client
+      temDebitos: false, 
     };
 
     try {
       const docRef = await addDoc(collection(db, "clientes"), newClientData);
       const newClientForSelect = { id: docRef.id, nome: data.nome, email: data.email, telefone: data.telefone };
       setClients(prev => [...prev, newClientForSelect].sort((a,b) => a.nome.localeCompare(b.nome)));
-      osForm.setValue('clienteId', docRef.id); // Select the new client in the OS form
+      osForm.setValue('clienteId', docRef.id); 
       osForm.setValue('clienteNome', data.nome);
       toast({ title: "Novo Cliente Salvo!", description: `${data.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
@@ -457,6 +460,7 @@ export default function OrdemServicoPage() {
         tipo: itemCatalogo.tipo,
     } : {
         idTemp: `item-${Date.now()}`,
+        produtoServicoId: undefined,
         nome: "",
         quantidade: 1,
         valorUnitario: 0,
@@ -479,6 +483,17 @@ export default function OrdemServicoPage() {
   };
 
   const handleItemCatalogoSelect = (index: number, itemId: string) => {
+    if (itemId === MANUAL_ITEM_PLACEHOLDER_VALUE) {
+        update(index, {
+            ...fields[index],
+            produtoServicoId: undefined, // Clear if it was previously set
+            nome: fields[index].nome || "", // Keep manual name if user typed something
+            tipo: 'Manual',
+            // valorUnitario and valorTotal would be manually entered
+        });
+        return;
+    }
+
     const selectedCatalogoItem = catalogoItens.find(c => c.id === itemId);
     if (selectedCatalogoItem) {
         update(index, {
@@ -486,13 +501,13 @@ export default function OrdemServicoPage() {
             produtoServicoId: selectedCatalogoItem.id,
             nome: selectedCatalogoItem.nome,
             valorUnitario: selectedCatalogoItem.valorVenda,
-            valorTotal: fields[index].quantidade * selectedCatalogoItem.valorVenda, // Recalculate based on current quantity
+            valorTotal: fields[index].quantidade * selectedCatalogoItem.valorVenda, 
             tipo: selectedCatalogoItem.tipo,
         });
     }
   };
 
-  const handleEnviarWhatsApp = () => {
+  const handleEnviarWhatsApp = () => { 
     toast({ title: "WhatsApp", description: "Funcionalidade de envio por WhatsApp em desenvolvimento." });
   }
   const handleEnviarEmail = async () => {
@@ -504,7 +519,7 @@ export default function OrdemServicoPage() {
   if (isAuthLoading || isLoadingClients || isLoadingCatalogo) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
   }
-  // if (!bypassAuth && !user) { /* ... acesso negado ... */ } // Assuming bypassAuth is true for now
+  
 
   return (
     <div className="space-y-6">
@@ -538,7 +553,7 @@ export default function OrdemServicoPage() {
                             osForm.setValue('clienteNome', 'Cliente Avulso');
                           }
                         }}
-                        value={field.value || "avulso"} // Default to avulso if undefined
+                        value={field.value || "avulso"} 
                         disabled={isLoadingClients}
                       >
                         <FormControl>
@@ -589,12 +604,12 @@ export default function OrdemServicoPage() {
                                 <FormLabel>Item do Catálogo</FormLabel>
                                 <Select
                                     onValueChange={(value) => handleItemCatalogoSelect(index, value)}
-                                    value={item.produtoServicoId || ""}
+                                    value={item.produtoServicoId || MANUAL_ITEM_PLACEHOLDER_VALUE}
                                     disabled={isLoadingCatalogo}
                                 >
                                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} /></SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">-- Item Manual (digite o nome abaixo) --</SelectItem>
+                                        <SelectItem value={MANUAL_ITEM_PLACEHOLDER_VALUE}>-- Item Manual (digite o nome abaixo) --</SelectItem>
                                         {catalogoItens.map(catItem => <SelectItem key={catItem.id} value={catItem.id}>{catItem.nome} ({catItem.tipo}) - R${catItem.valorVenda.toFixed(2)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -615,7 +630,7 @@ export default function OrdemServicoPage() {
                                 <Input type="number" value={item.valorTotal.toFixed(2)} readOnly disabled className="bg-muted/50" />
                              </FormItem>
                         </div>
-                         <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( // Hidden field, type is set by selection or default
+                         <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
                             <FormItem className="hidden">
                                 <FormControl><Input {...field} /></FormControl>
                             </FormItem>
@@ -676,7 +691,7 @@ export default function OrdemServicoPage() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))} // Disallow past dates
+                          disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))} 
                           initialFocus
                           locale={ptBR}
                         />
