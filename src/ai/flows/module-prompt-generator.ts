@@ -54,11 +54,11 @@ Consider the following specifications when generating the prompt:
   - CSS Styling: Tailwind CSS.
   - Theme: Defined in src/app/globals.css using CSS HSL variables.
   - Key Colors (Light Mode):
-    - Background: hsl(0 0% 96%) (Light Gray)
+    - Background: hsl(0 0% 95%) (Light Gray)
     - Foreground: hsl(0 0% 10%) (Dark Gray)
-    - Primary: hsl(165 50% 24%) (Dark Green)
+    - Primary: hsl(190 60% 35%) (Petroleum Blue)
     - Primary Foreground: hsl(0 0% 98%) (Light text on primary)
-    - Accent: hsl(100 17% 80%) (Light Olive)
+    - Accent: hsl(96 46% 82%) (Light Olive) 
   - Aesthetics: Modern, clean, professional design with rounded corners and subtle shadows.
   - Font: 'Poppins' from Google Fonts.
 - **Layout and Structure**:
