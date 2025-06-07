@@ -160,30 +160,29 @@ export default function OrdemServicoPage() {
   }, [updateAICurrentPageContext]);
 
   useEffect(() => {
-    const subscription = osForm.watch((values, { name, type }) => {
-      const currentItens = values.itens || [];
-      let totalItens = 0;
-
-      // Se um campo de item específico mudou, recalculamos o total desse item primeiro
-      if (name && name.startsWith("itens.")) {
-        const itemIndexMatch = name.match(/itens\.(\d+)\.(quantidade|valorUnitario)/);
-        if (itemIndexMatch) {
-          const index = parseInt(itemIndexMatch[1], 10);
-          if (index < currentItens.length) {
-            const item = currentItens[index];
-            const newTotalItem = (item.quantidade || 0) * (item.valorUnitario || 0);
-            if (item.valorTotal !== newTotalItem) {
-              // Temporariamente atualiza para cálculo, mas a fonte da verdade deve ser handleItemChange/handleItemCatalogoSelect
-               currentItens[index] = { ...item, valorTotal: newTotalItem };
-            }
+    const subscription = osForm.watch((_, { name, type }) => {
+      // Recalculate item total if quantity or unit price of an item changed
+      if (name && name.startsWith("itens.") && (name.endsWith(".quantidade") || name.endsWith(".valorUnitario"))) {
+        const parts = name.split('.');
+        const index = parseInt(parts[1], 10);
+        
+        const item = osForm.getValues(`itens.${index}`); // Get the LATEST values from form state
+        if (item && typeof item.quantidade === 'number' && typeof item.valorUnitario === 'number') {
+          const newTotalItem = item.quantidade * item.valorUnitario;
+          // Only update if it's actually different to avoid re-renders/potential loops
+          if (item.valorTotal !== newTotalItem) { 
+            osForm.setValue(`itens.${index}.valorTotal`, newTotalItem, { shouldValidate: false }); // Update specific item's total
           }
         }
       }
-      
-      totalItens = currentItens.reduce((sum, item) => sum + (item.valorTotal || 0), 0);
 
-      if (osForm.getValues("valorTotalOS") !== totalItens) {
-        osForm.setValue("valorTotalOS", totalItens, { shouldValidate: true });
+      // Always recalculate OS total based on all current item totals
+      // This will run after an individual item's total might have been updated by the block above
+      const currentItens = osForm.getValues("itens") || [];
+      const totalOS = currentItens.reduce((sum, itemEntry) => sum + (itemEntry.valorTotal || 0), 0);
+      
+      if (osForm.getValues("valorTotalOS") !== totalOS) {
+        osForm.setValue("valorTotalOS", totalOS, { shouldValidate: true });
       }
     });
     return () => subscription.unsubscribe();
@@ -219,7 +218,12 @@ export default function OrdemServicoPage() {
             const itemFieldName = fieldNameParts[2] as keyof ItemOSFormValues;
 
             if (itemIndex >= 0 && itemIndex < fields.length && itemFieldName) {
-                update(itemIndex, { ...fields[itemIndex], [itemFieldName]: detail.value });
+                // Use handleItemChange for consistency if it's quantity or valorUnitario
+                if (itemFieldName === 'quantidade' || itemFieldName === 'valorUnitario') {
+                  handleItemChange(itemIndex, itemFieldName, detail.value);
+                } else {
+                  update(itemIndex, { ...fields[itemIndex], [itemFieldName]: detail.value });
+                }
                 toast({ title: "Item da OS Atualizado pela IA", description: `${detail.actionLabel || `Item ${itemIndex + 1}, campo ${itemFieldName} atualizado.`}` });
             } else {
                 console.warn(`IA tentou preencher campo de item inválido: ${detail.fieldName}`);
@@ -473,7 +477,7 @@ export default function OrdemServicoPage() {
         nome: itemCatalogo.nome,
         quantidade: 1,
         valorUnitario: itemCatalogo.valorVenda,
-        valorTotal: itemCatalogo.valorVenda, // Assumindo quantidade 1 inicialmente
+        valorTotal: itemCatalogo.valorVenda, 
         tipo: itemCatalogo.tipo,
     } : {
         idTemp: `item-${Date.now()}`,
@@ -488,20 +492,26 @@ export default function OrdemServicoPage() {
   };
 
   const handleItemChange = (index: number, field: keyof ItemOSFormValues, value: any) => {
-    const currentItem = fields[index];
+    const currentItem = fields[index]; // From useFieldArray
     let numericValue = value;
-    if (field === 'quantidade' || field === 'valorUnitario') {
-      numericValue = parseFloat(value) || 0;
-    }
-    
-    let updatedItem = { ...currentItem, [field]: numericValue };
 
     if (field === 'quantidade' || field === 'valorUnitario') {
-      const qtd = updatedItem.quantidade;
-      const vu = updatedItem.valorUnitario;
-      updatedItem.valorTotal = qtd * vu;
+      numericValue = parseFloat(String(value)) || 0; // Ensure string conversion for parseFloat
     }
-    update(index, updatedItem);
+    
+    // Create a temporary object with the changed field
+    // This object is what will be passed to `update`
+    const itemStateToUpdate = { ...currentItem, [field]: numericValue };
+
+    // Recalculate valorTotal for this item based on its own quantity and valorUnitario from the temp state
+    if (field === 'quantidade' || field === 'valorUnitario') {
+      const qtd = itemStateToUpdate.quantidade || 0;
+      const vu = itemStateToUpdate.valorUnitario || 0;
+      itemStateToUpdate.valorTotal = qtd * vu;
+    }
+    // For other fields, valorTotal remains as it was in currentItem unless explicitly set by this logic
+    
+    update(index, itemStateToUpdate); // Update the item in the form array, this will trigger the watch
   };
 
   const handleItemCatalogoSelect = (index: number, itemId: string) => {
@@ -510,7 +520,7 @@ export default function OrdemServicoPage() {
         update(index, {
             ...currentItem,
             produtoServicoId: undefined,
-            nome: "", // Limpa nome para entrada manual
+            nome: "", 
             valorUnitario: 0,
             valorTotal: 0, 
             tipo: 'Manual',
@@ -646,10 +656,10 @@ export default function OrdemServicoPage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                              <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => handleItemChange(index, 'quantidade', parseFloat(e.target.value) || 0)} min="1" /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => handleItemChange(index, 'quantidade', e.target.value)} min="1" /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" onChange={e => handleItemChange(index, 'valorUnitario', parseFloat(e.target.value) || 0)} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" onChange={e => handleItemChange(index, 'valorUnitario', e.target.value)} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormItem>
                                 <FormLabel>Val. Total (R$)</FormLabel>
