@@ -90,7 +90,7 @@ export default function OrdemServicoPage() {
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [isSavingNewClient, setIsSavingNewClient] = useState(false);
 
-  const bypassAuth = true; // Forçar bypass para testes
+  const bypassAuth = true; 
 
   const osForm = useForm<OrdemServicoFormValues>({
     resolver: zodResolver(ordemServicoFormSchema),
@@ -556,7 +556,7 @@ Enviado por: Meu Negócio App
                         <SelectContent>
                           <SelectItem value="avulso">Cliente Avulso / Não Especificado</SelectItem>
                           {clients.map(client => (<SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>))}
-                          {!isLoadingClients && clients.length === 0 && <SelectItem value="" disabled>Nenhum cliente cadastrado</SelectItem>}
+                          {!isLoadingClients && clients.length === 0 && <SelectItem value="no-clients-available" disabled>Nenhum cliente cadastrado</SelectItem>}
                         </SelectContent>
                       </Select>
                       <Button type="button" variant="outline" onClick={() => setIsNewClientModalOpen(true)} className="shrink-0" disabled={isSaving}><UserPlus className="mr-2 h-4 w-4" /> Novo Cliente</Button>
