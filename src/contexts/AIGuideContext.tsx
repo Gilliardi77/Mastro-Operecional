@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -27,7 +28,7 @@ interface AIGuideContextType {
   closeAIGuide: () => void;
   chatMessages: ChatMessage[];
   currentAppContext: CurrentAppContext;
-  updateAICurrentPageContext: (pageName: string) => void; // Simplified for now
+  updateAICurrentPageContext: (context: Partial<CurrentAppContext>) => void;
   sendQueryToAIGuide: (userQuery: string) => Promise<void>;
   isAILoading: boolean;
 }
@@ -44,14 +45,41 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
     pageName: pathname || 'unknown',
   });
 
+  // Load chat from sessionStorage when guide opens for a specific page
   useEffect(() => {
-    // Update pageName context when route changes
-    setCurrentAppContext(prev => ({ ...prev, pageName: pathname || 'unknown' }));
-     // Optionally, clear chat or send a "new page" message to AI here
-    if (isAIGuideOpen) {
-        // setChatMessages([]); // Example: clear chat on page change
+    if (isAIGuideOpen && typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem(`chat-${pathname}`);
+      if (saved) {
+        try {
+          const parsedMessages = JSON.parse(saved).map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp) // Ensure timestamp is a Date object
+          }));
+          setChatMessages(parsedMessages);
+        } catch (e) {
+          console.error("Failed to parse chat from session storage", e);
+          sessionStorage.removeItem(`chat-${pathname}`); // Clear corrupted data
+        }
+      } else {
+        setChatMessages([]); // Start with empty chat if nothing saved for this path
+      }
     }
-  }, [pathname, isAIGuideOpen]);
+  }, [isAIGuideOpen, pathname]);
+
+  // Save chat to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && chatMessages.length > 0) {
+      sessionStorage.setItem(`chat-${pathname}`, JSON.stringify(chatMessages));
+    } else if (typeof window !== 'undefined' && chatMessages.length === 0) {
+      // If chatMessages becomes empty (e.g. cleared), remove from storage
+      sessionStorage.removeItem(`chat-${pathname}`);
+    }
+  }, [chatMessages, pathname]);
+
+
+  useEffect(() => {
+    setCurrentAppContext(prev => ({ ...prev, pageName: pathname || 'unknown' }));
+  }, [pathname]);
 
 
   const toggleAIGuide = useCallback(() => {
@@ -62,13 +90,19 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
     setIsAIGuideOpen(false);
   }, []);
 
-  const updateAICurrentPageContext = useCallback((pageName: string) => {
-    setCurrentAppContext(prev => ({ ...prev, pageName }));
-  }, []);
+  const updateAICurrentPageContext = useCallback((context: Partial<CurrentAppContext>) => {
+    setCurrentAppContext(prev => ({ ...prev, ...context, pageName: context.pageName || prev.pageName || pathname || 'unknown' }));
+  }, [pathname]);
 
-  const addMessage = (sender: 'user' | 'ai', text: string, suggestedActions?: ContextualAIGuideOutput['suggestedActions']) => {
-    setChatMessages(prev => [...prev, { id: Date.now().toString(), sender, text, timestamp: new Date(), suggestedActions }]);
-  };
+  const addMessage = useCallback((sender: 'user' | 'ai', text: string, suggestedActions?: ContextualAIGuideOutput['suggestedActions']) => {
+    setChatMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      sender,
+      text: text || 'Sem resposta.', // Fallback for empty text
+      timestamp: new Date(),
+      suggestedActions,
+    }]);
+  }, []);
 
   const sendQueryToAIGuide = async (userQuery: string) => {
     if (!userQuery.trim()) return;
@@ -79,7 +113,8 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
       const input: ContextualAIGuideInput = {
         pageName: currentAppContext.pageName,
         userQuery: userQuery,
-        // currentAction and formSnapshotJSON can be added later
+        currentAction: currentAppContext.currentAction,
+        formSnapshotJSON: currentAppContext.formSnapshotJSON,
       };
       const aiResponse = await contextualAIGuideFlow(input);
       addMessage('ai', aiResponse.aiResponseText, aiResponse.suggestedActions);

@@ -11,6 +11,7 @@ import { useAIGuide } from '@/contexts/AIGuideContext';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast'; 
+import SuggestedActions from './SuggestedActions'; // Import the new component
 
 export default function ContextualAIGuide() {
   const {
@@ -26,12 +27,26 @@ export default function ContextualAIGuide() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { toast } = useToast(); 
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+
 
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [chatMessages]);
+
+  // Initial AI message when guide opens on a new page context
+  useEffect(() => {
+    if (isAIGuideOpen && chatMessages.length === 0 && !isAILoading) {
+      // Check if sessionStorage already has messages for this page to avoid re-triggering
+      const savedChat = typeof window !== 'undefined' ? sessionStorage.getItem(`chat-${currentAppContext.pageName}`) : null;
+      if (!savedChat) {
+        sendQueryToAIGuide(`Olá! Estou na página "${currentAppContext.pageName}". Poderia me dar uma breve orientação ou perguntar como posso ajudar?`);
+      }
+    }
+  }, [isAIGuideOpen, chatMessages.length, currentAppContext.pageName, sendQueryToAIGuide, isAILoading]);
+
 
   const handleSendMessage = async (e?: React.FormEvent<HTMLFormElement>) => {
     if (e) e.preventDefault();
@@ -43,55 +58,64 @@ export default function ContextualAIGuide() {
   
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
     setUserInput(''); 
+    setSelectedActionId(actionId); // For visual feedback
 
-    switch (actionId) {
-      case 'navigate_to_page':
-        if (payload && typeof payload.path === 'string') {
-          router.push(payload.path);
-          closeAIGuide(); 
-        } else {
-          toast({ title: "Erro de Navegação", description: "Caminho inválido fornecido pela IA.", variant: "destructive"});
-        }
-        break;
-      case 'preencher_campo_formulario':
-        if (payload && payload.formName && payload.fieldName && payload.value !== undefined) {
-          const event = new CustomEvent('aiFillFormEvent', { 
-            detail: {
-              formName: payload.formName,
-              fieldName: payload.fieldName,
-              value: payload.value,
-              actionLabel: actionLabel 
-            }
-          });
-          window.dispatchEvent(event);
-          
-          await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada. O campo ${payload.fieldName} foi preenchido com ${payload.value}.`);
-        } else {
-           toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
-        }
-        break;
-      case 'abrir_modal_novo_cliente_os':
-        if (payload) {
-          const event = new CustomEvent('aiOpenNewClientModalOSEvent', {
-            detail: {
-              ...payload,
-              actionLabel: actionLabel,
-            }
-          });
-          window.dispatchEvent(event);
-          // Não enviar mensagem de volta para a IA aqui, pois a ação é abrir um modal.
-          // A página que lida com o modal pode dar um toast.
-          // Ou, a IA poderia ser informada APÓS o modal ser preenchido e salvo.
-        } else {
-          toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive"});
-        }
-        break;
-      default:
-        
-        await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
-        break;
+    try {
+      switch (actionId) {
+        case 'navigate_to_page':
+          if (payload && typeof payload.path === 'string') {
+            router.push(payload.path);
+            closeAIGuide(); 
+          } else {
+            toast({ title: "Erro de Navegação", description: "Caminho inválido fornecido pela IA.", variant: "destructive"});
+          }
+          break;
+        case 'preencher_campo_formulario':
+          if (payload && payload.formName && payload.fieldName && payload.value !== undefined) {
+            const event = new CustomEvent('aiFillFormEvent', { 
+              detail: {
+                formName: payload.formName,
+                fieldName: payload.fieldName,
+                value: payload.value,
+                actionLabel: actionLabel 
+              }
+            });
+            window.dispatchEvent(event);
+            
+            await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada. O campo ${payload.fieldName} foi preenchido com ${payload.value}.`);
+          } else {
+             toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
+          }
+          break;
+        case 'abrir_modal_novo_cliente_os':
+          if (payload) {
+            const event = new CustomEvent('aiOpenNewClientModalOSEvent', {
+              detail: {
+                ...payload,
+                actionLabel: actionLabel,
+              }
+            });
+            window.dispatchEvent(event);
+            // Inform AI that the action was initiated
+            await sendQueryToAIGuide(`Ação: "${actionLabel}" iniciada. O modal para adicionar cliente será aberto.`);
+          } else {
+            toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive"});
+          }
+          break;
+        default:
+          await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
+          break;
+      }
+    } finally {
+       // setSelectedActionId(null); // Reset after AI response handled by sendQueryToAIGuide's finally block
     }
   };
+
+  useEffect(() => {
+    if (!isAILoading) {
+      setSelectedActionId(null);
+    }
+  }, [isAILoading]);
 
 
   if (!currentAppContext.pageName) {
@@ -118,7 +142,7 @@ export default function ContextualAIGuide() {
               Guia Inteligente Business Maestro
             </SheetTitle>
             <SheetDescription>
-              Precisa de ajuda com a página "{currentAppContext.pageName}"? Pergunte-me!
+              Precisa de ajuda aqui na "{currentAppContext.pageName}"? Posso te orientar com base no que você está fazendo.
             </SheetDescription>
           </SheetHeader>
           
@@ -137,24 +161,16 @@ export default function ContextualAIGuide() {
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                   {msg.sender === 'ai' && msg.suggestedActions && msg.suggestedActions.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-                      {msg.suggestedActions.map(action => (
-                        <Button
-                          key={action.actionId + (action.payload?.fieldName || action.payload?.suggestedClientName || Math.random().toString(36).substring(7))} 
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start text-left h-auto py-1.5 text-xs"
-                          onClick={() => handleSuggestedAction(action.label, action.actionId, action.payload)}
-                          disabled={isAILoading}
-                        >
-                          {action.label}
-                        </Button>
-                      ))}
-                    </div>
+                    <SuggestedActions
+                      actions={msg.suggestedActions}
+                      onActionClick={handleSuggestedAction}
+                      isLoading={isAILoading}
+                      selectedActionId={selectedActionId}
+                    />
                   )}
                 </div>
               ))}
-              {isAILoading && chatMessages.length > 0 && chatMessages[chatMessages.length -1].sender === 'user' && (
+              {isAILoading && chatMessages.length > 0 && chatMessages[chatMessages.length -1].sender === 'user' && !selectedActionId && (
                 <div className="flex self-start bg-muted p-3 rounded-lg rounded-bl-none max-w-[85%]">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>
@@ -166,7 +182,7 @@ export default function ContextualAIGuide() {
             <form onSubmit={handleSendMessage} className="flex w-full items-center space-x-2">
               <Input
                 type="text"
-                placeholder="Digite sua pergunta..."
+                placeholder="Digite sua pergunta ou ação..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 className="flex-grow"
@@ -179,7 +195,7 @@ export default function ContextualAIGuide() {
                 }}
               />
               <Button type="submit" size="icon" disabled={isAILoading || !userInput.trim()} aria-label="Enviar mensagem">
-                {isAILoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                {isAILoading && !selectedActionId ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
               </Button>
             </form>
           </SheetFooter>
