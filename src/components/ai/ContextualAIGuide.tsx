@@ -70,6 +70,22 @@ export default function ContextualAIGuide() {
            toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
         }
         break;
+      case 'abrir_modal_novo_cliente_os':
+        if (payload) {
+          const event = new CustomEvent('aiOpenNewClientModalOSEvent', {
+            detail: {
+              ...payload,
+              actionLabel: actionLabel,
+            }
+          });
+          window.dispatchEvent(event);
+          // Não enviar mensagem de volta para a IA aqui, pois a ação é abrir um modal.
+          // A página que lida com o modal pode dar um toast.
+          // Ou, a IA poderia ser informada APÓS o modal ser preenchido e salvo.
+        } else {
+          toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive"});
+        }
+        break;
       default:
         
         await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
@@ -124,7 +140,7 @@ export default function ContextualAIGuide() {
                     <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                       {msg.suggestedActions.map(action => (
                         <Button
-                          key={action.actionId + (action.payload?.fieldName || Math.random().toString(36).substring(7))} 
+                          key={action.actionId + (action.payload?.fieldName || action.payload?.suggestedClientName || Math.random().toString(36).substring(7))} 
                           variant="outline"
                           size="sm"
                           className="w-full justify-start text-left h-auto py-1.5 text-xs"

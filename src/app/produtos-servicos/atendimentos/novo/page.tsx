@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { useAuth } from '@/components/auth/auth-provider';
-import { useAIGuide } from '@/contexts/AIGuideContext'; // Importado AIGuideContext
+import { useAIGuide } from '@/contexts/AIGuideContext'; 
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
@@ -65,8 +65,13 @@ interface LastSavedOsDataType extends OrdemServicoFormValues {
 // Interface para o payload do evento da IA
 interface AIFillFormEventPayload {
   formName: string;
-  fieldName: FieldPath<OrdemServicoFormValues>; // Usando FieldPath para segurança de tipo
+  fieldName: FieldPath<OrdemServicoFormValues>; 
   value: any;
+  actionLabel?: string;
+}
+
+interface AIOpenNewClientModalOSEventPayload {
+  suggestedClientName?: string;
   actionLabel?: string;
 }
 
@@ -94,7 +99,7 @@ export default function OrdemServicoPage() {
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [lastSavedOsData, setLastSavedOsData] = useState<LastSavedOsDataType | null>(null);
   const searchParams = useSearchParams();
-  const { updateAICurrentPageContext } = useAIGuide(); // Obtendo função do contexto da IA
+  const { updateAICurrentPageContext } = useAIGuide(); 
 
   const [clients, setClients] = useState<Cliente[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
@@ -121,20 +126,16 @@ export default function OrdemServicoPage() {
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
-  // Efeito para atualizar o contexto da página da IA
   useEffect(() => {
     updateAICurrentPageContext("Nova Ordem de Serviço");
   }, [updateAICurrentPageContext]);
 
-  // Efeito para escutar eventos de preenchimento de formulário da IA
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
       const customEvent = event as CustomEvent<AIFillFormEventPayload>;
       const { detail } = customEvent;
 
       if (detail.formName === "ordemServicoForm") {
-        // Validar se fieldName é uma chave válida de OrdemServicoFormValues
-        // Isso é mais para type safety no TypeScript, o Zod já valida no submit
         const validFieldNames: Array<FieldPath<OrdemServicoFormValues>> = [
           "clienteId", "clienteNome", "descricao", "valorTotal", 
           "valorAdiantado", "dataEntrega", "observacoes"
@@ -143,9 +144,8 @@ export default function OrdemServicoPage() {
         if (validFieldNames.includes(detail.fieldName)) {
           let valueToSet = detail.value;
           if (detail.fieldName === 'dataEntrega') {
-            // Tentar converter para Date se for string, caso a IA envie AAAA-MM-DD
             if (typeof valueToSet === 'string') {
-              const parsedDate = new Date(valueToSet + 'T00:00:00'); // Adiciona T00:00:00 para evitar problemas de fuso horário na conversão
+              const parsedDate = new Date(valueToSet + 'T00:00:00'); 
               if (!isNaN(parsedDate.getTime())) {
                 valueToSet = parsedDate;
               } else {
@@ -163,7 +163,6 @@ export default function OrdemServicoPage() {
             }
           }
 
-
           osForm.setValue(detail.fieldName, valueToSet, { shouldValidate: true, shouldDirty: true });
           toast({
             title: "Campo Preenchido pela IA",
@@ -176,11 +175,27 @@ export default function OrdemServicoPage() {
       }
     };
 
+    const handleAiOpenNewClientModal = (event: Event) => {
+        const customEvent = event as CustomEvent<AIOpenNewClientModalOSEventPayload>;
+        const { detail } = customEvent;
+
+        setIsNewClientModalOpen(true);
+        if (detail.suggestedClientName) {
+            newClientForm.setValue('nome', detail.suggestedClientName, { shouldValidate: true, shouldDirty: true });
+        }
+        toast({
+            title: "Assistente IA",
+            description: detail.actionLabel || "Abrindo modal para adicionar novo cliente.",
+        });
+    };
+
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
+    window.addEventListener('aiOpenNewClientModalOSEvent', handleAiOpenNewClientModal);
     return () => {
       window.removeEventListener('aiFillFormEvent', handleAiFormFill);
+      window.removeEventListener('aiOpenNewClientModalOSEvent', handleAiOpenNewClientModal);
     };
-  }, [osForm, toast]);
+  }, [osForm, newClientForm, toast]);
 
 
   const fetchClients = useCallback(async () => {
@@ -206,7 +221,7 @@ export default function OrdemServicoPage() {
       setClients(fetchedClients);
     } catch (error: any) {
       console.error("Erro ao buscar clientes:", error);
-      let description = "Não foi possível carregar a lista de clientes.";
+      let description = "Não foi possível carregar la lista de clientes.";
       if (error.message) {
         description += ` Detalhe: ${error.message}`;
       }
@@ -243,7 +258,7 @@ export default function OrdemServicoPage() {
       } else if (clienteIdParam === "avulso") {
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
       } else if (clienteIdParam !== "avulso" && !clientExists) {
-         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; // Default if param name is also missing
+         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; 
       }
     } else {
         prefillData.clienteId = "avulso";
@@ -279,7 +294,7 @@ export default function OrdemServicoPage() {
         const nomeForm = osForm.getValues('clienteNome');
         if (nomeParam && nomeParam !== nomeForm) {
              osForm.setValue('clienteNome', nomeParam);
-        } else if (!nomeForm && !nomeParam) { // if both are empty, set default
+        } else if (!nomeForm && !nomeParam) { 
              osForm.setValue('clienteNome', "Cliente Avulso");
         }
     }
@@ -341,13 +356,13 @@ export default function OrdemServicoPage() {
       if (valorAdiantado > 0) {
         const adiantamentoData = {
           userId: userIdToSave,
-          titulo: `Adiantamento OS #${osDocRefId.substring(0,6)} - ${nomeClienteFinal}`,
+          titulo: `Adiantamento OS #${osDocRefId.substring(0,6)}... - ${nomeClienteFinal}`,
           valor: valorAdiantado,
           tipo: 'receita' as 'receita' | 'despesa',
           data: Timestamp.now(),
           categoria: "Adiantamento de Cliente",
           status: 'recebido' as 'pago' | 'recebido' | 'pendente',
-          descricao: `Valor recebido como adiantamento para a OS #${osDocRefId.substring(0,6)}.`,
+          descricao: `Valor recebido como adiantamento para a OS #${osDocRefId.substring(0,6)}...`,
           ordemServicoId: osDocRefId,
           criadoEm: now,
           atualizadoEm: now,
@@ -362,13 +377,13 @@ export default function OrdemServicoPage() {
       if (valorAReceber > 0) {
         const saldoData = {
           userId: userIdToSave,
-          titulo: `Saldo OS #${osDocRefId.substring(0,6)} - ${nomeClienteFinal}`,
+          titulo: `Saldo OS #${osDocRefId.substring(0,6)}... - ${nomeClienteFinal}`,
           valor: valorAReceber,
           tipo: 'receita' as 'receita' | 'despesa',
           data: Timestamp.fromDate(data.dataEntrega),
           categoria: "Venda de Serviço (Saldo)",
           status: 'pendente' as 'pago' | 'recebido' | 'pendente',
-          descricao: `Valor pendente referente ao saldo da OS #${osDocRefId.substring(0,6)}.`,
+          descricao: `Valor pendente referente ao saldo da OS #${osDocRefId.substring(0,6)}...`,
           ordemServicoId: osDocRefId,
           criadoEm: now,
           atualizadoEm: now,
@@ -715,5 +730,3 @@ Enviado por: Meu Negócio App
     </div>
   );
 }
-
-    

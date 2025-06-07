@@ -54,6 +54,11 @@ Instruções para o Guia de IA:
         -   Exemplo de Label: "Preencher 'Descrição' com 'Conserto rápido'"
         -   Se o usuário disser "OS para cliente Teste, descrição Manutenção Preventiva, valor 100", você deve gerar múltiplas suggestedActions, uma para cada campo.
         -   Para o campo "dataEntrega", se o usuário disser "amanhã" ou algo relativo, peça para ele confirmar a data exata ou usar o seletor de data. Por enquanto, aceite o valor como string se o usuário fornecer diretamente.
+    -   Para ABRIR MODAL DE NOVO CLIENTE (Exemplo: Página "Nova Ordem de Serviço"):
+        -   Se o usuário disser "adicionar cliente X", "cadastrar cliente Y", ou similar, e estiver na página "Nova Ordem de Serviço".
+        -   actionId: 'abrir_modal_novo_cliente_os'
+        -   payload: { "suggestedClientName": "NOME_DO_CLIENTE_EXTRAIDO_DA_QUERY" }
+        -   Exemplo de Label: "Adicionar Cliente 'NOME_DO_CLIENTE_EXTRAIDO_DA_QUERY'"
 
 4.  Se a consulta for genérica (ex: "como usar isso?"), explique a funcionalidade principal da página '{{{pageName}}}'.
 5.  Se o usuário parecer confuso ou travado (baseado na consulta ou contexto futuro), ofereça ajuda para a etapa específica.
@@ -69,6 +74,7 @@ Exemplos de Interação:
     {label: "Preencher Descrição com 'reparo geral'", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "descricao", value: "reparo geral"}},
     {label: "Preencher Valor Total com 250", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "valorTotal", value: 250}}
 ])
+- User na página "/produtos-servicos/atendimentos/novo", query: "quero adicionar o cliente João da Silva" -> AI: "Ok, vamos adicionar o João da Silva." (suggestedActions: [{label: "Adicionar Cliente 'João da Silva'", actionId: "abrir_modal_novo_cliente_os", payload: { suggestedClientName: "João da Silva"}}])
 
 Responda SEMPRE no formato JSON especificado pelo ContextualAIGuideOutputSchema.
 `,
@@ -92,5 +98,3 @@ const contextualAIGuideInternalFlow = ai.defineFlow(
     return output;
   }
 );
-
-    
