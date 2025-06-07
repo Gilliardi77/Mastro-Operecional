@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -40,8 +41,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { db, auth } from "@/lib/firebase";
-import { useAuth } from '@/components/auth/auth-provider'; // Atualizado
+import { db, getFirebaseInstances } from "@/lib/firebase"; // auth removido, getFirebaseInstances adicionado
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation'; // Importado useRouter
 import {
   collection,
   addDoc,
@@ -84,11 +86,13 @@ type ClientFormValues = z.infer<typeof clientSchema>;
 
 export default function ClientesPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth(); // Adicionado isAuthLoading
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const router = useRouter(); // Instanciado useRouter
+  const { auth: firebaseAuthInstance } = getFirebaseInstances(); // Pegando auth de getFirebaseInstances
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(true); // Renomeado para evitar conflito
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [firebaseInitialized, setFirebaseInitialized] = useState(false);
@@ -107,18 +111,16 @@ export default function ClientesPage() {
   });
 
  useEffect(() => {
-    if (db && auth) {
+    if (db && firebaseAuthInstance) { // Verificando db e firebaseAuthInstance
       setFirebaseInitialized(true);
     } else if (typeof window !== 'undefined' && !firebaseInitialized) {
-      // Apenas mostra o toast se o Firebase ainda não foi marcado como inicializado
-      // e db não está disponível (significa que a inicialização em firebase.ts falhou)
       toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente e a consola.", variant: "destructive" });
     }
-  }, [firebaseInitialized, toast]);
+  }, [firebaseInitialized, toast, firebaseAuthInstance]);
 
 
   const fetchClientes = useCallback(async () => {
-    if (!firebaseInitialized || isAuthLoading) return; // Aguarda Firebase e autenticação
+    if (!firebaseInitialized || isAuthLoading) return; 
 
     if (!user && !bypassAuth) {
       setClientes([]);
@@ -128,7 +130,7 @@ export default function ClientesPage() {
     setIsLoadingData(true);
     try {
       const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-      if (!userIdToQuery) { // Removido !bypassAuth, pois placeholder é válido
+      if (!userIdToQuery) { 
         setClientes([]);
         setIsLoadingData(false);
         return;
@@ -152,10 +154,10 @@ export default function ClientesPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [user, toast, bypassAuth, firebaseInitialized, isAuthLoading]); // Adicionado firebaseInitialized e isAuthLoading
+  }, [user, toast, bypassAuth, firebaseInitialized, isAuthLoading]); 
 
   useEffect(() => {
-     if (firebaseInitialized && !isAuthLoading) { // Só busca se Firebase init e auth verificado
+     if (firebaseInitialized && !isAuthLoading) { 
         fetchClientes();
      }
   }, [fetchClientes, firebaseInitialized, isAuthLoading]);
@@ -216,7 +218,7 @@ export default function ClientesPage() {
         });
         toast({ title: "Cliente Adicionado!", description: `Cliente ${values.nome} adicionado com sucesso.` });
       }
-      await fetchClientes(); // Re-fetch após salvar
+      await fetchClientes(); 
       setIsModalOpen(false);
       setEditingClient(null);
       form.reset();
@@ -238,7 +240,7 @@ export default function ClientesPage() {
     try {
       await deleteDoc(doc(db, "clientes", clientId));
       toast({ title: "Cliente Excluído!", description: "O cliente foi removido com sucesso." });
-      await fetchClientes(); // Re-fetch após excluir
+      await fetchClientes(); 
     } catch (error) {
       console.error("Erro ao excluir cliente:", error);
       toast({ title: "Erro ao Excluir", description: "Não foi possível excluir o cliente.", variant: "destructive" });
@@ -253,25 +255,21 @@ export default function ClientesPage() {
     (cliente.telefone && cliente.telefone.includes(searchTerm))
   );
 
-  const handleSignOutAndRedirect = () => {
-    if (!auth) { // auth pode ser undefined se Firebase não inicializou
-      toast({ title: "Erro de Configuração", description: "Firebase Auth não inicializado.", variant: "destructive" });
-      return;
-    }
-    auth.signOut().then(() => window.location.href = '/login');
+  const handleRedirectToLogin = () => { // Renomeado e ajustado
+    router.push('/login');
   }
 
   if (isAuthLoading || (!firebaseInitialized && typeof window !== 'undefined')) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Inicializando...</p></div>;
   }
 
-  if (!bypassAuth && !user && !isAuthLoading) { // Usuário não logado, e não em modo bypass
+  if (!bypassAuth && !user && !isAuthLoading) { 
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
         <CardContent>
           <p>Você precisa estar logado para acessar a lista de clientes.</p>
-          <Button onClick={handleSignOutAndRedirect} className="mt-4">Fazer Login</Button>
+          <Button onClick={handleRedirectToLogin} className="mt-4">Fazer Login</Button> {/* Ajustado */}
         </CardContent>
       </Card>
     );
