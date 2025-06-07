@@ -2,14 +2,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircleQuestion, Send, X, Loader2 } from 'lucide-react'; // Alterado aqui
+import { MessageCircleQuestion, Send, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'; // SheetClose removido se não usado
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// Badge removido se não usado
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation'; // Importado useRouter
 
 export default function ContextualAIGuide() {
   const {
@@ -23,6 +23,7 @@ export default function ContextualAIGuide() {
   } = useAIGuide();
   const [userInput, setUserInput] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const router = useRouter(); // Instanciado useRouter
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -40,7 +41,15 @@ export default function ContextualAIGuide() {
   
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
     setUserInput(''); 
-    await sendQueryToAIGuide(`O que acontece se eu clicar em: "${actionLabel}"? (Contexto da ação: ${actionId})`);
+
+    if (actionId === 'navigate_to_page' && payload && typeof payload.path === 'string') {
+      router.push(payload.path);
+      closeAIGuide(); // Fecha o painel da IA após iniciar a navegação
+      // Não envia uma nova query para a IA, pois a ação é de navegação
+    } else {
+      // Para outras ações, podemos enviar uma query para a IA explicar ou confirmar
+      await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
+    }
   };
 
 
@@ -57,14 +66,14 @@ export default function ContextualAIGuide() {
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
-        {isAIGuideOpen ? <X className="h-7 w-7" /> : <MessageCircleQuestion className="h-7 w-7" />} {/* Alterado aqui */}
+        {isAIGuideOpen ? <X className="h-7 w-7" /> : <MessageCircleQuestion className="h-7 w-7" />}
       </Button>
 
       <Sheet open={isAIGuideOpen} onOpenChange={(open) => { if (!open) closeAIGuide(); else toggleAIGuide();}}>
         <SheetContent side="right" className="w-[400px] sm:w-[540px] p-0 flex flex-col">
           <SheetHeader className="p-6 pb-2 border-b">
             <SheetTitle className="text-xl flex items-center gap-2">
-              <MessageCircleQuestion className="h-6 w-6 text-primary" /> {/* Alterado aqui */}
+              <MessageCircleQuestion className="h-6 w-6 text-primary" />
               Guia Inteligente Business Maestro
             </SheetTitle>
             <SheetDescription>
@@ -123,7 +132,7 @@ export default function ContextualAIGuide() {
                 disabled={isAILoading}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !isAILoading && userInput.trim()) {
-                    e.preventDefault(); // Prevenir nova linha no Enter
+                    e.preventDefault();
                     handleSendMessage();
                   }
                 }}
