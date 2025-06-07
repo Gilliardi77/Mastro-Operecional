@@ -5,6 +5,8 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/components/auth/auth-provider';
+import { AIGuideProvider } from '@/contexts/AIGuideContext'; // Importado
+import ContextualAIGuide from '@/components/ai/ContextualAIGuide'; // Importado
 
 export const metadata: Metadata = {
   title: 'Extensão de Módulo Business Maestro',
@@ -25,15 +27,17 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased flex flex-col min-h-screen bg-background">
         <AuthProvider>
-          <Header />
-          {/* Aumentado pt-16 para pt-20 e pb-12 para pb-16 */}
-          <div className="flex-1 overflow-y-auto pt-20 pb-16"> {/* Adjust pt-20 and pb-16 based on actual Header/Footer height + desired spacing */}
-            <main className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
-              {children}
-            </main>
-          </div>
-          <Footer />
-          <Toaster />
+          <AIGuideProvider> {/* Adicionado AIGuideProvider */}
+            <Header />
+            <div className="flex-1 overflow-y-auto pt-20 pb-16">
+              <main className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
+                {children}
+              </main>
+            </div>
+            <Footer />
+            <Toaster />
+            <ContextualAIGuide /> {/* Adicionado ContextualAIGuide */}
+          </AIGuideProvider>
         </AuthProvider>
       </body>
     </html>

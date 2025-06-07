@@ -1,6 +1,8 @@
+
 import { config } from 'dotenv';
 config();
 
 import '@/ai/flows/module-prompt-generator.ts';
 import '@/ai/flows/ai-content-suggestions.ts';
-import '@/ai/flows/interactive-module-guide-flow.ts'; // Adicionado novo fluxo
+import '@/ai/flows/interactive-module-guide-flow.ts';
+import '@/ai/flows/contextual-ai-guide-flow.ts'; // Adicionado novo fluxo contextual
