@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircleQuestion, Send, X, Loader2 } from 'lucide-react';
+import { Sparkles, Send, X, Loader2 } from 'lucide-react'; // Alterado MessageCircleQuestion para Sparkles
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { useAIGuide } from '@/contexts/AIGuideContext';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast'; 
-import SuggestedActions from './SuggestedActions'; // Import the new component
+import SuggestedActions from './SuggestedActions';
 
 export default function ContextualAIGuide() {
   const {
@@ -36,10 +36,8 @@ export default function ContextualAIGuide() {
     }
   }, [chatMessages]);
 
-  // Initial AI message when guide opens on a new page context
   useEffect(() => {
     if (isAIGuideOpen && chatMessages.length === 0 && !isAILoading) {
-      // Check if sessionStorage already has messages for this page to avoid re-triggering
       const savedChat = typeof window !== 'undefined' ? sessionStorage.getItem(`chat-${currentAppContext.pageName}`) : null;
       if (!savedChat) {
         sendQueryToAIGuide(`Olá! Estou na página "${currentAppContext.pageName}". Poderia me dar uma breve orientação ou perguntar como posso ajudar?`);
@@ -58,7 +56,7 @@ export default function ContextualAIGuide() {
   
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
     setUserInput(''); 
-    setSelectedActionId(actionId); // For visual feedback
+    setSelectedActionId(actionId); 
 
     try {
       switch (actionId) {
@@ -96,7 +94,6 @@ export default function ContextualAIGuide() {
               }
             });
             window.dispatchEvent(event);
-            // Inform AI that the action was initiated
             await sendQueryToAIGuide(`Ação: "${actionLabel}" iniciada. O modal para adicionar cliente será aberto.`);
           } else {
             toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive"});
@@ -107,7 +104,7 @@ export default function ContextualAIGuide() {
           break;
       }
     } finally {
-       // setSelectedActionId(null); // Reset after AI response handled by sendQueryToAIGuide's finally block
+       // Reset selectedActionId é feito no useEffect que observa isAILoading
     }
   };
 
@@ -125,20 +122,20 @@ export default function ContextualAIGuide() {
   return (
     <>
       <Button
-        variant="default"
+        variant="default" // Mantém default para estrutura, mas cores são sobrescritas abaixo
         size="icon"
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50 bg-primary hover:bg-primary/90 text-primary-foreground"
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50 bg-accent hover:bg-accent/90 text-accent-foreground" // Cor alterada para accent
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
-        {isAIGuideOpen ? <X className="h-7 w-7" /> : <MessageCircleQuestion className="h-7 w-7" />}
+        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Sparkles className="h-7 w-7" />} {/* Ícone alterado para Sparkles */}
       </Button>
 
       <Sheet open={isAIGuideOpen} onOpenChange={(open) => { if (!open) closeAIGuide(); else toggleAIGuide();}}>
         <SheetContent side="right" className="w-[400px] sm:w-[540px] p-0 flex flex-col">
           <SheetHeader className="p-6 pb-2 border-b">
             <SheetTitle className="text-xl flex items-center gap-2">
-              <MessageCircleQuestion className="h-6 w-6 text-primary" />
+              <Sparkles className="h-6 w-6 text-primary" /> {/* Ícone no título do Sheet também atualizado para consistência */}
               Guia Inteligente Business Maestro
             </SheetTitle>
             <SheetDescription>
