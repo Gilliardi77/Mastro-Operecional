@@ -106,7 +106,7 @@ export default function ProducaoPage() {
   const [editingOrderDetails, setEditingOrderDetails] = useState<EditingOrderState | null>(null);
 
 
-  const bypassAuth = true; // Forçar bypass para testes
+  const bypassAuth = true; 
 
   const [statusFilters, setStatusFilters] = useState<Record<ProductionOrderStatus, boolean>>({
     "Pendente": true,
@@ -118,19 +118,27 @@ export default function ProducaoPage() {
 
   const fetchProductionOrders = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
+    console.log("[DEBUG ProducaoPage] fetchProductionOrders: userIdToQuery =", userIdToQuery);
+
     if (!userIdToQuery) {
+      console.log("[DEBUG ProducaoPage] fetchProductionOrders: userIdToQuery is null/undefined. Skipping fetch.");
       setProductionOrders([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
+      const collectionRef = collection(db, "ordensDeProducao");
+      console.log("[DEBUG ProducaoPage] fetchProductionOrders: Attempting to query collection 'ordensDeProducao'");
       const q = query(
-        collection(db, "ordensDeProducao"),
+        collectionRef,
         where("userId", "==", userIdToQuery),
         orderBy("dataAgendamento", "desc")
       );
+      console.log("[DEBUG ProducaoPage] fetchProductionOrders: Query constructed:", q);
+      
       const querySnapshot = await getDocs(q);
+      console.log("[DEBUG ProducaoPage] fetchProductionOrders: Query successful. Docs found:", querySnapshot.docs.length);
       const fetchedOrders = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<ProductionOrderFirestore, 'id'>;
         return {
@@ -144,9 +152,13 @@ export default function ProducaoPage() {
         } as ProductionOrder;
       });
       setProductionOrders(fetchedOrders);
-    } catch (error) {
-      console.error("Erro ao buscar ordens de produção:", error);
-      toast({ title: "Erro ao buscar ordens", description: "Não foi possível carregar os dados.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("[DEBUG ProducaoPage] Erro ao buscar ordens de produção:", error);
+      toast({ 
+        title: "Erro ao buscar ordens de produção", 
+        description: `Não foi possível carregar os dados. Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${error.code || 'N/A'})`, 
+        variant: "destructive" 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -190,9 +202,9 @@ export default function ProducaoPage() {
       });
       toast({ title: "Status Atualizado!", description: `Ordem de produção atualizada para ${newStatus}.` });
       await fetchProductionOrders(); 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao atualizar status:", error);
-      toast({ title: "Erro ao Atualizar Status", variant: "destructive" });
+      toast({ title: "Erro ao Atualizar Status", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}` });
     } finally {
       setIsSubmitting(false);
     }
@@ -213,9 +225,9 @@ export default function ProducaoPage() {
         toast({ title: "Detalhes da Produção Salvos!", description: "As alterações foram salvas." });
         await fetchProductionOrders();
         setIsViewModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erro ao salvar detalhes da produção:", error);
-        toast({ title: "Erro ao Salvar Detalhes", variant: "destructive"});
+        toast({ title: "Erro ao Salvar Detalhes", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}`});
     } finally {
         setIsSubmitting(false);
     }
@@ -475,6 +487,4 @@ Equipe Meu Negócio App
     </div>
   );
 }
-    
-
     

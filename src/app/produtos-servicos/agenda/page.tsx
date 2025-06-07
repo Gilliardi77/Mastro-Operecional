@@ -122,7 +122,7 @@ export default function AgendaPage() {
   const [fetchedClients, setFetchedClients] = useState<Cliente[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
-  const bypassAuth = true; // Forçar bypass para testes
+  const bypassAuth = true; 
 
   const [statusFilters, setStatusFilters] = useState<Record<AppointmentStatus, boolean>>({
     "Pendente": true,
@@ -146,23 +146,35 @@ export default function AgendaPage() {
 
   const fetchClients = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
+    console.log("[DEBUG AgendaPage] fetchClients: userIdToQuery =", userIdToQuery);
+    
     if (!userIdToQuery) {
+      console.log("[DEBUG AgendaPage] fetchClients: userIdToQuery is null/undefined. Skipping fetch.");
       setFetchedClients([]);
       setIsLoadingClients(false);
       return;
     }
     setIsLoadingClients(true);
     try {
-      const q = query(collection(db, "clientes"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
+      const collectionRef = collection(db, "clientes");
+      console.log("[DEBUG AgendaPage] fetchClients: Attempting to query collection 'clientes'");
+      const q = query(collectionRef, where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
+      console.log("[DEBUG AgendaPage] fetchClients: Query constructed:", q);
+
       const querySnapshot = await getDocs(q);
+      console.log("[DEBUG AgendaPage] fetchClients: Query successful. Docs found:", querySnapshot.docs.length);
       const clientsData = querySnapshot.docs.map(docSnap => ({
         id: docSnap.id,
         nome: docSnap.data().nome as string,
       }));
       setFetchedClients(clientsData);
-    } catch (error) {
-      console.error("Erro ao buscar clientes para agenda:", error);
-      toast({ title: "Erro ao buscar clientes", variant: "destructive" });
+    } catch (error: any) {
+      console.error("[DEBUG AgendaPage] Erro ao buscar clientes para agenda:", error);
+      toast({ 
+        title: "Erro ao buscar clientes", 
+        description: `Não foi possível carregar os dados. Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${error.code || 'N/A'})`, 
+        variant: "destructive" 
+      });
     } finally {
       setIsLoadingClients(false);
     }
@@ -170,25 +182,28 @@ export default function AgendaPage() {
 
 
   const fetchAppointments = useCallback(async () => {
-    if (!user && !bypassAuth) {
+    const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
+    console.log("[DEBUG AgendaPage] fetchAppointments: userIdToQuery =", userIdToQuery);
+    
+    if (!userIdToQuery) {
+      console.log("[DEBUG AgendaPage] fetchAppointments: userIdToQuery is null/undefined. Skipping fetch.");
       setAppointments([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-      if (!userIdToQuery) {
-         setAppointments([]);
-         setIsLoading(false);
-         return;
-      }
+      const collectionRef = collection(db, "agendamentos");
+      console.log("[DEBUG AgendaPage] fetchAppointments: Attempting to query collection 'agendamentos'");
       const q = query(
-        collection(db, "agendamentos"),
+        collectionRef,
         where("userId", "==", userIdToQuery),
         orderBy("dataHora", "asc")
       );
+      console.log("[DEBUG AgendaPage] fetchAppointments: Query constructed:", q);
+      
       const querySnapshot = await getDocs(q);
+      console.log("[DEBUG AgendaPage] fetchAppointments: Query successful. Docs found:", querySnapshot.docs.length);
       const fetchedAppointments = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<AppointmentFirestore, 'id'>;
         return {
@@ -200,9 +215,13 @@ export default function AgendaPage() {
         } as Appointment;
       });
       setAppointments(fetchedAppointments);
-    } catch (error) {
-      console.error("Erro ao buscar agendamentos:", error);
-      toast({ title: "Erro ao buscar agendamentos", description: "Não foi possível carregar os dados.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("[DEBUG AgendaPage] Erro ao buscar agendamentos:", error);
+      toast({ 
+        title: "Erro ao buscar agendamentos", 
+        description: `Não foi possível carregar os dados. Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${error.code || 'N/A'})`, 
+        variant: "destructive" 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -359,9 +378,9 @@ export default function AgendaPage() {
       setIsAppointmentModalOpen(false);
       setEditingAppointment(null);
       form.reset();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar agendamento:", error);
-      toast({ title: "Erro ao Salvar", description: "Não foi possível salvar o agendamento.", variant: "destructive" });
+      toast({ title: "Erro ao Salvar", description: `Não foi possível salvar o agendamento. Detalhe: ${error.message || 'Erro desconhecido.'}`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -375,9 +394,9 @@ export default function AgendaPage() {
       await updateDoc(docRef, { status: "Concluído", atualizadoEm: Timestamp.now() });
       toast({ title: "Status Atualizado", description: "Agendamento marcado como concluído." });
       await fetchAppointments();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao marcar como concluído:", error);
-      toast({ title: "Erro ao Atualizar Status", variant: "destructive" });
+      toast({ title: "Erro ao Atualizar Status", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}` });
     } finally {
       setIsSubmitting(false);
     }
