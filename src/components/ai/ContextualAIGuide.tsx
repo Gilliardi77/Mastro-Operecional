@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast'; // Importado useToast
+import { useToast } from '@/hooks/use-toast'; 
 
 export default function ContextualAIGuide() {
   const {
@@ -25,7 +25,7 @@ export default function ContextualAIGuide() {
   const [userInput, setUserInput] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const { toast } = useToast(); // Instanciado useToast
+  const { toast } = useToast(); 
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -60,19 +60,18 @@ export default function ContextualAIGuide() {
               formName: payload.formName,
               fieldName: payload.fieldName,
               value: payload.value,
-              actionLabel: actionLabel // Passando o label para o toast
+              actionLabel: actionLabel 
             }
           });
           window.dispatchEvent(event);
-          // Não fecha o guia aqui, pode ser que o usuário queira preencher mais campos
-          // A IA pode dar um feedback como "Campo X preenchido. Algo mais?"
+          
           await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada. O campo ${payload.fieldName} foi preenchido com ${payload.value}.`);
         } else {
            toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
         }
         break;
       default:
-        // Para outras ações, podemos enviar uma query para a IA explicar ou confirmar
+        
         await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
         break;
     }
@@ -125,7 +124,7 @@ export default function ContextualAIGuide() {
                     <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                       {msg.suggestedActions.map(action => (
                         <Button
-                          key={action.actionId + (action.payload?.fieldName || '')} // Chave mais única
+                          key={action.actionId + (action.payload?.fieldName || Math.random().toString(36).substring(7))} 
                           variant="outline"
                           size="sm"
                           className="w-full justify-start text-left h-auto py-1.5 text-xs"
@@ -173,5 +172,3 @@ export default function ContextualAIGuide() {
     </>
   );
 }
-
-    
