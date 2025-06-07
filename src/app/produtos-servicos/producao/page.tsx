@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail } from "lucide-react";
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, ListOrdered } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,42 +40,39 @@ import {
   doc,
   updateDoc,
   Timestamp,
-  runTransaction, // Adicionado para transações
-  DocumentSnapshot, // Adicionado para tipo
-  getDoc, // Adicionado para buscar a OS original
+  runTransaction,
+  getDoc,
 } from "firebase/firestore";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 type ProductionOrderStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
-// Interface para os itens dentro da Ordem de Serviço original
 interface ItemDaOSOriginal {
   produtoServicoId: string | null;
   nome: string;
   quantidade: number;
   valorUnitario: number;
-  valorTotal: number;
+  // valorTotal: number; // Removido para simplificação
   tipo: 'Produto' | 'Serviço' | 'Manual';
 }
 
-// Interface para o documento da Ordem de Serviço original
 interface OrdemServicoOriginalFirestore {
   itens: ItemDaOSOriginal[];
+  status: ProductionOrderStatus;
   // Outros campos da OS original que podem ser úteis...
 }
 
 
 interface ProductionOrderFirestore {
   id: string;
-  agendamentoId: string; // Este é o ID da Ordem de Serviço original
+  agendamentoId: string; 
   clienteId?: string;
   clienteNome: string;
-  servicoId?: string; // Pode ser removido ou adaptado se servicoNome for suficiente
-  servicoNome: string; // Descrição geral da OS (ex: primeiro item + "e outros")
+  servicoNome: string; 
   dataAgendamento: Timestamp;
   status: ProductionOrderStatus;
-  progresso?: number; // 0-100
+  progresso?: number; 
   observacoesAgendamento?: string;
   observacoesProducao?: string;
   userId: string;
@@ -108,7 +105,7 @@ const getStatusFromProgress = (progress: number): ProductionOrderStatus => {
   if (progress === 0) return "Pendente";
   if (progress === 100) return "Concluído";
   if (progress > 0 && progress < 100) return "Em Andamento";
-  return "Pendente"; // Fallback
+  return "Pendente"; 
 };
 
 
@@ -135,7 +132,6 @@ export default function ProducaoPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const fetchProductionOrders = useCallback(async () => {
-    // ... (lógica de fetch mantida, apenas certifique-se que agendamentoId é o ID da OS)
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
     if (!userIdToQuery) {
       setProductionOrders([]);
@@ -166,7 +162,7 @@ export default function ProducaoPage() {
       setProductionOrders(fetchedOrders);
     } catch (error: any) {
       console.error("Erro ao buscar ordens de produção:", error);
-      toast({ title: "Erro ao buscar ordens", variant: "destructive" });
+      toast({ title: "Erro ao buscar ordens", variant: "destructive", description: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +175,7 @@ export default function ProducaoPage() {
   }, [fetchProductionOrders, user, bypassAuth]);
 
   useEffect(() => {
-    const agendamentoIdFromParams = searchParams.get('agendamentoId'); // Este é o ID da OS
+    const agendamentoIdFromParams = searchParams.get('agendamentoId'); 
     if (agendamentoIdFromParams) {
       setSearchTerm(agendamentoIdFromParams);
     }
@@ -198,6 +194,22 @@ export default function ProducaoPage() {
     setIsViewModalOpen(true);
   }
 
+  const updateOriginalOSStatus = async (osId: string, newStatus: ProductionOrderStatus) => {
+    try {
+      const osRef = doc(db, "ordensServico", osId);
+      await updateDoc(osRef, { status: newStatus, atualizadoEm: Timestamp.now() });
+      console.log(`Status da OS ${osId} atualizado para ${newStatus} no documento 'ordensServico'.`);
+    } catch (error) {
+      console.error(`Erro ao atualizar status da OS ${osId} em 'ordensServico':`, error);
+      toast({
+        title: `Erro ao Sincronizar Status da OS Original`,
+        description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para ${newStatus}.`,
+        variant: "destructive",
+      });
+    }
+  };
+
+
   const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: ProductionOrderStatus, newProgress: number) => {
     if (!user && !bypassAuth) return;
     setIsSubmitting(true);
@@ -209,9 +221,10 @@ export default function ProducaoPage() {
         atualizadoEm: Timestamp.now()
       });
 
-      // Se o novo status for "Concluído", tentar baixar estoque
+      await updateOriginalOSStatus(order.agendamentoId, newStatus);
+
       if (newStatus === "Concluído") {
-        const osOriginalRef = doc(db, "ordensServico", order.agendamentoId); // agendamentoId é o ID da OS
+        const osOriginalRef = doc(db, "ordensServico", order.agendamentoId); 
         const osOriginalSnap = await getDoc(osOriginalRef);
 
         if (osOriginalSnap.exists()) {
@@ -225,9 +238,9 @@ export default function ProducaoPage() {
                     const produtoDoc = await transaction.get(produtoCatalogoRef);
                     if (!produtoDoc.exists()) {
                       console.warn(`Produto ${itemOS.nome} (ID: ${itemOS.produtoServicoId}) da OS ${order.agendamentoId} não encontrado no catálogo para baixa de estoque.`);
-                      return; // Pula este item se não encontrado
+                      return; 
                     }
-                    const produtoData = produtoDoc.data() as any; // Idealmente, tipo mais forte aqui
+                    const produtoData = produtoDoc.data() as any; 
                     const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
                     const novoEstoque = estoqueAtual - itemOS.quantidade;
                     transaction.update(produtoCatalogoRef, {
@@ -252,7 +265,7 @@ export default function ProducaoPage() {
         }
       }
 
-      toast({ title: "Status Atualizado!", description: `Ordem de produção atualizada para ${newStatus}.` });
+      toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
       await fetchProductionOrders();
     } catch (error: any) {
       console.error("Erro ao atualizar status:", error);
@@ -269,7 +282,6 @@ export default function ProducaoPage() {
         const docRef = doc(db, "ordensDeProducao", viewingOrder.id);
         const newStatus = getStatusFromProgress(editingOrderDetails.progresso);
         
-        // Salvar detalhes da produção
         await updateDoc(docRef, {
             progresso: editingOrderDetails.progresso,
             status: newStatus,
@@ -277,7 +289,8 @@ export default function ProducaoPage() {
             atualizadoEm: Timestamp.now(),
         });
 
-        // Se o novo status for "Concluído" E o status anterior não era "Concluído", tentar baixar estoque
+        await updateOriginalOSStatus(viewingOrder.agendamentoId, newStatus);
+        
         if (newStatus === "Concluído" && viewingOrder.status !== "Concluído") {
             const osOriginalRef = doc(db, "ordensServico", viewingOrder.agendamentoId);
             const osOriginalSnap = await getDoc(osOriginalRef);
@@ -288,7 +301,6 @@ export default function ProducaoPage() {
                     for (const itemOS of osData.itens) {
                         if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
                             const produtoCatalogoRef = doc(db, "produtosServicos", itemOS.produtoServicoId);
-                            // ... (lógica de transação para baixar estoque, igual a handleQuickStatusUpdate)
                              try {
                                 await runTransaction(db, async (transaction) => {
                                     const produtoDoc = await transaction.get(produtoCatalogoRef);
@@ -332,8 +344,14 @@ export default function ProducaoPage() {
     }
   };
 
-  const handleSendWhatsAppStatus = () => { /* ... mantido ... */ };
-  const handleSendEmailStatus = () => { /* ... mantido ... */ };
+  const handleSendWhatsAppStatus = () => { 
+    if (!viewingOrder) return;
+    toast({ title: "WhatsApp", description: `Simulando envio de status da OS #${viewingOrder.id.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
+  };
+  const handleSendEmailStatus = () => { 
+    if (!viewingOrder) return;
+    toast({ title: "E-mail", description: `Simulando envio de e-mail de status da OS #${viewingOrder.id.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
+  };
 
   const filteredOrders = useMemo(() => {
     return productionOrders.filter(order => {
@@ -350,23 +368,95 @@ export default function ProducaoPage() {
     });
   }, [productionOrders, statusFilters, searchTerm]);
 
-  if (isAuthLoading) { /* ... */ }
-  if (!bypassAuth && !user) { /* ... */ }
-  if (isLoading && (user || bypassAuth)) { /* ... */ }
+  if (isAuthLoading && !bypassAuth) {
+    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
+  }
+
+  if (!user && !bypassAuth) {
+     return (
+      <Card>
+        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
+        <CardContent>
+          <p>Você precisa estar logado para acessar o controle de produção.</p>
+          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (isLoading && (user || bypassAuth)) {
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando ordens de produção...</p></div>;
+  }
+
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          {/* ... Header mantido ... */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2"><Settings2 className="h-6 w-6 text-primary" />Controle de Produção</CardTitle>
+              <CardDescription>Acompanhe e gerencie o progresso das ordens de serviço em produção.</CardDescription>
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="flex-grow md:flex-grow-0">
+                    <ListFilter className="mr-2 h-4 w-4" /> Filtrar Status
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Status Visíveis</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {(Object.keys(statusFilters) as ProductionOrderStatus[]).map(status => (
+                    <DropdownMenuCheckboxItem
+                      key={status}
+                      checked={statusFilters[status]}
+                      onCheckedChange={(checked) => typeof checked === 'boolean' && handleStatusFilterChange(status, checked)}
+                    >
+                      {status}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          <div className="mt-4 relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+                placeholder="Buscar por cliente, serviço, OS ID, observação..."
+                className="pl-10 w-full"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredOrders.length === 0 && !isLoading && <p className="text-muted-foreground text-center py-4">Nenhuma ordem de produção encontrada.</p>}
+            {filteredOrders.length === 0 && !isLoading && <p className="text-muted-foreground text-center py-4">Nenhuma ordem de produção encontrada para os filtros aplicados.</p>}
             {filteredOrders.map((order) => (
               <Card key={order.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-3">
-                  {/* ... Card Header de cada ordem mantido ... */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
+                    <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <span className="text-primary cursor-pointer hover:underline" onClick={() => setSearchTerm(order.agendamentoId)}>OS: #{order.agendamentoId.substring(0,8)}...</span>
+                            <Badge variant={getStatusVariant(order.status)}>{order.status}</Badge>
+                        </CardTitle>
+                        <CardDescription>
+                            Cliente: {order.clienteNome} <br />
+                            Serviço: {order.servicoNome} <br />
+                            Data Prevista: {format(order.dataAgendamento, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </CardDescription>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1 sm:mt-0 sm:text-right">
+                        Progresso: {order.progresso ?? 0}% <br />
+                        Produção ID: #{order.id.substring(0,8)}...
+                    </div>
+                  </div>
+                  {(order.progresso ?? 0) > 0 && (order.progresso ?? 0) < 100 && (
+                    <Progress value={order.progresso ?? 0} className="w-full h-2 mt-2" />
+                  )}
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center gap-2">
                   <Button variant="outline" size="sm" onClick={() => handleViewDetails(order)} disabled={isSubmitting}>
@@ -389,22 +479,69 @@ export default function ProducaoPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isViewModalOpen} onOpenChange={(isOpen) => { /* ... mantido ... */ }}>
+      <Dialog open={isViewModalOpen} onOpenChange={(isOpen) => { 
+          setIsViewModalOpen(isOpen); 
+          if (!isOpen) { setViewingOrder(null); setEditingOrderDetails(null); }
+      }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            {/* ... Dialog Header mantido ... */}
+            <DialogTitle>Gerenciar Ordem de Produção</DialogTitle>
+            {viewingOrder && <DialogPrimitiveDescription>OS: #{viewingOrder.agendamentoId.substring(0,8)}... para {viewingOrder.clienteNome}</DialogPrimitiveDescription>}
           </DialogHeader>
           {viewingOrder && editingOrderDetails && (
             <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
-              {/* ... Conteúdo do Dialog mantido ... */}
+              <div>
+                <h4 className="font-semibold text-sm mb-1">Serviço/Produto Principal:</h4>
+                <p className="text-sm text-muted-foreground">{viewingOrder.servicoNome}</p>
+              </div>
+              {viewingOrder.observacoesAgendamento && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Observações da OS:</h4>
+                  <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">{viewingOrder.observacoesAgendamento}</p>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="progressoSlider" className="text-sm font-semibold">Progresso Atual: {editingOrderDetails.progresso}%</Label>
+                <Slider
+                  id="progressoSlider"
+                  min={0} max={100} step={5}
+                  value={[editingOrderDetails.progresso]}
+                  onValueChange={(value) => setEditingOrderDetails(prev => ({...prev!, progresso: value[0]}))}
+                  className="my-2"
+                />
+                <Badge variant={getStatusVariant(getStatusFromProgress(editingOrderDetails.progresso))}>
+                  Status: {getStatusFromProgress(editingOrderDetails.progresso)}
+                </Badge>
+              </div>
+              <div>
+                <Label htmlFor="observacoesProducao" className="text-sm font-semibold">Observações da Produção (Interno)</Label>
+                <Textarea
+                  id="observacoesProducao"
+                  placeholder="Detalhes sobre o andamento, problemas, próximos passos..."
+                  value={editingOrderDetails.observacoesProducao}
+                  onChange={(e) => setEditingOrderDetails(prev => ({...prev!, observacoesProducao: e.target.value}))}
+                  rows={4}
+                  className="mt-1"
+                />
+              </div>
+               <div>
+                <h4 className="font-semibold text-sm mb-2">Comunicação com Cliente (Opcional):</h4>
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={handleSendWhatsAppStatus} disabled={isSubmitting}><MessageSquare className="mr-1.5 h-4 w-4"/> Enviar Status (WhatsApp)</Button>
+                    <Button variant="outline" size="sm" onClick={handleSendEmailStatus} disabled={isSubmitting}><Mail className="mr-1.5 h-4 w-4"/> Enviar Status (E-mail)</Button>
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter className="mt-4">
-             {/* ... Botões do Dialog Footer mantidos ... */}
+            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Fechar</Button></DialogClose>
+            <Button onClick={handleSaveProductionDetails} disabled={isSubmitting || !editingOrderDetails}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Salvar Alterações
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
-
