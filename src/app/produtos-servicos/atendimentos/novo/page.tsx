@@ -131,9 +131,18 @@ export default function OrdemServicoPage() {
         };
       });
       setClients(fetchedClients);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao buscar clientes:", error);
-      toast({ title: "Erro ao buscar clientes", variant: "destructive", description: "Não foi possível carregar a lista de clientes." });
+      let description = "Não foi possível carregar a lista de clientes.";
+      if (error.message) {
+        description += ` Detalhe: ${error.message}`;
+      }
+      if (error.code === 'permission-denied') {
+        description = "Permissão negada ao buscar clientes. Verifique as regras de segurança do Firestore.";
+      } else if (error.code === 'failed-precondition') {
+        description = "A consulta requer um índice que não existe ou ainda não está ativo. Verifique o console do Firebase para criar o índice (o link geralmente é fornecido no erro do console).";
+      }
+      toast({ title: "Erro ao buscar clientes", variant: "destructive", description });
     } finally {
       setIsLoadingClients(false);
     }
@@ -622,3 +631,4 @@ Enviado por: Meu Negócio App
     
 
     
+
