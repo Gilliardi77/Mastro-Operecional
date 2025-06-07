@@ -1,11 +1,10 @@
-
 'use client'; // Necessário para hooks como useState e useEffect
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles, FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid } from 'lucide-react';
-import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide';
+import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid } from 'lucide-react';
+// import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide'; // Removido
 import React, { useState, useEffect } from 'react'; // Importar useState e useEffect
 
 interface QuickAccessCardProps {
@@ -118,12 +117,6 @@ export default function Home() {
           {quickAccessItems.map((item) => (
             <QuickAccessCard key={item.href} {...item} />
           ))}
-        </div>
-      </section>
-
-      <section id="ai-tools" className="mt-20">
-        <div className="mb-12">
-          <InteractiveModuleGuide />
         </div>
       </section>
     </div>
