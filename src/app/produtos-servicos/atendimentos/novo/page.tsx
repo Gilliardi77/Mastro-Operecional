@@ -220,6 +220,8 @@ export default function OrdemServicoPage() {
     let userIdToSave = user ? user.uid : null;
     if (bypassAuth && !user) userIdToSave = "bypass_user_placeholder";
 
+    console.log("[DEBUG] onOsSubmit: Iniciando salvamento. userIdToSave:", userIdToSave);
+
     if (!userIdToSave) {
       toast({ title: "Erro de Autenticação", description: "Login necessário para salvar.", variant: "destructive" });
       setIsSaving(false);
@@ -242,7 +244,8 @@ export default function OrdemServicoPage() {
       dataEntrega: Timestamp.fromDate(data.dataEntrega),
       observacoes: data.observacoes || "",
       status: "Pendente" as ProductionOrderStatusOSPage,
-      criadoPor: userIdToSave,
+      criadoPor: userIdToSave, // Este campo precisa ser userId para consistência, ou usar o nome que as regras esperam
+      userId: userIdToSave,    // Adicionando userId explicitamente para clareza com as regras
       criadoEm: now,
       atualizadoEm: now,
       numeroOS: ""
@@ -251,8 +254,11 @@ export default function OrdemServicoPage() {
     let osDocRefId: string | null = null;
 
     try {
+      console.log("[DEBUG] Tentando salvar OS. Dados:", JSON.stringify(osDataToSave, null, 2));
       const docRef = await addDoc(collection(db, "ordensServico"), osDataToSave);
       osDocRefId = docRef.id;
+      console.log("[DEBUG] OS salva com ID:", osDocRefId);
+
 
       await updateDoc(doc(db, "ordensServico", osDocRefId), {
         numeroOS: osDocRefId
@@ -273,7 +279,9 @@ export default function OrdemServicoPage() {
           criadoEm: now,
           atualizadoEm: now,
         };
+        console.log("[DEBUG] Tentando salvar adiantamento. Dados:", JSON.stringify(adiantamentoData, null, 2));
         await addDoc(collection(db, "lancamentosFinanceiros"), adiantamentoData);
+        console.log("[DEBUG] Adiantamento salvo.");
         toast({ title: "Adiantamento Registrado!", description: `R$ ${valorAdiantado.toFixed(2)} lançado como receita recebida.`});
       }
 
@@ -292,8 +300,10 @@ export default function OrdemServicoPage() {
           criadoEm: now,
           atualizadoEm: now,
         };
+        console.log("[DEBUG] Tentando salvar saldo pendente. Dados:", JSON.stringify(saldoData, null, 2));
         await addDoc(collection(db, "lancamentosFinanceiros"), saldoData);
-         toast({ title: "Saldo Pendente Registrado!", description: `R$ ${valorAReceber.toFixed(2)} lançado como conta a receber.`});
+        console.log("[DEBUG] Saldo pendente salvo.");
+        toast({ title: "Saldo Pendente Registrado!", description: `R$ ${valorAReceber.toFixed(2)} lançado como conta a receber.`});
       }
 
       toast({
@@ -316,13 +326,15 @@ export default function OrdemServicoPage() {
           criadoEm: Timestamp.now(),
           atualizadoEm: Timestamp.now(),
         };
+        console.log("[DEBUG] Tentando criar entrada de produção. Dados:", JSON.stringify(productionOrderData, null, 2));
         await addDoc(collection(db, "ordensDeProducao"), productionOrderData);
+        console.log("[DEBUG] Entrada de produção criada.");
         toast({
           title: "Entrada de Produção Criada!",
           description: `OS #${osDocRefId ? osDocRefId.substring(0,6) : 'N/A'} enviada para controle de produção.`,
         });
       } catch (prodError: any) {
-         console.error("Erro ao criar entrada de produção: ", prodError);
+         console.error("[DEBUG] Erro ao criar entrada de produção: ", prodError);
          toast({
           title: "Erro ao Criar Entrada de Produção",
           description: `A OS #${osDocRefId ? osDocRefId.substring(0,6) : 'N/A'} foi salva, mas houve um erro ao criar a entrada de produção. Detalhe: ${prodError.message || 'Erro desconhecido.'}`,
@@ -340,10 +352,10 @@ export default function OrdemServicoPage() {
       osForm.reset({ clienteId: "avulso", clienteNome: "Cliente Avulso", descricao: "", valorTotal: 0, valorAdiantado: 0, observacoes: "", dataEntrega: undefined });
 
     } catch (e: any) {
-      console.error("Erro ao salvar OS ou lançamentos financeiros: ", e);
+      console.error("[DEBUG] Erro ao salvar OS ou lançamentos financeiros: ", e);
       toast({
         title: "Erro ao Salvar Ordem de Serviço",
-        description: `Não foi possível salvar a OS ou seus lançamentos financeiros. Detalhe: ${e.message || 'Erro desconhecido.'}`,
+        description: `Não foi possível salvar a OS ou seus lançamentos financeiros. Detalhe: ${e.message || 'Erro desconhecido.'} (Verifique o console para mais detalhes e os dados que estavam sendo enviados).`,
         variant: "destructive",
       });
     } finally {
@@ -370,7 +382,9 @@ export default function OrdemServicoPage() {
         criadoEm: serverTimestamp(),
         atualizadoEm: serverTimestamp(),
       };
+      console.log("[DEBUG] Tentando salvar novo cliente. Dados:", JSON.stringify(clientData, null, 2));
       const docRef = await addDoc(collection(db, "clientes"), clientData);
+      console.log("[DEBUG] Novo cliente salvo com ID:", docRef.id);
       toast({ title: "Cliente Adicionado!", description: `${data.nome} foi adicionado.` });
 
       const newClient: Cliente = { id: docRef.id, nome: data.nome, telefone: data.telefone, email: data.email };
@@ -381,7 +395,7 @@ export default function OrdemServicoPage() {
       setIsNewClientModalOpen(false);
       newClientForm.reset();
     } catch (error) {
-      console.error("Erro ao salvar novo cliente:", error);
+      console.error("[DEBUG] Erro ao salvar novo cliente:", error);
       toast({ title: "Erro ao Salvar Cliente", variant: "destructive", description: "Não foi possível adicionar o novo cliente." });
     } finally {
       setIsSavingNewClient(false);
@@ -480,7 +494,7 @@ Enviado por: Meu Negócio App
       if (functionUrl.includes("YOUR_REGION-YOUR_PROJECT_ID")) {
         console.warn("URL da função de e-mail é placeholder. O e-mail não será enviado de verdade.");
         toast({ title: "Envio de E-mail (Simulado)", description: "A URL da função de envio de e-mail não está configurada. Verifique os logs do console para o conteúdo do e-mail.", variant: "default" });
-        console.log("Simulando envio de e-mail:", { to: recipientEmail, subject: emailSubject, htmlBody: emailHtmlBody });
+        console.log("[DEBUG] Simulando envio de e-mail:", { to: recipientEmail, subject: emailSubject, htmlBody: emailHtmlBody });
         setIsSendingEmail(false);
         return;
       }
@@ -501,7 +515,7 @@ Enviado por: Meu Negócio App
         throw new Error(result.error || "Falha ao enviar e-mail via função.");
       }
     } catch (error: any) {
-      console.error("Erro ao chamar função de e-mail:", error);
+      console.error("[DEBUG] Erro ao chamar função de e-mail:", error);
       toast({ title: "Erro ao Enviar E-mail", description: `${error.message || 'Ocorreu um problema ao tentar enviar o e-mail.'}`, variant: "destructive" });
     } finally {
       setIsSendingEmail(false);
@@ -631,4 +645,5 @@ Enviado por: Meu Negócio App
     
 
     
+
 
