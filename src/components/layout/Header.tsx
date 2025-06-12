@@ -6,7 +6,7 @@ import React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  LogIn, UserPlus, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
+  LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
   Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase // Briefcase para Operacional
 } from "lucide-react";
 import {
@@ -19,7 +19,7 @@ import { getFirebaseInstances, signOut as firebaseSignOutUtil } from '@/lib/fire
 import { useToast } from "@/hooks/use-toast";
 
 export default function Header() {
-  const { user, isLoading } = useAuth(); // Usando isLoading do nosso AuthProvider
+  const { user, isLoading, isAuthenticating } = useAuth();
   const router = useRouter();
   const { auth: firebaseAuthInstance } = getFirebaseInstances();
   const { toast } = useToast();
@@ -40,8 +40,7 @@ export default function Header() {
         title: "Logout Realizado",
         description: "Você foi desconectado com sucesso.",
       });
-      // O AuthProvider cuidará do redirecionamento ou atualização do estado do usuário
-      // router.push('/login'); // Opcional, se o AuthProvider não redirecionar
+      // router.push('/login'); // Opcional, AuthProvider deve lidar com isso
     } catch (error) {
       console.error("Falha no logout pelo header:", error);
       toast({
@@ -81,7 +80,6 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Botões para os outros dois apps */}
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
           <Link href="/produtos-servicos">
             <Briefcase className="mr-1 h-4 w-4" /> Operacional
@@ -98,9 +96,7 @@ export default function Header() {
             </Link>
         </Button>
 
-        {/* ThemeToggle removido pois não existe no projeto */}
-
-        {isLoading ? (
+        {(isLoading || isAuthenticating) ? (
           <Button variant="ghost" size="icon" disabled>
             <Loader2 className="h-5 w-5 animate-spin" />
           </Button>
@@ -111,7 +107,7 @@ export default function Header() {
                 <UserCircle className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60"> {/* Aumentei um pouco a largura */}
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel className="truncate">
                 {user.displayName || user.email || "Meu Perfil"}
               </DropdownMenuLabel>
@@ -123,12 +119,11 @@ export default function Header() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/"> {/* Link do Dashboard para a Home Page */}
+                <Link href="/">
                   <LayoutDashboard className="mr-2 h-4 w-4" />
                   <span>Painel Principal</span>
                 </Link>
               </DropdownMenuItem>
-                {/* Links para módulos principais dentro do Dropdown para mobile */}
                <DropdownMenuItem asChild className="sm:hidden">
                 <Link href="/produtos-servicos">
                     <Briefcase className="mr-2 h-4 w-4" /> Operacional
@@ -146,12 +141,12 @@ export default function Header() {
                 </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional"  rel="noopener noreferrer"> {/* Email genérico */}
+                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional"  rel="noopener noreferrer">
                   <MessageSquareText className="mr-2 h-4 w-4" />
                   <span>Enviar Feedback</span>
                 </a>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled> {/* Manter desabilitado se não houver página de ajuda */}
+              <DropdownMenuItem disabled>
                 <HelpCircle className="mr-2 h-4 w-4" />
                 <span>Ajuda</span>
               </DropdownMenuItem>
@@ -172,14 +167,6 @@ export default function Header() {
                 <LogIn className="mr-1.5 h-4 w-4" /> Entrar
               </Link>
             </Button>
-            {/* Botão de Registro pode ser descomentado se/quando a funcionalidade existir */}
-            {/* 
-            <Button size="sm" asChild>
-              <Link href="/register">
-                <UserPlus className="mr-1.5 h-4 w-4" /> Registrar-se
-              </Link>
-            </Button>
-            */}
           </div>
         )}
       </div>
