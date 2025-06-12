@@ -1,0 +1,12 @@
+{
+  "hosting": {
+    "public": ".next", // Aponta o diretório público padrão para .next
+    "site": "gestor-maestro", // Especifica o ID do site do Firebase
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+    // Removemos a seção targets por enquanto para simplificar
+  }
+}

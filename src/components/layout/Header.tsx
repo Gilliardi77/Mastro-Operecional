@@ -1,5 +1,5 @@
 
-import { Briefcase, LayoutDashboard } from 'lucide-react';
+import { Briefcase, LayoutDashboard, AppWindow } from 'lucide-react'; // Adicionado AppWindow
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -29,6 +29,32 @@ export default function Header() {
                   <Briefcase className="h-5 w-5" /> 
                   Operacional
                 </Link>
+              </Button>
+            </li>
+            <li>
+              <Button variant="ghost" asChild>
+                <a 
+                  href="https://studio--viso-clara-financeira.us-central1.hosted.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1"
+                >
+                  <AppWindow className="h-5 w-5" />
+                  Visão Fin.
+                </a>
+              </Button>
+            </li>
+            <li>
+              <Button variant="ghost" asChild>
+                <a 
+                  href="https://studio--gestor-maestro.us-central1.hosted.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1"
+                >
+                  <AppWindow className="h-5 w-5" />
+                  Gestor M.
+                </a>
               </Button>
             </li>
           </ul>
