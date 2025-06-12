@@ -7,7 +7,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
-  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase // Briefcase para Operacional
+  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -19,7 +19,7 @@ import { getFirebaseInstances, signOut as firebaseSignOutUtil } from '@/lib/fire
 import { useToast } from "@/hooks/use-toast";
 
 export default function Header() {
-  const { user, isLoading, isAuthenticating } = useAuth();
+  const { user, isLoading, isAuthenticating } = useAuth(); // Alinhado com AuthProvider
   const router = useRouter();
   const { auth: firebaseAuthInstance } = getFirebaseInstances();
   const { toast } = useToast();
@@ -35,12 +35,12 @@ export default function Header() {
       return;
     }
     try {
-      await firebaseSignOutUtil(firebaseAuthInstance);
+      await firebaseSignOutUtil(firebaseAuthInstance); // Usando firebaseSignOutUtil
       toast({
         title: "Logout Realizado",
         description: "Você foi desconectado com sucesso.",
       });
-      // router.push('/login'); // Opcional, AuthProvider deve lidar com isso
+      // O AuthProvider cuidará do redirecionamento implicitamente ao atualizar o estado 'user'
     } catch (error) {
       console.error("Falha no logout pelo header:", error);
       toast({
@@ -52,7 +52,6 @@ export default function Header() {
   };
 
   const handleGoBack = () => {
-    // Verifica se há histórico para voltar, senão vai para a home
     if (typeof window !== "undefined" && window.history.length > 2) {
        router.back();
     } else {
@@ -95,7 +94,8 @@ export default function Header() {
                 <Link2Icon className="mr-1 h-4 w-4" /> Gestor M.
             </Link>
         </Button>
-
+        
+        {/* Lógica de exibição condicional do botão de perfil/login */}
         {(isLoading || isAuthenticating) ? (
           <Button variant="ghost" size="icon" disabled>
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -141,7 +141,7 @@ export default function Header() {
                 </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional"  rel="noopener noreferrer">
+                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional" rel="noopener noreferrer">
                   <MessageSquareText className="mr-2 h-4 w-4" />
                   <span>Enviar Feedback</span>
                 </a>
@@ -167,9 +167,12 @@ export default function Header() {
                 <LogIn className="mr-1.5 h-4 w-4" /> Entrar
               </Link>
             </Button>
+            {/* O botão Registrar-se foi removido conforme solicitado anteriormente */}
           </div>
         )}
       </div>
     </header>
   );
 }
+
+    
