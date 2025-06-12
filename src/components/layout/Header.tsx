@@ -19,7 +19,7 @@ import { getFirebaseInstances, signOut as firebaseSignOutUtil } from '@/lib/fire
 import { useToast } from "@/hooks/use-toast";
 
 export default function Header() {
-  const { user, isLoading, isAuthenticating } = useAuth(); // Alinhado com AuthProvider
+  const { user, isLoading, isAuthenticating } = useAuth();
   const router = useRouter();
   const { auth: firebaseAuthInstance } = getFirebaseInstances();
   const { toast } = useToast();
@@ -35,12 +35,13 @@ export default function Header() {
       return;
     }
     try {
-      await firebaseSignOutUtil(firebaseAuthInstance); // Usando firebaseSignOutUtil
+      await firebaseSignOutUtil(firebaseAuthInstance);
       toast({
         title: "Logout Realizado",
         description: "Você foi desconectado com sucesso.",
       });
       // O AuthProvider cuidará do redirecionamento implicitamente ao atualizar o estado 'user'
+      // router.push('/login'); // Não é mais necessário aqui explicitamente
     } catch (error) {
       console.error("Falha no logout pelo header:", error);
       toast({
@@ -60,7 +61,7 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b bg-background/95 px-4 shadow-sm backdrop-blur-md md:px-6">
+    <header className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-primary-foreground/30 bg-primary text-primary-foreground px-4 shadow-sm md:px-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={handleGoBack} aria-label="Voltar">
           <ArrowLeftCircle className="h-5 w-5" />
@@ -95,7 +96,6 @@ export default function Header() {
             </Link>
         </Button>
         
-        {/* Lógica de exibição condicional do botão de perfil/login */}
         {(isLoading || isAuthenticating) ? (
           <Button variant="ghost" size="icon" disabled>
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -141,7 +141,7 @@ export default function Header() {
                 </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional" rel="noopener noreferrer">
+                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional" target="_blank" rel="noopener noreferrer">
                   <MessageSquareText className="mr-2 h-4 w-4" />
                   <span>Enviar Feedback</span>
                 </a>
@@ -167,12 +167,9 @@ export default function Header() {
                 <LogIn className="mr-1.5 h-4 w-4" /> Entrar
               </Link>
             </Button>
-            {/* O botão Registrar-se foi removido conforme solicitado anteriormente */}
           </div>
         )}
       </div>
     </header>
   );
 }
-
-    
