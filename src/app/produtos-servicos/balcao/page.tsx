@@ -557,6 +557,7 @@ export default function BalcaoPage() {
 
             <div className="flex flex-col gap-2">
                 <Button
+                    variant="success"
                     className="w-full"
                     size="lg"
                     onClick={handleFinalizarVenda}
@@ -566,7 +567,7 @@ export default function BalcaoPage() {
                     {isFinalizingSale ? "Finalizando..." : "Finalizar Venda"}
                 </Button>
                 <Button
-                    variant="outline"
+                    variant="default" 
                     className="w-full"
                     onClick={handleTransformarEmOS}
                     disabled={cartItems.length === 0 || isFinalizingSale}
@@ -644,4 +645,5 @@ export default function BalcaoPage() {
     
 
     
+
 

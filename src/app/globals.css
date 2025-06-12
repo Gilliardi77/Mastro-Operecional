@@ -33,6 +33,9 @@ body {
     --destructive: 0 70% 50%;           /* Standard red (mantido) */
     --destructive-foreground: 0 0% 98%; /* Light text on destructive (mantido) */
 
+    --success: 145 63% 42%;             /* Vibrant green for success actions */
+    --success-foreground: 0 0% 100%;    /* White text on success */
+
     --border: 0 0% 88%;                 /* Border color, subtle gray (mantido) */
     --input: 0 0% 98%;                  /* Input background, very light (mantido) */
     --ring: 190 60% 40%;                /* Ring color for focus states, related to new primary */
@@ -80,6 +83,9 @@ body {
 
     --destructive: 0 70% 40%;           /* Darker red */
     --destructive-foreground: 0 0% 98%; /* Light text on destructive (mantido) */
+
+    --success: 145 50% 50%;             /* Slightly lighter/less saturated green for dark mode */
+    --success-foreground: 0 0% 100%;    /* White text on success */
 
     --border: 0 0% 22%;                 /* Darker border */
     --input: 0 0% 18%;                  /* Darker input background */
