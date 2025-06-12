@@ -1,64 +1,187 @@
 
-import { Briefcase, LayoutDashboard, AppWindow } from 'lucide-react'; // Adicionado AppWindow
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+"use client";
+
+import Link from "next/link";
+import React from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import {
+  LogIn, UserPlus, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
+  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase // Briefcase para Operacional
+} from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuTrigger, DropdownMenuLabel
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { useAuth } from '@/components/auth/auth-provider';
+import { getFirebaseInstances, signOut as firebaseSignOutUtil } from '@/lib/firebase';
+import { useToast } from "@/hooks/use-toast";
 
 export default function Header() {
+  const { user, isLoading } = useAuth(); // Usando isLoading do nosso AuthProvider
+  const router = useRouter();
+  const { auth: firebaseAuthInstance } = getFirebaseInstances();
+  const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    if (!firebaseAuthInstance) {
+      toast({
+        title: "Erro de Logout",
+        description: "Sistema de autenticação não está pronto.",
+        variant: "destructive",
+      });
+      console.error("Firebase Auth não inicializado para logout");
+      return;
+    }
+    try {
+      await firebaseSignOutUtil(firebaseAuthInstance);
+      toast({
+        title: "Logout Realizado",
+        description: "Você foi desconectado com sucesso.",
+      });
+      // O AuthProvider cuidará do redirecionamento ou atualização do estado do usuário
+      // router.push('/login'); // Opcional, se o AuthProvider não redirecionar
+    } catch (error) {
+      console.error("Falha no logout pelo header:", error);
+      toast({
+        title: "Erro no Logout",
+        description: "Não foi possível realizar o logout.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleGoBack = () => {
+    // Verifica se há histórico para voltar, senão vai para a home
+    if (typeof window !== "undefined" && window.history.length > 2) {
+       router.back();
+    } else {
+       router.push('/');
+    }
+  };
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-primary text-primary-foreground shadow-lg">
-      <div className="container mx-auto flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <Briefcase className="h-8 w-8" />
-          <h1 className="font-headline text-xl font-semibold sm:text-2xl">
-            Maestro Operacional
-          </h1>
+    <header className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b bg-background/95 px-4 shadow-sm backdrop-blur-md md:px-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={handleGoBack} aria-label="Voltar">
+          <ArrowLeftCircle className="h-5 w-5" />
+        </Button>
+
+        <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
+          <Image
+            src="https://placehold.co/140x36.png?text=Maestro+Op"
+            alt="Maestro Operacional Logo"
+            width={140}
+            height={36}
+            priority
+            data-ai-hint="logo placeholder"
+          />
         </Link>
-        <nav>
-          <ul className="flex items-center gap-2">
-            <li>
-              <Button variant="ghost" asChild>
-                <Link href="/" className="flex items-center gap-1">
-                  <LayoutDashboard className="h-5 w-5" />
-                  Início
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Botões para os outros dois apps */}
+        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <Link href="/produtos-servicos">
+            <Briefcase className="mr-1 h-4 w-4" /> Operacional
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+            <Link2Icon className="mr-1 h-4 w-4" /> Visão Fin.
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+            <Link href="https://studio--gestor-maestro.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+                <Link2Icon className="mr-1 h-4 w-4" /> Gestor M.
+            </Link>
+        </Button>
+
+        {/* ThemeToggle removido pois não existe no projeto */}
+
+        {isLoading ? (
+          <Button variant="ghost" size="icon" disabled>
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </Button>
+        ) : user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Menu do Usuário">
+                <UserCircle className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60"> {/* Aumentei um pouco a largura */}
+              <DropdownMenuLabel className="truncate">
+                {user.displayName || user.email || "Meu Perfil"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Configurações do Perfil</span>
                 </Link>
-              </Button>
-            </li>
-            <li>
-              <Button variant="ghost" asChild>
-                <Link href="/produtos-servicos" className="flex items-center gap-1">
-                  <Briefcase className="h-5 w-5" /> 
-                  Operacional
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/"> {/* Link do Dashboard para a Home Page */}
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  <span>Painel Principal</span>
                 </Link>
-              </Button>
-            </li>
-            <li>
-              <Button variant="ghost" asChild>
-                <a 
-                  href="https://studio--viso-clara-financeira.us-central1.hosted.app/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1"
-                >
-                  <AppWindow className="h-5 w-5" />
-                  Visão Fin.
+              </DropdownMenuItem>
+                {/* Links para módulos principais dentro do Dropdown para mobile */}
+               <DropdownMenuItem asChild className="sm:hidden">
+                <Link href="/produtos-servicos">
+                    <Briefcase className="mr-2 h-4 w-4" /> Operacional
+                </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="sm:hidden">
+                <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+                    <Link2Icon className="mr-2 h-4 w-4" /> Visão Fin.
+                </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="sm:hidden">
+                <Link href="https://studio--gestor-maestro.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+                    <Link2Icon className="mr-2 h-4 w-4" /> Gestor M.
+                </Link>
+                </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional"  rel="noopener noreferrer"> {/* Email genérico */}
+                  <MessageSquareText className="mr-2 h-4 w-4" />
+                  <span>Enviar Feedback</span>
                 </a>
-              </Button>
-            </li>
-            <li>
-              <Button variant="ghost" asChild>
-                <a 
-                  href="https://studio--gestor-maestro.us-central1.hosted.app/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1"
-                >
-                  <AppWindow className="h-5 w-5" />
-                  Gestor M.
-                </a>
-              </Button>
-            </li>
-          </ul>
-        </nav>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled> {/* Manter desabilitado se não houver página de ajuda */}
+                <HelpCircle className="mr-2 h-4 w-4" />
+                <span>Ajuda</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                className="text-red-600 focus:text-red-700 focus:bg-red-50 dark:text-red-400 dark:focus:text-red-500 dark:focus:bg-red-900/30 cursor-pointer"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sair</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/login">
+                <LogIn className="mr-1.5 h-4 w-4" /> Entrar
+              </Link>
+            </Button>
+            {/* Botão de Registro pode ser descomentado se/quando a funcionalidade existir */}
+            {/* 
+            <Button size="sm" asChild>
+              <Link href="/register">
+                <UserPlus className="mr-1.5 h-4 w-4" /> Registrar-se
+              </Link>
+            </Button>
+            */}
+          </div>
+        )}
       </div>
     </header>
   );
