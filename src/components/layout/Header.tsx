@@ -41,7 +41,6 @@ export default function Header() {
         description: "Você foi desconectado com sucesso.",
       });
       // O AuthProvider cuidará do redirecionamento implicitamente ao atualizar o estado 'user'
-      // router.push('/login'); // Não é mais necessário aqui explicitamente
     } catch (error) {
       console.error("Falha no logout pelo header:", error);
       toast({
@@ -86,12 +85,12 @@ export default function Header() {
           </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-          <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+          <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app" target="_blank" rel="noopener noreferrer">
             <Link2Icon className="mr-1 h-4 w-4" /> Visão Fin.
           </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-            <Link href="https://studio--gestor-maestro.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+            <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank" rel="noopener noreferrer">
                 <Link2Icon className="mr-1 h-4 w-4" /> Gestor M.
             </Link>
         </Button>
@@ -130,12 +129,12 @@ export default function Header() {
                 </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+                <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app" target="_blank" rel="noopener noreferrer">
                     <Link2Icon className="mr-2 h-4 w-4" /> Visão Fin.
                 </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="https://studio--gestor-maestro.us-central1.hosted.app/" target="_blank" rel="noopener noreferrer">
+                <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank" rel="noopener noreferrer">
                     <Link2Icon className="mr-2 h-4 w-4" /> Gestor M.
                 </Link>
                 </DropdownMenuItem>
@@ -167,6 +166,7 @@ export default function Header() {
                 <LogIn className="mr-1.5 h-4 w-4" /> Entrar
               </Link>
             </Button>
+            {/* Botão de registrar removido conforme solicitado anteriormente */}
           </div>
         )}
       </div>
