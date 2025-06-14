@@ -99,12 +99,12 @@ const appointmentSchema = z.object({
   status: z.enum(["Pendente", "Em Andamento", "Concluído", "Cancelado"], { required_error: "Status inicial é obrigatório." }),
   geraOrdemProducao: z.boolean().optional().default(false),
 }).refine(data => {
-  return (data.clienteId && data.clienteId.trim() !== "") || (data.clienteNomeInput && data.clienteNomeInput.trim() !== "");
+  return (data.clienteId && data.clienteId.trim() !== "" && data.clienteId !== "__placeholder_cliente__") || (data.clienteNomeInput && data.clienteNomeInput.trim() !== "");
 }, {
   message: "Selecione um cliente ou informe o nome manualmente.",
   path: ["clienteId"], 
 }).refine(data => {
-  return (data.servicoId && data.servicoId.trim() !== "") || (data.servicoNomeInput && data.servicoNomeInput.trim() !== "");
+  return (data.servicoId && data.servicoId.trim() !== "" && data.servicoId !== "__placeholder_servico__") || (data.servicoNomeInput && data.servicoNomeInput.trim() !== "");
 }, {
   message: "Selecione um serviço/produto ou informe o nome manualmente.",
   path: ["servicoId"], 
@@ -353,7 +353,7 @@ export default function AgendaPage() {
 
     let finalClienteId = "";
     let finalClienteNome = "";
-    if (values.clienteId && values.clienteId.trim() !== "") {
+    if (values.clienteId && values.clienteId.trim() !== "" && values.clienteId !== "__placeholder_cliente__") {
         const selectedClientObj = fetchedClients.find(c => c.id === values.clienteId);
         if (selectedClientObj) {
             finalClienteId = selectedClientObj.id;
@@ -380,7 +380,7 @@ export default function AgendaPage() {
 
     let finalServicoId = "";
     let finalServicoNome = "";
-    if (values.servicoId && values.servicoId.trim() !== "") {
+    if (values.servicoId && values.servicoId.trim() !== "" && values.servicoId !== "__placeholder_servico__") {
         const selectedServiceObj = sampleServices.find(s => s.id === values.servicoId);
          if (selectedServiceObj) {
             finalServicoId = selectedServiceObj.id;
@@ -662,7 +662,7 @@ export default function AgendaPage() {
                       <FormControl><SelectTrigger><SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} /></SelectTrigger></FormControl>
                       <SelectContent>
                         {isLoadingClients && <SelectItem value="loading" disabled>Carregando clientes...</SelectItem>}
-                         <SelectItem value="" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
+                         <SelectItem value="__placeholder_cliente__" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
                         {fetchedClients.map(client => <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>)}
                         {!isLoadingClients && fetchedClients.length === 0 && <SelectItem value="no-clients" disabled>Nenhum cliente cadastrado</SelectItem>}
                       </SelectContent>
@@ -692,7 +692,7 @@ export default function AgendaPage() {
                     <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecione o serviço/produto" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
+                        <SelectItem value="__placeholder_servico__" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
                         {sampleServices.map(service => <SelectItem key={service.id} value={service.id}>{service.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
