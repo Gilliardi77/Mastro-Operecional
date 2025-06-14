@@ -53,14 +53,13 @@ import {
   deleteDoc,
   DocumentReference,
 } from "firebase/firestore";
+import { getAllClientsByUserId } from '@/services/clientService';
+import type { Client } from '@/schemas/clientSchema';
 
 type AppointmentStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 type ProductionOrderStatusAgenda = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
-interface Cliente {
-  id: string;
-  nome: string;
-}
+// Interface Cliente foi removida pois usaremos o tipo Client de clientSchema
 
 interface Servico {
   id: string;
@@ -131,7 +130,7 @@ export default function AgendaPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fetchedClients, setFetchedClients] = useState<Cliente[]>([]);
+  const [fetchedClients, setFetchedClients] = useState<Client[]>([]); // Alterado para usar o tipo Client
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
   const bypassAuth = true; 
@@ -160,35 +159,21 @@ export default function AgendaPage() {
 
   const fetchClients = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    console.log("[DEBUG AgendaPage] fetchClients: userIdToQuery =", userIdToQuery);
-    
     if (!userIdToQuery) {
-      console.log("[DEBUG AgendaPage] fetchClients: userIdToQuery is null/undefined. Skipping fetch.");
       setFetchedClients([]);
       setIsLoadingClients(false);
       return;
     }
     setIsLoadingClients(true);
     try {
-      const collectionRef = collection(db, "clientes");
-      console.log("[DEBUG AgendaPage] fetchClients: Attempting to query collection 'clientes'");
-      const q = query(collectionRef, where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
-      console.log("[DEBUG AgendaPage] fetchClients: Query constructed:", q);
-
-      const querySnapshot = await getDocs(q);
-      console.log("[DEBUG AgendaPage] fetchClients: Query successful. Docs found:", querySnapshot.docs.length);
-      const clientsData = querySnapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        nome: docSnap.data().nome as string,
-      }));
+      // Usando o clientService para buscar clientes
+      const clientsData = await getAllClientsByUserId(userIdToQuery);
       setFetchedClients(clientsData);
     } catch (error: any) {
-      console.error("[DEBUG AgendaPage] Erro ao buscar clientes para agenda:", error);
-      const firestoreErrorCode = error.code;
-      const detailedMessage = `Detalhe: ${error.message || 'Erro desconhecido.'} (Code: ${firestoreErrorCode || 'N/A'})`;
+      console.error("[DEBUG AgendaPage] Erro ao buscar clientes para agenda via service:", error);
       toast({ 
-        title: `Erro ao buscar clientes (Code: ${firestoreErrorCode || 'N/A'})`, 
-        description: `Não foi possível carregar os dados. ${detailedMessage}`, 
+        title: `Erro ao buscar clientes`, 
+        description: error.message || "Não foi possível carregar os dados dos clientes.", 
         variant: "destructive" 
       });
     } finally {
@@ -199,10 +184,7 @@ export default function AgendaPage() {
 
   const fetchAppointments = useCallback(async () => {
     const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-    console.log("[DEBUG AgendaPage] fetchAppointments: userIdToQuery =", userIdToQuery);
-    
     if (!userIdToQuery) {
-      console.log("[DEBUG AgendaPage] fetchAppointments: userIdToQuery is null/undefined. Skipping fetch.");
       setAppointments([]);
       setIsLoading(false);
       return;
@@ -210,16 +192,13 @@ export default function AgendaPage() {
     setIsLoading(true);
     try {
       const collectionRef = collection(db, "agendamentos");
-      console.log("[DEBUG AgendaPage] fetchAppointments: Attempting to query collection 'agendamentos', Query: where('userId', '==', '", userIdToQuery, "').orderBy('dataHora', 'asc')");
       const q = query(
         collectionRef,
         where("userId", "==", userIdToQuery),
         orderBy("dataHora", "asc")
       );
-      console.log("[DEBUG AgendaPage] fetchAppointments: Query constructed:", q);
       
       const querySnapshot = await getDocs(q);
-      console.log("[DEBUG AgendaPage] fetchAppointments: Query successful. Docs found:", querySnapshot.docs.length);
       const fetchedAppointments = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<AppointmentFirestore, 'id'>;
         return {
@@ -359,7 +338,6 @@ export default function AgendaPage() {
             finalClienteId = selectedClientObj.id;
             finalClienteNome = selectedClientObj.nome;
         } else {
-            // Fallback para nome manual se ID não for encontrado (pode ser ID antigo/inválido)
             if (values.clienteNomeInput && values.clienteNomeInput.trim() !== "") {
                 finalClienteId = `manual_cliente_${Date.now()}`;
                 finalClienteNome = values.clienteNomeInput.trim();
@@ -829,3 +807,4 @@ export default function AgendaPage() {
     
 
     
+

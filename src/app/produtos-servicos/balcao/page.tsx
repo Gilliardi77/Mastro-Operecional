@@ -23,7 +23,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from '@/components/auth/auth-provider';
 import { db } from "@/lib/firebase";
-import { collection, addDoc, Timestamp, getDocs, query, where, orderBy, doc, runTransaction } from "firebase/firestore"; // Adicionado doc e runTransaction
+import { collection, addDoc, Timestamp, getDocs, query, where, orderBy, doc, runTransaction } from "firebase/firestore";
+import { getAllClientsByUserId } from '@/services/clientService';
+import type { Client } from '@/schemas/clientSchema';
+
 
 interface ProductServicoFirestore {
   id: string;
@@ -59,16 +62,10 @@ interface CartItem {
   manual?: boolean;
   imageHint?: string;
   productId?: string;
-  productType?: "Serviço" | "Produto"; // Adicionado para saber o tipo do item do catálogo
+  productType?: "Serviço" | "Produto"; 
 }
 
-interface Cliente {
-  id: string;
-  nome: string;
-  email?: string;
-  telefone?: string;
-  endereco?: string;
-}
+// Interface Cliente foi removida pois usaremos o tipo Client de clientSchema
 
 
 const paymentMethods = [
@@ -98,7 +95,7 @@ export default function BalcaoPage() {
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [searchTermProducts, setSearchTermProducts] = useState("");
 
-  const [fetchedClients, setFetchedClients] = useState<Cliente[]>([]);
+  const [fetchedClients, setFetchedClients] = useState<Client[]>([]); // Alterado para usar o tipo Client
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
 
@@ -145,16 +142,12 @@ export default function BalcaoPage() {
     }
     setIsLoadingClients(true);
     try {
-      const q = query(collection(db, "clientes"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
-      const querySnapshot = await getDocs(q);
-      const clientsData = querySnapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Cliente, 'id'>),
-      }));
+      // Usando o clientService para buscar clientes
+      const clientsData = await getAllClientsByUserId(userIdToQuery);
       setFetchedClients(clientsData);
-    } catch (error) {
-      console.error("Erro ao buscar clientes:", error);
-      toast({ title: "Erro ao buscar clientes", variant: "destructive" });
+    } catch (error: any) {
+      console.error("Erro ao buscar clientes via service:", error);
+      toast({ title: "Erro ao buscar clientes", description: error.message || "Não foi possível carregar os dados dos clientes.", variant: "destructive" });
     } finally {
       setIsLoadingClients(false);
     }
@@ -195,7 +188,7 @@ export default function BalcaoPage() {
             valorTotal: product.price,
             manual: false,
             imageHint: product.imageHint,
-            productType: product.type, // Adicionado tipo do produto
+            productType: product.type, 
           },
         ];
       }
@@ -272,7 +265,7 @@ export default function BalcaoPage() {
             valorUnitario: item.valorUnitario,
             valorTotal: item.valorTotal,
             manual: item.manual || false,
-            productType: item.productType || null, // Salvar o tipo do item
+            productType: item.productType || null, 
         })),
         totalVenda: totalVenda,
         formaPagamento: paymentMethod,
@@ -283,7 +276,6 @@ export default function BalcaoPage() {
       };
       const vendaDocRef = await addDoc(collection(db, "vendas"), vendaData);
 
-      // Lançamento Financeiro
       const lancamentoReceita = {
         userId: userIdToSave,
         titulo: `Venda Balcão #${vendaDocRef.id.substring(0,6)} - ${clienteNome}`,
@@ -299,7 +291,6 @@ export default function BalcaoPage() {
       };
       await addDoc(collection(db, "lancamentosFinanceiros"), lancamentoReceita);
 
-      // Baixa de Estoque para Produtos
       for (const item of cartItems) {
         if (item.productId && !item.manual && item.productType === 'Produto') {
           const productRef = doc(db, "produtosServicos", item.productId);
@@ -312,8 +303,6 @@ export default function BalcaoPage() {
               const productData = productDoc.data() as ProductServicoFirestore;
               const estoqueAtual = productData.quantidadeEstoque ?? 0;
               
-              // A política de permitir estoque negativo é confirmada.
-              // Apenas calculamos o novo estoque.
               const novoEstoque = estoqueAtual - item.quantidade;
               transaction.update(productRef, { 
                 quantidadeEstoque: novoEstoque,
@@ -645,5 +634,6 @@ export default function BalcaoPage() {
     
 
     
+
 
 

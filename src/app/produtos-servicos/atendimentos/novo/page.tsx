@@ -25,6 +25,9 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useAIGuide } from '@/contexts/AIGuideContext';
+import { createClient, getAllClientsByUserId } from '@/services/clientService';
+import type { Client, ClientCreateData, ClientFormValues as NewClientFormValues } from '@/schemas/clientSchema'; // Ajustado para usar ClientFormValues para o modal
+import { ClientFormSchema as newClientSchema } from '@/schemas/clientSchema'; // Usando o schema direto para o form
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
@@ -52,21 +55,7 @@ const ordemServicoFormSchema = z.object({
 
 type OrdemServicoFormValues = z.infer<typeof ordemServicoFormSchema>;
 
-const newClientSchema = z.object({
-  nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
-  email: z.string().email({ message: "Formato de e-mail inválido." }).optional().or(z.literal('')),
-  telefone: z.string().optional(),
-  endereco: z.string().optional(),
-});
-type NewClientFormValues = z.infer<typeof newClientSchema>;
-
-interface Cliente {
-  id: string;
-  nome: string;
-  telefone?: string;
-  email?: string;
-}
-
+// Interface Cliente e CatalogoItem mantidas como antes, pois não são o foco desta refatoração de cliente
 interface CatalogoItem {
   id: string;
   nome: string;
@@ -121,7 +110,7 @@ export default function OrdemServicoPage() {
   const searchParams = useSearchParams();
   const { updateAICurrentPageContext } = useAIGuide();
 
-  const [clients, setClients] = useState<Cliente[]>([]);
+  const [clients, setClients] = useState<Client[]>([]); // Alterado para usar o tipo Client
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [catalogoItens, setCatalogoItens] = useState<CatalogoItem[]>([]);
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
@@ -149,7 +138,7 @@ export default function OrdemServicoPage() {
   });
 
   const newClientForm = useForm<NewClientFormValues>({
-    resolver: zodResolver(newClientSchema),
+    resolver: zodResolver(newClientSchema), // Usando o schema importado diretamente
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
@@ -216,11 +205,11 @@ export default function OrdemServicoPage() {
     setIsLoadingClients(true);
     setIsLoadingCatalogo(true);
     try {
-      const clientsQuery = query(collection(db, "clientes"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
-      const clientsSnapshot = await getDocs(clientsQuery);
-      const fetchedClients = clientsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...(docSnap.data() as Omit<Cliente, 'id'>) }));
+      // Buscando clientes com o clientService
+      const fetchedClients = await getAllClientsByUserId(userIdToQuery);
       setClients(fetchedClients);
 
+      // Lógica para buscar catálogo mantida, pois não foi refatorada ainda
       const catalogoQuery = query(collection(db, "produtosServicos"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
       const catalogoSnapshot = await getDocs(catalogoQuery);
       const fetchedCatalogoItens = catalogoSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...(docSnap.data() as Omit<CatalogoItem, 'id'>) }));
@@ -228,7 +217,7 @@ export default function OrdemServicoPage() {
 
     } catch (error: any) {
       console.error("Erro ao buscar clientes ou catálogo:", error);
-      toast({ title: "Erro ao buscar dados", variant: "destructive", description: "Não foi possível carregar clientes ou catálogo." });
+      toast({ title: "Erro ao buscar dados", variant: "destructive", description: `Não foi possível carregar. ${error.message}` });
     } finally {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
@@ -243,9 +232,9 @@ export default function OrdemServicoPage() {
 
   useEffect(() => {
     const clienteIdParam = searchParams.get('clienteId');
-    const clienteNomeParam = searchParams.get('clienteNome'); // Nome do cliente vindo dos params
+    const clienteNomeParam = searchParams.get('clienteNome'); 
     const descricaoParam = searchParams.get('descricao');
-    const valorTotalParam = searchParams.get('valorTotal'); // Este é o valor total vindo do Balcão
+    const valorTotalParam = searchParams.get('valorTotal'); 
 
     let prefillData: Partial<OrdemServicoFormValues> = { itens: [] };
 
@@ -257,14 +246,13 @@ export default function OrdemServicoPage() {
       } else if (clienteIdParam === "avulso") {
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
       } else if (clienteIdParam !== "avulso" && !clientExists) {
-         // Cliente com ID não encontrado, mas nome fornecido, tratar como avulso com nome.
          prefillData.clienteId = "avulso";
          prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; 
       }
-    } else if (clienteNomeParam) { // Se não há ID, mas há nome, tratar como avulso
+    } else if (clienteNomeParam) { 
         prefillData.clienteId = "avulso";
         prefillData.clienteNome = clienteNomeParam;
-    } else { // Default se nada for passado
+    } else { 
         prefillData.clienteId = "avulso";
         prefillData.clienteNome = "Cliente Avulso";
     }
@@ -285,7 +273,6 @@ export default function OrdemServicoPage() {
       });
     }
     
-    // O valorTotalParam vindo do balcão é para o valorTotalOS, não para cada item individualmente
     if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
       prefillData.valorTotalOS = parseFloat(valorTotalParam);
     }
@@ -294,7 +281,6 @@ export default function OrdemServicoPage() {
       osForm.reset(currentValues => ({
         ...currentValues,
         ...prefillData,
-        // Mantém data de entrega se já estiver preenchida, ou undefined se não.
         dataEntrega: currentValues.dataEntrega || undefined, 
       }));
     }
@@ -417,23 +403,28 @@ export default function OrdemServicoPage() {
     }
     setIsSavingNewClient(true);
     const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
-    const now = Timestamp.now();
-
-    const newClientData = {
-      ...data,
-      userId: userIdToSave,
-      criadoEm: now,
-      atualizadoEm: now,
-      temDebitos: false, 
+    
+    // Os campos como createdAt e updatedAt são gerenciados pelo clientService/firestoreService
+    const clientDataToCreate: ClientCreateData = {
+        nome: data.nome,
+        email: data.email,
+        telefone: data.telefone,
+        endereco: data.endereco,
+        cpfCnpj: data.cpfCnpj,
+        dataNascimento: data.dataNascimento,
+        observacoes: data.observacoes,
+        temDebitos: data.temDebitos,
     };
 
     try {
-      const docRef = await addDoc(collection(db, "clientes"), newClientData);
-      const newClientForSelect = { id: docRef.id, nome: data.nome, email: data.email, telefone: data.telefone };
-      setClients(prev => [...prev, newClientForSelect].sort((a,b) => a.nome.localeCompare(b.nome)));
-      osForm.setValue('clienteId', docRef.id); 
-      osForm.setValue('clienteNome', data.nome);
-      toast({ title: "Novo Cliente Salvo!", description: `${data.nome} foi adicionado e selecionado.` });
+      // Usando o clientService para criar o cliente
+      const clienteCriado = await createClient(userIdToSave, clientDataToCreate);
+      
+      // O clientService já retorna o cliente com id, createdAt, updatedAt
+      setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
+      osForm.setValue('clienteId', clienteCriado.id); 
+      osForm.setValue('clienteNome', clienteCriado.nome);
+      toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
       newClientForm.reset();
     } catch (e: any) {
@@ -443,20 +434,6 @@ export default function OrdemServicoPage() {
       setIsSavingNewClient(false);
     }
   }
-
-  // Função mantida caso seja usada em outro local, mas não para os inputs problemáticos.
-  const handleItemChange = (index: number, field: keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>, value: any) => {
-    const currentItem = fields[index];
-    let numericValue = value;
-
-    if (field === 'quantidade' || field === 'valorUnitario') {
-      numericValue = parseFloat(String(value).replace(',', '.')) || 0;
-    }
-    
-    const itemStateToUpdate: ItemOSFormValues = { ...currentItem, [field]: numericValue };
-    update(index, itemStateToUpdate);
-  };
-
 
   const handleAddItem = (itemCatalogo?: CatalogoItem) => {
     const newItem: ItemOSFormValues = itemCatalogo ? {
@@ -468,7 +445,7 @@ export default function OrdemServicoPage() {
         tipo: itemCatalogo.tipo,
     } : {
         idTemp: `item-${Date.now()}`,
-        produtoServicoId: undefined, // Será MANUAL_ITEM_PLACEHOLDER_VALUE se não for do catálogo
+        produtoServicoId: undefined, 
         nome: "",
         quantidade: 1,
         valorUnitario: 0,
@@ -482,9 +459,9 @@ export default function OrdemServicoPage() {
     if (itemId === MANUAL_ITEM_PLACEHOLDER_VALUE) {
         update(index, {
             ...currentItem,
-            produtoServicoId: undefined, // Garante que não haverá ID de catálogo
-            nome: currentItem.nome, // Mantém o nome que o usuário pode ter digitado, ou vazio se for novo
-            valorUnitario: currentItem.valorUnitario, // Mantém valor que pode ter sido digitado
+            produtoServicoId: undefined, 
+            nome: currentItem.nome, 
+            valorUnitario: currentItem.valorUnitario, 
             tipo: 'Manual',
         });
     } else {
@@ -761,6 +738,33 @@ export default function OrdemServicoPage() {
                   <FormMessage />
                 </FormItem>
               )} />
+               <FormField control={newClientForm.control} name="cpfCnpj" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CPF/CNPJ (Opcional)</FormLabel>
+                  <FormControl><Input placeholder="Documento do cliente" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={newClientForm.control} name="dataNascimento" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Data Nascimento (Opcional)</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={newClientForm.control} name="observacoes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Observações (Opcional)</FormLabel>
+                  <FormControl><Textarea placeholder="Preferências, histórico, etc." {...field} rows={2} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+               <FormField control={newClientForm.control} name="temDebitos" render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                  <FormControl><input type="checkbox" checked={field.value} onChange={field.onChange} className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" /></FormControl>
+                  <FormLabel className="font-normal text-sm">Cliente possui débitos pendentes?</FormLabel>
+                </FormItem>
+              )} />
               <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="outline" disabled={isSavingNewClient}>Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={isSavingNewClient}>
@@ -775,3 +779,4 @@ export default function OrdemServicoPage() {
     </div>
   );
 }
+
