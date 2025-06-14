@@ -120,6 +120,17 @@ export async function getDocumentById<T extends { id: string }>(
     if (docSnap.exists()) {
       const rawData = docSnap.data() as DocumentData;
       const dataWithId = { ...rawData, id: docSnap.id };
+
+      // Ensure essential timestamp fields exist before passing to Zod
+      if (!('createdAt' in dataWithId) || dataWithId.createdAt === undefined) {
+        console.warn(`[FirestoreService] Document ${id} in ${collectionName} is missing 'createdAt'. Defaulting to epoch.`);
+        (dataWithId as any).createdAt = new Date(0); // Assign a default Date
+      }
+      if (!('updatedAt' in dataWithId) || dataWithId.updatedAt === undefined) {
+        console.warn(`[FirestoreService] Document ${id} in ${collectionName} is missing 'updatedAt'. Defaulting to epoch.`);
+        (dataWithId as any).updatedAt = new Date(0); // Assign a default Date
+      }
+      
       const dataWithDates = convertTimestampsToDates(dataWithId);
       return schema.parse(dataWithDates);
     }
@@ -165,6 +176,17 @@ export async function getAllDocumentsByUserId<T extends { id: string }>(
     return querySnapshot.docs.map(docSnap => {
       const rawData = docSnap.data() as DocumentData;
       const dataWithId = { ...rawData, id: docSnap.id };
+
+      // Ensure essential timestamp fields exist
+      if (!('createdAt' in dataWithId) || dataWithId.createdAt === undefined) {
+        console.warn(`[FirestoreService] Document ${docSnap.id} in ${collectionName} (for user ${userId}) is missing 'createdAt'. Defaulting to epoch.`);
+        (dataWithId as any).createdAt = new Date(0);
+      }
+      if (!('updatedAt' in dataWithId) || dataWithId.updatedAt === undefined) {
+        console.warn(`[FirestoreService] Document ${docSnap.id} in ${collectionName} (for user ${userId}) is missing 'updatedAt'. Defaulting to epoch.`);
+        (dataWithId as any).updatedAt = new Date(0);
+      }
+      
       const dataWithDates = convertTimestampsToDates(dataWithId);
       return schema.parse(dataWithDates);
     });
@@ -201,15 +223,15 @@ export async function updateDocument<TUpdate, TFull extends { id: string }>(
   try {
     const validatedData = updateSchema.parse(data);
     if (Object.keys(validatedData).length === 0) {
-        const currentDoc = await getDocumentById(collectionName, id, fullSchema); // Relies on getDocumentById also getting db instance
+        const currentDoc = await getDocumentById(collectionName, id, fullSchema); 
         if (!currentDoc) throw new Error(`Documento com ID ${id} não encontrado em ${collectionName} para atualização vazia.`);
-        return currentDoc; // Nenhuma alteração real, retorna o documento atual
+        return currentDoc; 
     }
 
     const docRef = doc(firestoreDb, collectionName, id);
     const docDataWithTimestamp = {
       ...validatedData,
-      updatedAt: new Date(), // Usar Date, será convertido
+      updatedAt: new Date(), 
     };
     
     const docDataForFirestore = convertDatesToTimestamps(docDataWithTimestamp);
@@ -220,7 +242,19 @@ export async function updateDocument<TUpdate, TFull extends { id: string }>(
       throw new Error(`Documento ${id} não encontrado em ${collectionName} após atualização.`);
     }
     const rawData = updatedDocSnap.data() as DocumentData;
-    const dataWithId = { ...rawData, id: updatedDocSnap.id };
+    let dataWithId = { ...rawData, id: updatedDocSnap.id };
+
+    // Ensure essential timestamp fields exist
+    if (!('createdAt' in dataWithId) || dataWithId.createdAt === undefined) {
+        console.warn(`[FirestoreService] Document ${id} in ${collectionName} (after update) is missing 'createdAt'. Defaulting to epoch.`);
+        (dataWithId as any).createdAt = new Date(0);
+    }
+    if (!('updatedAt' in dataWithId) || dataWithId.updatedAt === undefined) {
+        // This should ideally not happen as we just set it, but as a safeguard:
+        console.warn(`[FirestoreService] Document ${id} in ${collectionName} (after update) is missing 'updatedAt'. Defaulting to epoch.`);
+        (dataWithId as any).updatedAt = new Date(0);
+    }
+
     const dataWithDates = convertTimestampsToDates(dataWithId);
     return fullSchema.parse(dataWithDates);
   } catch (error: any) {
@@ -275,7 +309,18 @@ export async function queryDocuments<T extends { id: string }>(
     
     return querySnapshot.docs.map(docSnap => {
       const rawData = docSnap.data() as DocumentData;
-      const dataWithId = { ...rawData, id: docSnap.id };
+      let dataWithId = { ...rawData, id: docSnap.id };
+
+      // Ensure essential timestamp fields exist
+      if (!('createdAt' in dataWithId) || dataWithId.createdAt === undefined) {
+        console.warn(`[FirestoreService] Document ${docSnap.id} in ${collectionName} (queryDocuments) is missing 'createdAt'. Defaulting to epoch.`);
+        (dataWithId as any).createdAt = new Date(0);
+      }
+      if (!('updatedAt' in dataWithId) || dataWithId.updatedAt === undefined) {
+        console.warn(`[FirestoreService] Document ${docSnap.id} in ${collectionName} (queryDocuments) is missing 'updatedAt'. Defaulting to epoch.`);
+        (dataWithId as any).updatedAt = new Date(0);
+      }
+
       const dataWithDates = convertTimestampsToDates(dataWithId);
       return schema.parse(dataWithDates);
     });
