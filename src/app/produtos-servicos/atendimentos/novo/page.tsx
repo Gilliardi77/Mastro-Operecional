@@ -444,6 +444,19 @@ export default function OrdemServicoPage() {
     }
   }
 
+  // Função mantida caso seja usada em outro local, mas não para os inputs problemáticos.
+  const handleItemChange = (index: number, field: keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>, value: any) => {
+    const currentItem = fields[index];
+    let numericValue = value;
+
+    if (field === 'quantidade' || field === 'valorUnitario') {
+      numericValue = parseFloat(String(value).replace(',', '.')) || 0;
+    }
+    
+    const itemStateToUpdate: ItemOSFormValues = { ...currentItem, [field]: numericValue };
+    update(index, itemStateToUpdate);
+  };
+
 
   const handleAddItem = (itemCatalogo?: CatalogoItem) => {
     const newItem: ItemOSFormValues = itemCatalogo ? {
@@ -462,18 +475,6 @@ export default function OrdemServicoPage() {
         tipo: 'Manual',
     };
     append(newItem);
-  };
-
-  const handleItemChange = (index: number, field: keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>, value: any) => {
-    const currentItem = fields[index];
-    let numericValue = value;
-
-    if (field === 'quantidade' || field === 'valorUnitario') {
-      numericValue = parseFloat(String(value).replace(',', '.')) || 0;
-    }
-    
-    const itemStateToUpdate: ItemOSFormValues = { ...currentItem, [field]: numericValue };
-    update(index, itemStateToUpdate);
   };
 
   const handleItemCatalogoSelect = (index: number, itemId: string) => {
@@ -615,10 +616,10 @@ export default function OrdemServicoPage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                              <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => handleItemChange(index, 'quantidade', e.target.value)} min="1" /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} min="1" /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" onChange={e => handleItemChange(index, 'valorUnitario', e.target.value)} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
                         </div>
                          <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
