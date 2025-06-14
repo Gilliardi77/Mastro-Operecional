@@ -146,9 +146,9 @@ export default function AgendaPage() {
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
-      clienteId: "",
+      clienteId: undefined,
       clienteNomeInput: "",
-      servicoId: "",
+      servicoId: undefined,
       servicoNomeInput: "",
       data: new Date(),
       hora: "09:00",
@@ -258,14 +258,14 @@ export default function AgendaPage() {
       let clienteIdForm = editingAppointment.clienteId;
       let clienteNomeInputForm = "";
       if (editingAppointment.clienteId.startsWith("manual_cliente_")) {
-        clienteIdForm = ""; 
+        clienteIdForm = undefined; 
         clienteNomeInputForm = editingAppointment.clienteNome;
       }
 
       let servicoIdForm = editingAppointment.servicoId;
       let servicoNomeInputForm = "";
       if (editingAppointment.servicoId.startsWith("manual_servico_")) {
-        servicoIdForm = ""; 
+        servicoIdForm = undefined; 
         servicoNomeInputForm = editingAppointment.servicoNome;
       }
 
@@ -282,9 +282,9 @@ export default function AgendaPage() {
       });
     } else {
       form.reset({
-        clienteId: "",
+        clienteId: undefined,
         clienteNomeInput: "",
-        servicoId: "",
+        servicoId: undefined,
         servicoNomeInput: "",
         data: selectedCalendarDate || new Date(),
         hora: "09:00",
@@ -637,7 +637,7 @@ export default function AgendaPage() {
           if (!isOpen) {
             setEditingAppointment(null);
             form.reset({
-                clienteId: "", clienteNomeInput: "", servicoId: "", servicoNomeInput: "",
+                clienteId: undefined, clienteNomeInput: "", servicoId: undefined, servicoNomeInput: "",
                 data: selectedCalendarDate || new Date(), hora: "09:00",
                 observacoes: "", status: "Pendente", geraOrdemProducao: false,
             });
@@ -658,7 +658,7 @@ export default function AgendaPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente (Seleção)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingClients}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingClients}>
                       <FormControl><SelectTrigger><SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} /></SelectTrigger></FormControl>
                       <SelectContent>
                         {isLoadingClients && <SelectItem value="loading" disabled>Carregando clientes...</SelectItem>}
@@ -689,7 +689,7 @@ export default function AgendaPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Serviço/Produto (Seleção)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecione o serviço/produto" /></SelectTrigger></FormControl>
                       <SelectContent>
                         <SelectItem value="__placeholder_servico__" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
