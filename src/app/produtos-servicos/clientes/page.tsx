@@ -39,210 +39,150 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { db, getFirebaseInstances } from "@/lib/firebase"; // auth removido, getFirebaseInstances adicionado
 import { useAuth } from '@/components/auth/auth-provider';
-import { useRouter } from 'next/navigation'; // Importado useRouter
+import { useRouter } from 'next/navigation';
 import {
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  Timestamp,
-  doc,
-  updateDoc,
-  deleteDoc,
-} from "firebase/firestore";
+  createClient,
+  getAllClientsByUserId,
+  updateClient,
+  deleteClient,
+} from '@/services/clientService';
+import { ClientFormSchema, type Client, type ClientFormValues } from '@/schemas/clientSchema';
 
-interface ClienteFirestore {
-  id: string;
-  nome: string;
-  email?: string;
-  telefone?: string;
-  endereco?: string;
-  temDebitos?: boolean;
-  userId: string;
-  criadoEm: Timestamp;
-  atualizadoEm: Timestamp;
-}
-
-interface Cliente extends Omit<ClienteFirestore, 'criadoEm' | 'atualizadoEm'> {
-  criadoEm?: Date;
-  atualizadoEm?: Date;
-}
-
-const clientSchema = z.object({
-  id: z.string().optional(),
-  nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
-  email: z.string().email({ message: "Formato de e-mail inválido." }).optional().or(z.literal('')),
-  telefone: z.string().optional(),
-  endereco: z.string().optional(),
-});
-
-type ClientFormValues = z.infer<typeof clientSchema>;
 
 export default function ClientesPage() {
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
-  const router = useRouter(); // Instanciado useRouter
-  const { auth: firebaseAuthInstance } = getFirebaseInstances(); // Pegando auth de getFirebaseInstances
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const router = useRouter();
+  const [clientes, setClientes] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<Cliente | null>(null);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [firebaseInitialized, setFirebaseInitialized] = useState(false);
 
-  const bypassAuth = true; // Forçar bypass para testes
+  const bypassAuth = true; 
 
   const form = useForm<ClientFormValues>({
-    resolver: zodResolver(clientSchema),
+    resolver: zodResolver(ClientFormSchema),
     defaultValues: {
+      id: undefined,
       nome: "",
       email: "",
       telefone: "",
       endereco: "",
+      cpfCnpj: "",
+      dataNascimento: "",
+      observacoes: "",
+      temDebitos: false,
     },
   });
 
- useEffect(() => {
-    if (db && firebaseAuthInstance) { // Verificando db e firebaseAuthInstance
-      setFirebaseInitialized(true);
-    } else if (typeof window !== 'undefined' && !firebaseInitialized) {
-      toast({ title: "Erro de Configuração", description: "Firebase não inicializado. Verifique as variáveis de ambiente e a consola.", variant: "destructive" });
-    }
-  }, [firebaseInitialized, toast, firebaseAuthInstance]);
-
-
   const fetchClientes = useCallback(async () => {
-    if (!firebaseInitialized || isAuthLoading) return; 
-
-    if (!user && !bypassAuth) {
+    const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
+    if (!userIdToQuery) {
       setClientes([]);
       setIsLoadingData(false);
+      if (!isAuthLoading && !user && !bypassAuth) { // Apenas mostra o toast se não for bypass e o user não estiver autenticando
+         toast({ title: "Acesso Negado", description: "Usuário não autenticado.", variant: "destructive" });
+      }
       return;
     }
     setIsLoadingData(true);
     try {
-      const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-      if (!userIdToQuery) { 
-        setClientes([]);
-        setIsLoadingData(false);
-        return;
-      }
-      const q = query(collection(db, "clientes"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
-      const querySnapshot = await getDocs(q);
-      const fetchedClientes = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data() as Omit<ClienteFirestore, 'id'>;
-        return {
-          id: docSnap.id,
-          ...data,
-          temDebitos: data.temDebitos || false,
-          criadoEm: data.criadoEm?.toDate(),
-          atualizadoEm: data.atualizadoEm?.toDate(),
-        } as Cliente;
-      });
+      const fetchedClientes = await getAllClientsByUserId(userIdToQuery);
       setClientes(fetchedClientes);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao buscar clientes:", error);
-      toast({ title: "Erro ao buscar clientes", description: "Não foi possível carregar os dados.", variant: "destructive" });
+      toast({ title: "Erro ao buscar clientes", description: error.message || "Não foi possível carregar os dados.", variant: "destructive" });
     } finally {
       setIsLoadingData(false);
     }
-  }, [user, toast, bypassAuth, firebaseInitialized, isAuthLoading]); 
+  }, [user, toast, bypassAuth, isAuthLoading]); 
 
   useEffect(() => {
-     if (firebaseInitialized && !isAuthLoading) { 
+     if (!isAuthLoading) { 
         fetchClientes();
      }
-  }, [fetchClientes, firebaseInitialized, isAuthLoading]);
+  }, [fetchClientes, isAuthLoading]);
 
   useEffect(() => {
     if (editingClient) {
-      form.reset(editingClient);
+      form.reset({
+        id: editingClient.id,
+        nome: editingClient.nome,
+        email: editingClient.email || "",
+        telefone: editingClient.telefone || "",
+        endereco: editingClient.endereco || "",
+        cpfCnpj: editingClient.cpfCnpj || "",
+        dataNascimento: editingClient.dataNascimento || "",
+        observacoes: editingClient.observacoes || "",
+        temDebitos: editingClient.temDebitos || false,
+      });
     } else {
-      form.reset({ nome: "", email: "", telefone: "", endereco: "" });
+      form.reset({
+        id: undefined,
+        nome: "",
+        email: "",
+        telefone: "",
+        endereco: "",
+        cpfCnpj: "",
+        dataNascimento: "",
+        observacoes: "",
+        temDebitos: false,
+      });
     }
   }, [editingClient, form, isModalOpen]);
 
-  const handleOpenModal = (clientToEdit: Cliente | null = null) => {
-    if (!firebaseInitialized) {
-        toast({ title: "Erro de Configuração", description: "Firebase não está pronto. Verifique as configurações.", variant: "destructive"});
-        return;
-    }
+  const handleOpenModal = (clientToEdit: Client | null = null) => {
     setEditingClient(clientToEdit);
     setIsModalOpen(true);
   };
 
   const handleSaveClient = async (values: ClientFormValues) => {
-    if (!firebaseInitialized) {
-        toast({ title: "Erro de Configuração", description: "Firebase não está pronto. Não é possível salvar.", variant: "destructive"});
-        return;
-    }
-    if (!user && !bypassAuth) {
-      toast({ title: "Usuário não autenticado", variant: "destructive" });
+    const userIdToSave = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
+    if (!userIdToSave) {
+      toast({ title: "Erro de Autenticação", description: "ID do usuário não encontrado.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
-    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToSave) {
-        toast({ title: "Erro: ID do usuário não encontrado", variant: "destructive" });
-        setIsSubmitting(false);
-        return;
-    }
 
-    const clientData = {
-      nome: values.nome,
-      email: values.email || "",
-      telefone: values.telefone || "",
-      endereco: values.endereco || "",
-      userId: userIdToSave,
-      atualizadoEm: Timestamp.now(),
-      temDebitos: editingClient?.temDebitos || false,
-    };
+    const { id, ...clientData } = values; // Separa o ID dos outros dados do formulário
 
     try {
-      if (editingClient?.id) {
-        const docRef = doc(db, "clientes", editingClient.id);
-        await updateDoc(docRef, clientData);
+      if (id && editingClient) { // Se tem ID e editingClient, é uma atualização
+        await updateClient(id, clientData);
         toast({ title: "Cliente Atualizado!", description: `Cliente ${values.nome} atualizado com sucesso.` });
-      } else {
-        await addDoc(collection(db, "clientes"), {
-          ...clientData,
-          criadoEm: Timestamp.now(),
-        });
+      } else { // Senão, é criação
+        await createClient(userIdToSave, clientData);
         toast({ title: "Cliente Adicionado!", description: `Cliente ${values.nome} adicionado com sucesso.` });
       }
       await fetchClientes(); 
       setIsModalOpen(false);
       setEditingClient(null);
-      form.reset();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar cliente:", error);
-      toast({ title: "Erro ao Salvar", description: "Não foi possível salvar o cliente.", variant: "destructive" });
+      toast({ title: "Erro ao Salvar", description: error.message || "Não foi possível salvar o cliente.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteClient = async (clientId: string) => {
-     if (!firebaseInitialized) {
-        toast({ title: "Erro de Configuração", description: "Firebase não está pronto. Não é possível excluir.", variant: "destructive"});
-        return;
+    const userIdRequester = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
+     if (!userIdRequester) {
+      toast({ title: "Ação não permitida", description: "Usuário não autenticado.", variant: "destructive" });
+      return;
     }
-    if (!user && !bypassAuth) return;
     setIsSubmitting(true);
     try {
-      await deleteDoc(doc(db, "clientes", clientId));
+      await deleteClient(clientId);
       toast({ title: "Cliente Excluído!", description: "O cliente foi removido com sucesso." });
       await fetchClientes(); 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao excluir cliente:", error);
-      toast({ title: "Erro ao Excluir", description: "Não foi possível excluir o cliente.", variant: "destructive" });
+      toast({ title: "Erro ao Excluir", description: error.message || "Não foi possível excluir o cliente.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -258,11 +198,11 @@ export default function ClientesPage() {
     router.push('/login');
   }
 
-  if (isAuthLoading || (!firebaseInitialized && typeof window !== 'undefined')) {
+  if (isAuthLoading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Inicializando...</p></div>;
   }
 
-  if (!bypassAuth && !user && !isAuthLoading) { 
+  if (!bypassAuth && !user) { 
      return (
       <Card>
         <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
@@ -277,7 +217,6 @@ export default function ClientesPage() {
   if (isLoadingData && (user || bypassAuth)) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>;
   }
-
 
   return (
     <div className="space-y-6">
@@ -378,7 +317,7 @@ export default function ClientesPage() {
           setIsModalOpen(isOpen);
           if (!isOpen) {
             setEditingClient(null);
-            form.reset({ nome: "", email: "", telefone: "", endereco: "" });
+            form.reset({ id: undefined, nome: "", email: "", telefone: "", endereco: "", cpfCnpj: "", dataNascimento: "", observacoes: "", temDebitos: false });
           }
       }}>
         <DialogContent className="sm:max-w-[480px]">
@@ -390,50 +329,61 @@ export default function ClientesPage() {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSaveClient)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
-              <FormField
-                control={form.control}
-                name="nome"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome Completo</FormLabel>
-                    <FormControl><Input placeholder="Nome do cliente" {...field} /></FormControl>
-                    <FormMessage />
+              <FormField control={form.control} name="nome" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome Completo</FormLabel>
+                  <FormControl><Input placeholder="Nome do cliente" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl><Input type="email" placeholder="email@example.com" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="telefone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone</FormLabel>
+                  <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="endereco" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endereço</FormLabel>
+                  <FormControl><Textarea placeholder="Rua, Número, Bairro, Cidade, Estado" {...field} rows={3} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="cpfCnpj" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CPF/CNPJ</FormLabel>
+                  <FormControl><Input placeholder="Documento do cliente" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="dataNascimento" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Data de Nascimento</FormLabel>
+                  <FormControl><Input type="date" placeholder="AAAA-MM-DD" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+               <FormField control={form.control} name="observacoes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Observações</FormLabel>
+                  <FormControl><Textarea placeholder="Observações adicionais" {...field} rows={2} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="temDebitos" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                    <FormControl><input type="checkbox" checked={field.value} onChange={field.onChange} className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" /></FormControl>
+                    <FormLabel className="font-normal">Cliente possui débitos?</FormLabel>
                   </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email (Opcional)</FormLabel>
-                    <FormControl><Input type="email" placeholder="email@example.com" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="telefone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Telefone (Opcional)</FormLabel>
-                    <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="endereco"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Endereço (Opcional)</FormLabel>
-                    <FormControl><Textarea placeholder="Rua, Número, Bairro, Cidade, Estado" {...field} rows={3} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              )} />
               <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={isSubmitting}>
@@ -448,5 +398,3 @@ export default function ClientesPage() {
     </div>
   );
 }
-
-    
