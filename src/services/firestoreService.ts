@@ -1,5 +1,5 @@
 
-import { db } from '@/lib/firebase';
+import { getFirebaseInstances } from '@/lib/firebase';
 import {
   collection,
   doc,
@@ -63,6 +63,10 @@ export async function createDocument<TCreate, TFull extends { id: string }>(
   fullSchema: ZodSchema<TFull>,
   data: TCreate
 ): Promise<TFull> {
+  const { db: firestoreDb } = getFirebaseInstances();
+  if (!firestoreDb) {
+    throw new Error(`Firestore DB instance is not available in firestoreService.createDocument. Check Firebase initialization and config (API Key, Project ID in .env).`);
+  }
   try {
     const validatedData = createSchema.parse(data);
     const now = new Date(); // Usar Date para Timestamps, serão convertidos
@@ -75,7 +79,7 @@ export async function createDocument<TCreate, TFull extends { id: string }>(
 
     const docDataForFirestore = convertDatesToTimestamps(docDataWithUserAndTimestamps);
 
-    const docRef = await addDoc(collection(db, collectionName), docDataForFirestore);
+    const docRef = await addDoc(collection(firestoreDb, collectionName), docDataForFirestore);
     
     const fullDocData = {
       ...docDataWithUserAndTimestamps, // Usa os dados com Date para validação Zod
@@ -105,8 +109,12 @@ export async function getDocumentById<T extends { id: string }>(
   id: string,
   schema: ZodSchema<T>
 ): Promise<T | null> {
+  const { db: firestoreDb } = getFirebaseInstances();
+  if (!firestoreDb) {
+    throw new Error(`Firestore DB instance is not available in firestoreService.getDocumentById. Check Firebase initialization and config.`);
+  }
   try {
-    const docRef = doc(db, collectionName, id);
+    const docRef = doc(firestoreDb, collectionName, id);
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
@@ -142,12 +150,16 @@ export async function getAllDocumentsByUserId<T extends { id: string }>(
   orderByField?: keyof T & string,
   orderDirection?: 'asc' | 'desc'
 ): Promise<T[]> {
+  const { db: firestoreDb } = getFirebaseInstances();
+  if (!firestoreDb) {
+    throw new Error(`Firestore DB instance is not available in firestoreService.getAllDocumentsByUserId. Check Firebase initialization and config.`);
+  }
   try {
     const qConstraints: QueryConstraint[] = [where("userId", "==", userId)];
     if (orderByField) {
       qConstraints.push(orderBy(orderByField, orderDirection || 'asc'));
     }
-    const q = query(collection(db, collectionName), ...qConstraints);
+    const q = query(collection(firestoreDb, collectionName), ...qConstraints);
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map(docSnap => {
@@ -182,15 +194,19 @@ export async function updateDocument<TUpdate, TFull extends { id: string }>(
   updateSchema: ZodSchema<TUpdate>,
   fullSchema: ZodSchema<TFull>
 ): Promise<TFull> {
+  const { db: firestoreDb } = getFirebaseInstances();
+  if (!firestoreDb) {
+    throw new Error(`Firestore DB instance is not available in firestoreService.updateDocument. Check Firebase initialization and config.`);
+  }
   try {
     const validatedData = updateSchema.parse(data);
     if (Object.keys(validatedData).length === 0) {
-        const currentDoc = await getDocumentById(collectionName, id, fullSchema);
+        const currentDoc = await getDocumentById(collectionName, id, fullSchema); // Relies on getDocumentById also getting db instance
         if (!currentDoc) throw new Error(`Documento com ID ${id} não encontrado em ${collectionName} para atualização vazia.`);
         return currentDoc; // Nenhuma alteração real, retorna o documento atual
     }
 
-    const docRef = doc(db, collectionName, id);
+    const docRef = doc(firestoreDb, collectionName, id);
     const docDataWithTimestamp = {
       ...validatedData,
       updatedAt: new Date(), // Usar Date, será convertido
@@ -223,8 +239,12 @@ export async function updateDocument<TUpdate, TFull extends { id: string }>(
  * @throws Error se ocorrer um erro no Firestore.
  */
 export async function deleteDocument(collectionName: string, id: string): Promise<void> {
+  const { db: firestoreDb } = getFirebaseInstances();
+  if (!firestoreDb) {
+    throw new Error(`Firestore DB instance is not available in firestoreService.deleteDocument. Check Firebase initialization and config.`);
+  }
   try {
-    const docRef = doc(db, collectionName, id);
+    const docRef = doc(firestoreDb, collectionName, id);
     await deleteDoc(docRef);
   } catch (error: any) {
     console.error(`Erro ao excluir documento ${id} de ${collectionName}:`, error);
@@ -245,8 +265,12 @@ export async function queryDocuments<T extends { id: string }>(
   qConstraints: QueryConstraint[],
   schema: ZodSchema<T>
 ): Promise<T[]> {
+  const { db: firestoreDb } = getFirebaseInstances();
+  if (!firestoreDb) {
+    throw new Error(`Firestore DB instance is not available in firestoreService.queryDocuments. Check Firebase initialization and config.`);
+  }
   try {
-    const q = query(collection(db, collectionName), ...qConstraints);
+    const q = query(collection(firestoreDb, collectionName), ...qConstraints);
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map(docSnap => {
