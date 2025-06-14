@@ -73,8 +73,14 @@ initializeFirebase();
 // Export a function to get the initialized app, auth, db, storage instances
 const getFirebaseInstances = () => {
   if (!app && typeof window !== 'undefined') {
-    console.warn("🟡 [FirebaseLib] getFirebaseInstances called, but app is not initialized. Attempting re-initialization.");
-    initializeFirebase();
+    // Check critical config *before* re-attempting initialization
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.trim() === "" || !firebaseConfig.projectId || firebaseConfig.projectId.trim() === "") {
+        const deploymentEnv = process.env.NODE_ENV === 'production' ? 'apphosting.yaml' : '.env file';
+        console.error(`🔴 [FirebaseLib] getFirebaseInstances: Critical Firebase config (API Key or Project ID) is missing. Cannot initialize or re-initialize. Please check your ${deploymentEnv}.`);
+    } else {
+        console.warn("🟡 [FirebaseLib] getFirebaseInstances called, but app is not initialized. Attempting re-initialization.");
+        initializeFirebase(); // Attempt to initialize if config seems present but app isn't
+    }
   } else if (!app && typeof window === 'undefined') {
       console.warn("🟡 [FirebaseLib] getFirebaseInstances: Firebase instances accessed before initialization or in a server context where client-side init is expected.");
   }
