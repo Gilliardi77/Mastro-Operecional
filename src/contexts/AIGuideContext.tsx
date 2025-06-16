@@ -79,6 +79,7 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
 
   useEffect(() => {
     setCurrentAppContext(prev => ({ ...prev, pageName: pathname || 'unknown' }));
+    // Não limpar chatMessages aqui, pois o effect acima lida com carregar/resetar baseado em isAIGuideOpen e pathname
   }, [pathname]);
 
 
@@ -106,15 +107,34 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
 
   const sendQueryToAIGuide = async (userQuery: string) => {
     if (!userQuery.trim()) return;
-    addMessage('user', userQuery);
+    
+    const newUserMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      sender: 'user',
+      text: userQuery,
+      timestamp: new Date(),
+    };
+    setChatMessages(prev => [...prev, newUserMessage]);
     setIsAILoading(true);
+
+    const historyForAI = chatMessages // Use o estado *antes* de adicionar a nova mensagem do usuário
+      .slice(-5) // Pega as últimas 5 mensagens (ajuste conforme necessário)
+      .map(msg => ({
+        role: msg.sender === 'ai' ? 'model' : 'user', // Converte 'ai' para 'model'
+        text: msg.text,
+      }));
+    
+    // Adiciona a mensagem atual do usuário ao histórico que será enviado
+    const currentHistoryPlusNewQuery = [...historyForAI, { role: 'user' as const, text: userQuery }];
+
 
     try {
       const input: ContextualAIGuideInput = {
         pageName: currentAppContext.pageName,
-        userQuery: userQuery,
+        userQuery: userQuery, // A consulta atual do usuário
         currentAction: currentAppContext.currentAction,
         formSnapshotJSON: currentAppContext.formSnapshotJSON,
+        chatHistory: currentHistoryPlusNewQuery.slice(0, -1), // Envia o histórico ANTES da consulta atual
       };
       const aiResponse = await contextualAIGuideFlow(input);
       addMessage('ai', aiResponse.aiResponseText, aiResponse.suggestedActions);

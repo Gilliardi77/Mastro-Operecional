@@ -6,6 +6,12 @@ export const ContextualAIGuideInputSchema = z.object({
   userQuery: z.string().min(1, {message: 'A consulta do usuário não pode estar vazia.'}).describe('A pergunta ou comando do usuário para a IA Guia.'),
   currentAction: z.string().optional().describe('A ação específica que o usuário está tentando realizar. Ex: "criando_novo_atendimento", "cadastrando_cliente", "editando_os".'),
   formSnapshotJSON: z.string().optional().describe('Um JSON stringificado do estado atual de um formulário que o usuário pode estar preenchendo. Inclui campos e seus valores.'),
+  chatHistory: z.array(
+    z.object({
+      role: z.enum(['user', 'model']),
+      text: z.string(),
+    })
+  ).optional().describe('Histórico das últimas mensagens da conversa para manter o contexto (opcional). Role "model" é a IA, "user" é o usuário.'),
 });
 export type ContextualAIGuideInput = z.infer<typeof ContextualAIGuideInputSchema>;
 
