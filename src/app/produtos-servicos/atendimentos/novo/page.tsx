@@ -3,13 +3,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type FieldPath, useFieldArray } from "react-hook-form";
-import { z } from "zod";
+// import { z } from "zod"; // Removido, usar do schema de OS
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, FileText, MessageSquare, Mail, Loader2, UserPlus, Trash2, PlusCircle } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import React, { useState, useEffect, useCallback } from "react";
-import { collection, addDoc, Timestamp, doc, updateDoc } from "firebase/firestore"; // Removido query, where, getDocs, orderBy, serverTimestamp
+import { collection, addDoc, Timestamp, doc, updateDoc } from "firebase/firestore"; 
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -28,43 +28,22 @@ import { useAIGuide } from '@/contexts/AIGuideContext';
 import { createClient, getAllClientsByUserId } from '@/services/clientService';
 import type { Client, ClientCreateData, ClientFormValues as NewClientFormValues } from '@/schemas/clientSchema';
 import { ClientFormSchema as newClientSchema } from '@/schemas/clientSchema';
-import { getAllProductServicesByUserId } from '@/services/productServiceService'; // Importado
-import type { ProductService } from '@/schemas/productServiceSchema'; // Importado
+import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
+import type { ProductService } from '@/schemas/productServiceSchema'; 
 
-type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
+import { createOrdemServico, type OrdemServicoCreateData } from '@/services/ordemServicoService';
+import { 
+  OrdemServicoFormSchema, // Schema para o formulário desta página
+  type ItemOSFormValues, // Tipo para os itens do formulário
+  type OrdemServicoFormValues // Tipo para os valores do formulário
+} from '@/schemas/ordemServicoSchema';
+import type { ProductionOrderStatus } from '@/schemas/ordemServicoSchema'; // Para tipo da OP
 
 const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
 
-const itemOSSchema = z.object({
-  idTemp: z.string(),
-  produtoServicoId: z.string().optional(),
-  nome: z.string().min(1, "Nome do item é obrigatório."),
-  quantidade: z.coerce.number().positive("Quantidade deve ser positiva.").default(1),
-  valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").default(0),
-  tipo: z.enum(['Produto', 'Serviço', 'Manual']).default('Manual'),
-});
-type ItemOSFormValues = z.infer<typeof itemOSSchema>;
-
-const ordemServicoFormSchema = z.object({
-  clienteId: z.string().optional(),
-  clienteNome: z.string().optional(),
-  itens: z.array(itemOSSchema).min(1, { message: "Adicione pelo menos um item à Ordem de Serviço." }),
-  valorTotalOS: z.coerce.number().nonnegative({ message: "O valor total da OS não pode ser negativo." }).optional().default(0),
-  valorAdiantado: z.coerce.number().nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional().default(0),
-  dataEntrega: z.date({ required_error: "A data de entrega é obrigatória." }),
-  observacoes: z.string().optional(),
-});
-
-type OrdemServicoFormValues = z.infer<typeof ordemServicoFormSchema>;
-
-// CatalogoItem foi removido, usaremos ProductService
-// interface CatalogoItem {
-//   id: string;
-//   nome: string;
-//   valorVenda: number;
-//   tipo: 'Produto' | 'Serviço';
-//   unidade?: string;
-// }
+// Tipos locais para ProductionOrderStatusOSPage e LastSavedOsDataType são mantidos
+// pois são específicos da lógica desta página e não diretamente parte do schema da OS
+type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
 interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   numeroOS?: string;
@@ -76,7 +55,7 @@ interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
 
 interface AIFillFormEventPayload {
   formName: string;
-  fieldName: FieldPath<OrdemServicoFormValues> | `itens.${number}.${keyof Omit<ItemOSFormValues, 'valorTotal'>}`;
+  fieldName: FieldPath<OrdemServicoFormValues> | `itens.${number}.${keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>}`;
   value: any;
   actionLabel?: string;
   itemIndex?: number;
@@ -87,6 +66,7 @@ interface AIOpenNewClientModalOSEventPayload {
   actionLabel?: string;
 }
 
+// Função formatPhoneNumberForWhatsApp mantida como está
 const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null => {
   if (!phone) return null;
   let digits = phone.replace(/\D/g, '');
@@ -102,6 +82,7 @@ const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null 
   return digits.length >= 10 ? digits : null;
 };
 
+
 export default function OrdemServicoPage() {
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -114,7 +95,7 @@ export default function OrdemServicoPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]); // Alterado para ProductService[]
+  const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]);
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [isSavingNewClient, setIsSavingNewClient] = useState(false);
@@ -122,7 +103,7 @@ export default function OrdemServicoPage() {
   const bypassAuth = true;
 
   const osForm = useForm<OrdemServicoFormValues>({
-    resolver: zodResolver(ordemServicoFormSchema),
+    resolver: zodResolver(OrdemServicoFormSchema), // Usando o schema importado
     defaultValues: {
       clienteId: "avulso",
       clienteNome: "Cliente Avulso",
@@ -130,7 +111,7 @@ export default function OrdemServicoPage() {
       valorTotalOS: 0,
       valorAdiantado: 0,
       observacoes: "",
-      dataEntrega: undefined,
+      dataEntrega: undefined, // Zod validará isso como obrigatório
     },
   });
 
@@ -148,8 +129,8 @@ export default function OrdemServicoPage() {
     updateAICurrentPageContext({pageName: "Nova Ordem de Serviço"});
   }, [updateAICurrentPageContext]);
 
-
- useEffect(() => {
+  // handleAiFormFill effect
+  useEffect(() => {
     const handleAiFormFill = (event: Event) => {
       const customEvent = event as CustomEvent<AIFillFormEventPayload>;
       const { detail } = customEvent;
@@ -175,10 +156,20 @@ export default function OrdemServicoPage() {
         } else if (typeof detail.fieldName === 'string' && detail.fieldName.startsWith("itens.") && detail.itemIndex !== undefined) {
             const fieldNameParts = detail.fieldName.split('.');
             const itemIndex = parseInt(fieldNameParts[1], 10);
-            const itemFieldName = fieldNameParts[2] as keyof Omit<ItemOSFormValues, 'valorTotal'>;
+            const itemFieldName = fieldNameParts[2] as keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>;
+
 
             if (itemIndex >= 0 && itemIndex < fields.length && itemFieldName) {
-                update(itemIndex, { ...fields[itemIndex], [itemFieldName]: detail.value });
+                let valueToSet = detail.value;
+                 if ((itemFieldName === 'quantidade' || itemFieldName === 'valorUnitario') && typeof valueToSet !== 'number') {
+                    const numValue = parseFloat(valueToSet);
+                    if (!isNaN(numValue)) valueToSet = numValue;
+                    else { 
+                        toast({ title: "Erro de Valor do Item", description: `Valor de ${itemFieldName} inválido da IA para o item ${itemIndex + 1}.`, variant: "destructive"}); 
+                        return; 
+                    }
+                }
+                update(itemIndex, { ...fields[itemIndex], [itemFieldName]: valueToSet });
                 toast({ title: "Item da OS Atualizado pela IA", description: `${detail.actionLabel || `Item ${itemIndex + 1}, campo ${itemFieldName} atualizado.`}` });
             } else {
                 console.warn(`IA tentou preencher campo de item inválido: ${detail.fieldName}`);
@@ -192,7 +183,7 @@ export default function OrdemServicoPage() {
     };
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
     return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
- }, [osForm, toast, fields, update]);
+  }, [osForm, toast, fields, update]);
 
 
   const fetchClientsAndCatalogo = useCallback(async () => {
@@ -209,11 +200,8 @@ export default function OrdemServicoPage() {
     try {
       const fetchedClients = await getAllClientsByUserId(userIdToQuery);
       setClients(fetchedClients);
-
-      // Buscando catálogo com productServiceService
       const fetchedCatalogoItens = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
       setCatalogoItens(fetchedCatalogoItens);
-
     } catch (error: any) {
       console.error("Erro ao buscar clientes ou catálogo:", error);
       toast({ title: "Erro ao buscar dados", variant: "destructive", description: `Não foi possível carregar. ${error.message}` });
@@ -262,14 +250,16 @@ export default function OrdemServicoPage() {
       if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
         valorUnitarioDoItem = parseFloat(valorTotalParam);
       }
-      prefillData.itens?.push({
+      // Usando o tipo ItemOSFormValues para o item
+      const newItem: ItemOSFormValues = {
         idTemp: `item-${Date.now()}`,
         produtoServicoId: undefined,
         nome: descricaoParam,
         quantidade: 1,
         valorUnitario: valorUnitarioDoItem,
         tipo: 'Manual',
-      });
+      };
+      prefillData.itens?.push(newItem);
     }
     
     if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
@@ -316,7 +306,6 @@ export default function OrdemServicoPage() {
       return;
     }
 
-    const now = Timestamp.now();
     const selectedClient = data.clienteId && data.clienteId !== "avulso" ? clients.find(c => c.id === data.clienteId) : null;
     const nomeClienteFinal = selectedClient ? selectedClient.nome : (data.clienteNome || "Cliente Avulso");
 
@@ -328,57 +317,45 @@ export default function OrdemServicoPage() {
       tipo: item.tipo,
     }));
 
-    const osDataToSave = {
+    const osDataToCreate: OrdemServicoCreateData = {
       clienteId: data.clienteId && data.clienteId !== "avulso" ? data.clienteId : null,
       clienteNome: nomeClienteFinal,
       itens: itensParaSalvar,
       valorTotal: data.valorTotalOS || 0,
       valorAdiantado: data.valorAdiantado || 0,
-      dataEntrega: Timestamp.fromDate(data.dataEntrega),
+      dataEntrega: data.dataEntrega, // dataEntrega já é Date do formulário
       observacoes: data.observacoes || "",
-      status: "Pendente" as ProductionOrderStatusOSPage,
-      userId: userIdToSave,
-      criadoEm: now,
-      atualizadoEm: now,
-      numeroOS: ""
+      status: "Pendente", // Default status
+      statusPagamento: "Pendente", // Default payment status
+      valorPagoTotal: data.valorAdiantado || 0, // Adiantamento é o primeiro valor pago
     };
 
-    let osDocRefId: string | null = null;
-
     try {
-      const docRef = await addDoc(collection(db, "ordensServico"), osDataToSave);
-      osDocRefId = docRef.id;
-      await updateDoc(doc(db, "ordensServico", osDocRefId), { numeroOS: osDocRefId });
+      const osCriada = await createOrdemServico(userIdToSave, osDataToCreate);
+      const osDocRefId = osCriada.id;
 
-      const valorAdiantado = data.valorAdiantado || 0;
-      if (valorAdiantado > 0) {
-         // Lógica para registrar adiantamento no financeiro (futuro)
-      }
-      const valorAReceber = (data.valorTotalOS || 0) - valorAdiantado;
-      if (valorAReceber > 0 || valorAReceber <=0 ) {
-         // Lógica para registrar saldo pendente/crédito no financeiro (futuro)
-      }
+      // Lógica de adiantamento e saldo (se necessário futuramente para lançamentos financeiros diretos)
+      // ...
 
       const primeiroItemNome = data.itens[0]?.nome || "Serviço Detalhado na OS";
       const productionOrderData = {
-        agendamentoId: osDocRefId, 
-        clienteId: osDataToSave.clienteId,
-        clienteNome: osDataToSave.clienteNome,
+        agendamentoId: osDocRefId, // Usar o ID da OS criada como referência
+        clienteId: osCriada.clienteId,
+        clienteNome: osCriada.clienteNome,
         servicoNome: primeiroItemNome + (data.itens.length > 1 ? " e outros" : ""),
-        dataAgendamento: osDataToSave.dataEntrega,
-        status: "Pendente" as ProductionOrderStatusOSPage,
+        dataAgendamento: Timestamp.fromDate(osCriada.dataEntrega), // Timestamp para Firestore
+        status: "Pendente" as ProductionOrderStatusOSPage, // Tipo local, mas compatível
         progresso: 0,
-        observacoesAgendamento: osDataToSave.observacoes,
+        observacoesAgendamento: osCriada.observacoes,
         userId: userIdToSave,
-        criadoEm: now,
-        atualizadoEm: now,
+        criadoEm: Timestamp.now(),
+        atualizadoEm: Timestamp.now(),
       };
       await addDoc(collection(db, "ordensDeProducao"), productionOrderData);
       
       toast({ title: "Ordem de Serviço Salva!", description: `OS #${osDocRefId.substring(0,6)}... salva e ordem de produção criada.` });
       setLastSavedOsData({
         ...data,
-        valorTotalOS: data.valorTotalOS || 0,
         numeroOS: osDocRefId,
         clienteNomeFinal: nomeClienteFinal,
         clienteTelefone: selectedClient?.telefone,
@@ -395,6 +372,7 @@ export default function OrdemServicoPage() {
     }
   }
 
+  // onSaveNewClient permanece igual, pois usa clientService
   async function onSaveNewClient(data: NewClientFormValues) {
     if (!user && !bypassAuth) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
@@ -430,7 +408,7 @@ export default function OrdemServicoPage() {
     }
   }
 
-  const handleAddItem = (itemCatalogo?: ProductService) => { // Alterado para ProductService
+  const handleAddItem = (itemCatalogo?: ProductService) => {
     const newItem: ItemOSFormValues = itemCatalogo ? {
         idTemp: `item-${Date.now()}`,
         produtoServicoId: itemCatalogo.id,
@@ -455,8 +433,8 @@ export default function OrdemServicoPage() {
         update(index, {
             ...currentItem,
             produtoServicoId: undefined, 
-            nome: currentItem.nome, 
-            valorUnitario: currentItem.valorUnitario, 
+            nome: currentItem.nome || "", // Garante que nome não seja undefined
+            valorUnitario: currentItem.valorUnitario ?? 0, // Garante que valorUnitario não seja undefined
             tipo: 'Manual',
         });
     } else {
@@ -495,7 +473,7 @@ export default function OrdemServicoPage() {
             <FileText className="h-6 w-6 text-primary" />
             <div>
               <CardTitle>Nova Ordem de Serviço</CardTitle>
-              <CardDescription>Preencha os dados para criar uma nova OS. Os totais serão calculados no backend.</CardDescription>
+              <CardDescription>Preencha os dados para criar uma nova OS.</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -550,7 +528,7 @@ export default function OrdemServicoPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nome do Cliente Avulso</FormLabel>
-                      <FormControl><Input placeholder="Nome para cliente avulso" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Nome para cliente avulso" {...field} value={field.value || ''} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -596,7 +574,7 @@ export default function OrdemServicoPage() {
                         </div>
                          <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
                             <FormItem className="hidden">
-                                <FormControl><Input {...field} /></FormControl>
+                                <FormControl><Input {...field} value={field.value || 'Manual'} /></FormControl>
                             </FormItem>
                          )}/>
                     </div>
@@ -615,7 +593,7 @@ export default function OrdemServicoPage() {
                     <FormItem>
                         <FormLabel>Valor Total da OS (R$) (Opcional)</FormLabel>
                         <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
-                        <FormDescription>Será calculado no backend se não informado.</FormDescription>
+                        <FormDescription>Se não informado, será calculado com base nos itens ao salvar.</FormDescription>
                         <FormMessage />
                     </FormItem>
                   )}
@@ -679,7 +657,7 @@ export default function OrdemServicoPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Observações (Opcional)</FormLabel>
-                    <FormControl><Textarea placeholder="Detalhes importantes, instruções especiais, etc." {...field} rows={3} /></FormControl>
+                    <FormControl><Textarea placeholder="Detalhes importantes, instruções especiais, etc." {...field} value={field.value || ''} rows={3} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -715,48 +693,48 @@ export default function OrdemServicoPage() {
                <FormField control={newClientForm.control} name="email" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email (Opcional)</FormLabel>
-                  <FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl>
+                  <FormControl><Input type="email" placeholder="email@exemplo.com" {...field} value={field.value || ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
                <FormField control={newClientForm.control} name="telefone" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Telefone (Opcional)</FormLabel>
-                  <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl>
+                  <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} value={field.value || ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={newClientForm.control} name="endereco" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Endereço Completo (Opcional)</FormLabel>
-                  <FormControl><Textarea placeholder="Rua ABC, 123, Bairro, Cidade - UF" {...field} rows={2} /></FormControl>
+                  <FormControl><Textarea placeholder="Rua ABC, 123, Bairro, Cidade - UF" {...field} value={field.value || ''} rows={2} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
                <FormField control={newClientForm.control} name="cpfCnpj" render={({ field }) => (
                 <FormItem>
                   <FormLabel>CPF/CNPJ (Opcional)</FormLabel>
-                  <FormControl><Input placeholder="Documento do cliente" {...field} /></FormControl>
+                  <FormControl><Input placeholder="Documento do cliente" {...field} value={field.value || ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={newClientForm.control} name="dataNascimento" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Data Nascimento (Opcional)</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={newClientForm.control} name="observacoes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Observações (Opcional)</FormLabel>
-                  <FormControl><Textarea placeholder="Preferências, histórico, etc." {...field} rows={2} /></FormControl>
+                  <FormControl><Textarea placeholder="Preferências, histórico, etc." {...field} value={field.value || ''} rows={2} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
                <FormField control={newClientForm.control} name="temDebitos" render={({ field }) => (
                 <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                  <FormControl><input type="checkbox" checked={field.value} onChange={field.onChange} className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" /></FormControl>
+                  <FormControl><input type="checkbox" checked={field.value || false} onChange={field.onChange} className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" /></FormControl>
                   <FormLabel className="font-normal text-sm">Cliente possui débitos pendentes?</FormLabel>
                 </FormItem>
               )} />
@@ -774,7 +752,5 @@ export default function OrdemServicoPage() {
     </div>
   );
 }
-
-
 
     

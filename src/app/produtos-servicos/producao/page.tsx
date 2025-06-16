@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, ListOrdered } from "lucide-react";
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail } from "lucide-react"; // ListOrdered removido
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,7 +39,7 @@ import {
   orderBy,
   getDocs,
   doc,
-  updateDoc,
+  updateDoc, // Mantido para ordensDeProducao, mas ordensServico usará o serviço
   Timestamp,
   runTransaction,
   getDoc,
@@ -47,27 +47,24 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+import { type OrdemServico, OrdemServicoStatusEnum, updateOrdemServico } from '@/services/ordemServicoService'; // Importando serviço e tipo/enum
+import type { ItemOS } from '@/schemas/ordemServicoSchema'; // Para tipo dos itens da OS original
+
+// Tipo ProductionOrderStatus já está em ordemServicoSchema.ts, mas vamos manter um local para clareza se necessário
 type ProductionOrderStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
-interface ItemDaOSOriginal {
-  produtoServicoId: string | null;
-  nome: string;
-  quantidade: number;
-  valorUnitario: number;
-  // valorTotal: number; // Removido para simplificação
-  tipo: 'Produto' | 'Serviço' | 'Manual';
-}
 
-interface OrdemServicoOriginalFirestore {
-  itens: ItemDaOSOriginal[];
-  status: ProductionOrderStatus;
-  // Outros campos da OS original que podem ser úteis...
+// Interface para os dados da OS original, focando nos itens para baixa de estoque
+interface OrdemServicoOriginalComItens {
+  id: string;
+  itens: ItemOS[];
+  status: ProductionOrderStatus; 
 }
 
 
 interface ProductionOrderFirestore {
   id: string;
-  agendamentoId: string; 
+  agendamentoId: string; // Este é o ID da OrdemServico original
   clienteId?: string;
   clienteNome: string;
   servicoNome: string; 
@@ -119,7 +116,6 @@ export default function ProducaoPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<ProductionOrder | null>(null);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [editingOrderDetails, setEditingOrderDetails] = useState<EditingOrderState | null>(null);
 
   const bypassAuth = true;
@@ -178,7 +174,7 @@ export default function ProducaoPage() {
   useEffect(() => {
     const agendamentoIdFromParams = searchParams.get('agendamentoId'); 
     if (agendamentoIdFromParams) {
-      setSearchTerm(agendamentoIdFromParams);
+      setSearchTerm(agendamentoIdFromParams); // Para filtrar pela OS original (agendamentoId)
     }
   }, [searchParams]);
 
@@ -195,16 +191,16 @@ export default function ProducaoPage() {
     setIsViewModalOpen(true);
   }
 
-  const updateOriginalOSStatus = async (osId: string, newStatus: ProductionOrderStatus) => {
+  // Atualizado para usar o serviço
+  const updateOriginalOSStatusViaService = async (osId: string, newStatus: ProductionOrderStatus) => {
     try {
-      const osRef = doc(db, "ordensServico", osId);
-      await updateDoc(osRef, { status: newStatus, atualizadoEm: Timestamp.now() });
-      console.log(`Status da OS ${osId} atualizado para ${newStatus} no documento 'ordensServico'.`);
-    } catch (error) {
-      console.error(`Erro ao atualizar status da OS ${osId} em 'ordensServico':`, error);
+      await updateOrdemServico(osId, { status: newStatus }); // Atualiza apenas o status
+      console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`);
+    } catch (error: any) {
+      console.error(`Erro ao atualizar status da OS ${osId} via serviço:`, error);
       toast({
         title: `Erro ao Sincronizar Status da OS Original`,
-        description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para ${newStatus}.`,
+        description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para ${newStatus}. Detalhe: ${error.message}`,
         variant: "destructive",
       });
     }
@@ -222,14 +218,14 @@ export default function ProducaoPage() {
         atualizadoEm: Timestamp.now()
       });
 
-      await updateOriginalOSStatus(order.agendamentoId, newStatus);
+      await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
 
       if (newStatus === "Concluído") {
         const osOriginalRef = doc(db, "ordensServico", order.agendamentoId); 
         const osOriginalSnap = await getDoc(osOriginalRef);
 
         if (osOriginalSnap.exists()) {
-          const osData = osOriginalSnap.data() as OrdemServicoOriginalFirestore;
+          const osData = osOriginalSnap.data() as OrdemServicoOriginalComItens; // Usando interface ajustada
           if (osData.itens && osData.itens.length > 0) {
             for (const itemOS of osData.itens) {
               if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
@@ -243,9 +239,6 @@ export default function ProducaoPage() {
                     }
                     const produtoData = produtoDoc.data() as any; 
                     const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
-                    
-                    // A política de permitir estoque negativo é confirmada.
-                    // Apenas calculamos o novo estoque.
                     const novoEstoque = estoqueAtual - itemOS.quantidade;
                     transaction.update(produtoCatalogoRef, { 
                       quantidadeEstoque: novoEstoque,
@@ -293,14 +286,14 @@ export default function ProducaoPage() {
             atualizadoEm: Timestamp.now(),
         });
 
-        await updateOriginalOSStatus(viewingOrder.agendamentoId, newStatus);
+        await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus);
         
         if (newStatus === "Concluído" && viewingOrder.status !== "Concluído") {
             const osOriginalRef = doc(db, "ordensServico", viewingOrder.agendamentoId);
             const osOriginalSnap = await getDoc(osOriginalRef);
 
             if (osOriginalSnap.exists()) {
-                const osData = osOriginalSnap.data() as OrdemServicoOriginalFirestore;
+                const osData = osOriginalSnap.data() as OrdemServicoOriginalComItens;
                 if (osData.itens && osData.itens.length > 0) {
                     for (const itemOS of osData.itens) {
                         if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
@@ -367,7 +360,7 @@ export default function ProducaoPage() {
         (order.observacoesAgendamento && order.observacoesAgendamento.toLowerCase().includes(searchTermLower)) ||
         (order.observacoesProducao && order.observacoesProducao.toLowerCase().includes(searchTermLower)) ||
         order.id.toLowerCase().includes(searchTermLower) ||
-        (order.agendamentoId && order.agendamentoId.toLowerCase().includes(searchTermLower));
+        (order.agendamentoId && order.agendamentoId.toLowerCase().includes(searchTermLower)); // Filtrar por agendamentoId (OS ID)
       return statusMatch && searchTermMatch;
     });
   }, [productionOrders, statusFilters, searchTerm]);
@@ -550,3 +543,4 @@ export default function ProducaoPage() {
   );
 }
 
+    

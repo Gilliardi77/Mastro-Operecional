@@ -16,10 +16,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
+// import { db } from "@/lib/firebase"; // Removido, usar serviço
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, addDoc } from "firebase/firestore";
+// import { collection, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, addDoc } from "firebase/firestore"; // Removido
+import { Timestamp, collection, addDoc } from "firebase/firestore"; // Mantido para addDoc de lancamentosFinanceiros
+import { db } from "@/lib/firebase"; // Mantido para addDoc de lancamentosFinanceiros
+
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogPrimitiveDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -30,11 +33,24 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+// import { z } from "zod"; // Removido, usar do schema
 import { cn } from '@/lib/utils';
 
-type OrdemServicoStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
-type PaymentStatus = "Pendente" | "Pago Parcial" | "Pago Total";
+import { 
+  getAllOrdensServicoByUserId, 
+  updateOrdemServico,
+  // getOrdemServicoById, // Não usado diretamente aqui
+  // createOrdemServico, // Não usado diretamente aqui
+  // deleteOrdemServico // Não usado diretamente aqui
+} from '@/services/ordemServicoService';
+import { 
+  type OrdemServico, 
+  type OrdemServicoStatus, 
+  type PaymentStatus,
+  PagamentoOsSchema, // Usar o schema do arquivo de OS
+  type PagamentoOsFormValues // Usar o tipo do arquivo de OS
+} from '@/schemas/ordemServicoSchema';
+
 
 const paymentMethods = [
   { value: "dinheiro", label: "Dinheiro" },
@@ -44,50 +60,11 @@ const paymentMethods = [
   { value: "boleto", label: "Boleto Bancário" },
 ];
 
-interface ItemOS {
-  produtoServicoId?: string | null;
-  nome: string;
-  quantidade: number;
-  valorUnitario: number;
-  tipo: 'Produto' | 'Serviço' | 'Manual';
+// OrdemServicoListData combina OrdemServico com campos transformados para UI
+interface OrdemServicoListData extends OrdemServico {
+  servicoDescricao: string; // Campo calculado para UI
 }
 
-interface OrdemServicoFirestore {
-  id: string;
-  numeroOS: string;
-  clienteId?: string | null;
-  clienteNome: string;
-  itens: ItemOS[];
-  valorTotal: number;
-  valorAdiantado: number;
-  dataEntrega: Timestamp;
-  observacoes?: string;
-  status: OrdemServicoStatus;
-  userId: string;
-  criadoEm: Timestamp;
-  atualizadoEm: Timestamp;
-  // Campos de pagamento
-  statusPagamento?: PaymentStatus;
-  valorPagoTotal?: number;
-  dataUltimoPagamento?: Timestamp;
-  formaUltimoPagamento?: string;
-  observacoesPagamento?: string;
-}
-
-interface OrdemServicoListData extends Omit<OrdemServicoFirestore, 'criadoEm' | 'dataEntrega' | 'dataUltimoPagamento' | 'atualizadoEm' | 'itens'> {
-  dataCriacao: Date;
-  dataEntregaPrevista: Date;
-  servicoDescricao: string;
-  dataUltimoPagamento?: Date;
-}
-
-const pagamentoOsSchema = z.object({
-  valorPago: z.coerce.number().positive({ message: "O valor pago deve ser positivo." }),
-  formaPagamento: z.string().min(1, { message: "Selecione a forma de pagamento." }),
-  dataPagamento: z.date({ required_error: "A data do pagamento é obrigatória." }),
-  observacoesPagamento: z.string().optional(),
-});
-type PagamentoOsFormValues = z.infer<typeof pagamentoOsSchema>;
 
 const getStatusVariant = (status: OrdemServicoStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
@@ -101,9 +78,9 @@ const getStatusVariant = (status: OrdemServicoStatus): "default" | "secondary" |
 
 const getPaymentStatusVariant = (status?: PaymentStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
-    case "Pago Total": return "default"; // verde (shadcn default é primary)
-    case "Pago Parcial": return "secondary"; // amarelo/cinza
-    case "Pendente": return "outline"; // outline/vermelho claro
+    case "Pago Total": return "default"; 
+    case "Pago Parcial": return "secondary"; 
+    case "Pendente": return "outline"; 
     default: return "outline";
   }
 };
@@ -123,7 +100,7 @@ export default function OrdensServicoPage() {
   const bypassAuth = true;
 
   const paymentForm = useForm<PagamentoOsFormValues>({
-    resolver: zodResolver(pagamentoOsSchema),
+    resolver: zodResolver(PagamentoOsSchema),
     defaultValues: {
       valorPago: 0,
       dataPagamento: new Date(),
@@ -140,47 +117,24 @@ export default function OrdensServicoPage() {
     }
     setIsLoading(true);
     try {
-      const collectionRef = collection(db, "ordensServico");
-      const q = query(
-        collectionRef,
-        where("userId", "==", userIdToQuery),
-        orderBy("criadoEm", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      const fetchedOrdens = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data() as OrdemServicoFirestore;
-        const id = docSnap.id;
+      const fetchedOrdens = await getAllOrdensServicoByUserId(userIdToQuery, 'createdAt', 'desc');
+      
+      const ordensParaLista = fetchedOrdens.map(order => {
         let servicoDescricao = "Serviço/Produto não especificado";
-        if (data.itens && data.itens.length > 0) {
-          servicoDescricao = data.itens[0].nome;
-          if (data.itens.length > 1) {
-            servicoDescricao += ` e mais ${data.itens.length - 1} item(ns)`;
+        if (order.itens && order.itens.length > 0) {
+          servicoDescricao = order.itens[0].nome;
+          if (order.itens.length > 1) {
+            servicoDescricao += ` e mais ${order.itens.length - 1} item(ns)`;
           }
-        } else if (data.observacoes) {
-          servicoDescricao = data.observacoes.substring(0, 50) + (data.observacoes.length > 50 ? "..." : "");
+        } else if (order.observacoes) {
+          servicoDescricao = order.observacoes.substring(0, 50) + (order.observacoes.length > 50 ? "..." : "");
         }
-
         return {
-          id: id,
-          numeroOS: data.numeroOS || id,
-          clienteNome: data.clienteNome,
-          servicoDescricao: servicoDescricao,
-          dataCriacao: data.criadoEm.toDate(),
-          dataEntregaPrevista: data.dataEntrega.toDate(),
-          status: data.status,
-          valorTotal: data.valorTotal,
-          userId: data.userId,
-          clienteId: data.clienteId,
-          valorAdiantado: data.valorAdiantado,
-          observacoes: data.observacoes,
-          statusPagamento: data.statusPagamento || "Pendente",
-          valorPagoTotal: data.valorPagoTotal || 0,
-          dataUltimoPagamento: data.dataUltimoPagamento?.toDate(),
-          formaUltimoPagamento: data.formaUltimoPagamento,
-          observacoesPagamento: data.observacoesPagamento,
-        } as OrdemServicoListData;
+          ...order,
+          servicoDescricao,
+        };
       });
-      setOrdensServico(fetchedOrdens);
+      setOrdensServico(ordensParaLista);
     } catch (error: any) {
       console.error("Erro ao buscar Ordens de Serviço:", error);
       toast({ title: "Erro ao buscar OS", description: `Não foi possível carregar os dados. ${error.message}`, variant: "destructive" });
@@ -210,10 +164,10 @@ export default function OrdensServicoPage() {
     setSelectedOrderForPayment(order);
     const valorPendente = order.valorTotal - (order.valorPagoTotal || 0);
     paymentForm.reset({
-      valorPago: valorPendente > 0 ? valorPendente : 0,
+      valorPago: valorPendente > 0 ? parseFloat(valorPendente.toFixed(2)) : 0, // Garantir que é número e com 2 casas decimais
       formaPagamento: paymentMethods[0].value,
       dataPagamento: new Date(),
-      observacoesPagamento: "",
+      observacoesPagamento: order.observacoesPagamento || "",
     });
     setIsPaymentModalOpen(true);
   };
@@ -231,7 +185,6 @@ export default function OrdensServicoPage() {
       return;
     }
 
-    const osRef = doc(db, "ordensServico", selectedOrderForPayment.id);
     const valorTotalDaOS = selectedOrderForPayment.valorTotal;
     const valorJaPagoAnteriormente = selectedOrderForPayment.valorPagoTotal || 0;
     const valorAcumuladoPago = valorJaPagoAnteriormente + data.valorPago;
@@ -244,26 +197,26 @@ export default function OrdensServicoPage() {
     }
 
     try {
-      await updateDoc(osRef, {
+      await updateOrdemServico(selectedOrderForPayment.id, {
         valorPagoTotal: valorAcumuladoPago,
         statusPagamento: novoStatusPagamento,
-        dataUltimoPagamento: Timestamp.fromDate(data.dataPagamento),
+        dataUltimoPagamento: data.dataPagamento, // Enviando Date, será convertido pelo firestoreService
         formaUltimoPagamento: data.formaPagamento,
         observacoesPagamento: data.observacoesPagamento || "",
-        atualizadoEm: Timestamp.now(),
       });
 
+      // Lógica de lançamento financeiro mantida, mas agora usa Timestamp.fromDate
       await addDoc(collection(db, "lancamentosFinanceiros"), {
         titulo: `Pagamento OS #${selectedOrderForPayment.numeroOS.substring(0,6)} - ${selectedOrderForPayment.clienteNome}`,
         valor: data.valorPago,
         tipo: 'receita',
         data: Timestamp.fromDate(data.dataPagamento),
         categoria: "Receita de OS",
-        status: "recebido", // Simplificado; boletos poderiam ser 'pendente'
+        status: "recebido", 
         referenciaOSId: selectedOrderForPayment.id,
         userId: userIdToSave,
-        criadoEm: Timestamp.now(),
-        atualizadoEm: Timestamp.now(),
+        createdAt: Timestamp.now(), // Usando Timestamp do Firestore
+        updatedAt: Timestamp.now(), // Usando Timestamp do Firestore
       });
 
       toast({ title: "Pagamento Registrado!", description: "O pagamento foi registrado e um lançamento financeiro foi criado." });
@@ -349,8 +302,8 @@ export default function OrdensServicoPage() {
                     <TableCell className="font-medium">{order.numeroOS.substring(0,8)}...</TableCell>
                     <TableCell>{order.clienteNome}</TableCell>
                     <TableCell>{order.servicoDescricao}</TableCell>
-                    <TableCell className="hidden md:table-cell">{format(order.dataCriacao, "dd/MM/yy", { locale: ptBR })}</TableCell>
-                    <TableCell className="hidden md:table-cell">{format(order.dataEntregaPrevista, "dd/MM/yy", { locale: ptBR })}</TableCell>
+                    <TableCell className="hidden md:table-cell">{format(order.createdAt, "dd/MM/yy", { locale: ptBR })}</TableCell>
+                    <TableCell className="hidden md:table-cell">{format(order.dataEntrega, "dd/MM/yy", { locale: ptBR })}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant={getStatusVariant(order.status)}>{order.status}</Badge>
                     </TableCell>
@@ -479,4 +432,6 @@ export default function OrdensServicoPage() {
     </div>
   );
 }
+    
+
     
