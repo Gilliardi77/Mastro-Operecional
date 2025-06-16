@@ -1,96 +1,392 @@
+# Guia Unificado de Dados e Backend para o Business Maestro
 
-# Guia Unificado de Dados e Backend - Maestro Operacional
-
-Este documento serve como guia central para o desenvolvimento de backend e gerenciamento de dados para todas as aplicações do ecossistema "Maestro Operacional". O objetivo é garantir consistência, qualidade, e facilitar a manutenção e evolução dos sistemas.
-
-## 1. Inicialização e Configuração do Firebase
-
-### 1.1. Centralização
-A inicialização do Firebase no lado do cliente é centralizada no módulo `src/lib/firebase.ts`. Este deve ser o único ponto de inicialização da aplicação Firebase.
-
-### 1.2. Variáveis de Ambiente
-É **crítico** configurar corretamente as seguintes variáveis de ambiente no seu arquivo `.env` (para desenvolvimento local) ou nas configurações de ambiente do seu provedor de hospedagem (para produção):
-- `NEXT_PUBLIC_FIREBASE_API_KEY`
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-- `NEXT_PUBLIC_FIREBASE_APP_ID`
-
-O módulo `src/lib/firebase.ts` inclui verificações e logs para alertar sobre a ausência dessas variáveis. Certifique-se de que elas estão presentes e corretas para evitar falhas na inicialização do Firebase.
-
-### 1.3. Acesso às Instâncias Firebase
-As instâncias do Firebase (app, auth, db, storage) devem ser obtidas exclusivamente através da função `getFirebaseInstances()` exportada por `src/lib/firebase.ts`. A inicialização ocorre automaticamente na primeira importação deste módulo em um contexto de cliente.
-
-## 2. Camada de Serviço Abstrata para Firestore (`src/services/firestoreService.ts`)
-
-### 2.1. Ponto Único de Acesso CRUD
-O `firestoreService.ts` é a **única interface direta** para operações básicas de Create, Read, Update, Delete (CRUD) com o Firestore para todas as entidades do backend. Nenhum outro módulo (exceto os serviços de entidade) deve interagir diretamente com o SDK do Firestore para estas operações.
-
-### 2.2. Gerenciamento Automático de Campos
-O `firestoreService.ts` gerencia automaticamente os seguintes campos:
-- **Na Criação:** Adiciona `userId` (do usuário autenticado), `createdAt` (como `Date`), e `updatedAt` (como `Date`) a novos documentos.
-- **Na Atualização:** Atualiza automaticamente o campo `updatedAt` (como `Date`) em documentos existentes.
-
-### 2.3. Conversão de Timestamps
-O `firestoreService.ts` é responsável pela conversão transparente entre objetos `Date` do JavaScript (usados na lógica da aplicação e nos schemas Zod antes de enviar ao Firestore) e objetos `Timestamp` do Firestore (para armazenamento e recuperação). Os schemas Zod devem usar o `FirestoreTimestampSchema` para campos de data.
-
-### 2.4. Validação com Zod na Camada de Serviço
-O `firestoreService.ts` utiliza schemas Zod para validação:
-- `createSchema`: Fornecido pelo serviço da entidade para validar os dados de entrada brutos antes da adição dos campos automáticos.
-- `fullSchema`: Fornecido pelo serviço da entidade para validar a estrutura completa do documento (após a adição dos campos automáticos e conversão de timestamps) ao ser retornado do Firestore.
-
-## 3. Serviços Dedicados por Entidade (Ex: `clientService.ts`)
-
-### 3.1. Estrutura Padrão
-Cada entidade de dados principal (Clientes, Produtos, Ordens de Serviço, etc.) deve ter seu próprio arquivo de serviço localizado em `src/services/`. Ex: `src/services/clientService.ts`.
-
-### 3.2. Responsabilidades
-Os serviços de entidade são responsáveis por:
-- Definir a lógica de negócios específica da entidade (se houver).
-- Utilizar **exclusivamente** as funções fornecidas pelo `src/services/firestoreService.ts` para qualquer persistência de dados.
-- Fornecer os schemas Zod corretos (de criação, atualização e completo da entidade) para as funções do `firestoreService.ts`.
-
-### 3.3. Interface Pública
-Cada serviço de entidade deve expor uma API clara e bem definida para outras partes da aplicação interagirem com aquela entidade. Ex: `createClient(userId: string, data: ClientCreateData): Promise<Client>`.
-
-## 4. Definições de Schema com Zod (`src/schemas/`)
-
-### 4.1. `src/schemas/commonSchemas.ts`
-- **`BaseSchema`**: Deve ser estendido por todos os schemas de entidade principais. Define os campos `id: string`, `userId: string`, `createdAt: FirestoreTimestampSchema`, `updatedAt: FirestoreTimestampSchema`.
-- **`FirestoreTimestampSchema`**: Um schema Zod customizado (`z.custom().transform()`) que valida e transforma Timestamps do Firestore em objetos `Date` JavaScript na leitura, e aceita objetos `Date` na escrita para serem convertidos em Timestamps pelo `firestoreService`.
-- **`BaseCreateSchema`**: Schema base para dados de criação de novas entidades (geralmente um `z.object({}).passthrough()` para ser estendido).
-- **`BaseUpdateSchema`**: Schema base para dados de atualização de entidades existentes (geralmente um `z.object({}).passthrough()` para ser estendido, com campos opcionais).
-
-### 4.2. Schemas por Entidade (Ex: `src/schemas/clientSchema.ts`)
-Para cada entidade, definir:
-- **`EntitySchema` (ex: `ClientSchema`):** Estende `BaseSchema`. Representa a estrutura completa do documento como é lido do Firestore e usado na aplicação (com campos `Date` já convertidos).
-- **`EntityCreateSchema` (ex: `ClientCreateSchema`):** Estende `BaseCreateSchema`. Valida os dados brutos na criação. Campos de data devem ser compatíveis com o que `FirestoreTimestampSchema` espera para transformação em `Date`.
-- **`EntityUpdateSchema` (ex: `ClientUpdateSchema`):** Estende `BaseUpdateSchema`. Valida dados para atualizações parciais; todos os campos da entidade devem ser opcionais. Mesma consideração para campos de data.
-
-### 4.3. Schemas de Formulário (UI)
-Podem existir schemas Zod específicos para formulários na UI, localizados próximos aos componentes que os utilizam ou em uma subpasta dentro de `src/schemas/ui/`. Estes podem diferir dos schemas de backend (ex: datas como strings para inputs HTML) e são responsabilidade da camada de apresentação.
-
-## 5. Tratamento de Erros nos Serviços
-- O `firestoreService.ts` propaga erros de validação Zod e erros do Firestore.
-- Os serviços de entidade (ex: `clientService.ts`) devem capturar esses erros.
-- Se necessário, podem re-lançá-los com mais contexto ou transformá-los em tipos de erro específicos da aplicação para tratamento uniforme no frontend (ex: exibição de `toast`s).
-
-## 6. Padrões de Desenvolvimento Específicos
-
-### 6.1. `bypassAuth` e `bypass_user_placeholder`
-- Para facilitar o desenvolvimento local sem autenticação completa, o padrão de usar uma flag `bypassAuth: boolean` e um `userId` placeholder (ex: `"bypass_user_placeholder"`) pode ser adotado.
-- **Regras de Segurança Firestore:** O Guia deve instruir que, para este modo de desenvolvimento, as Regras de Segurança do Firestore precisam ser temporariamente ajustadas para permitir acesso (leitura/escrita conforme necessário) para este `userId` placeholder ou para usuários não autenticados (`request.auth == null`).
-  ```rules
-  // Exemplo para desenvolvimento - NÃO USAR EM PRODUÇÃO SEM REVISÃO
-  match /suaColecao/{docId} {
-    allow read: if request.auth != null || request.auth.uid == "bypass_user_placeholder";
-    allow write: if request.auth != null && request.auth.uid == resource.data.userId;
-  }
-  ```
-- **Aviso de Segurança:** Incluir um aviso **MUITO CLARO** de que estas regras permissivas são **APENAS PARA DESENVOLVIMENTO** e devem ser substituídas por regras restritivas e seguras antes de qualquer implantação em produção. Em produção, o `bypass_user_placeholder` não deve ter acesso.
+Este documento é a **fonte única de verdade** para todas as IAs, desenvolvedores humanos e sistemas que interagem com os dados da aplicação **Business Maestro**. Ele estabelece um padrão universal, prático e automático para criação, leitura, atualização, exclusão e indexação de dados no Firestore, assim como para a modelagem de schemas, geração de serviços e organização geral do backend.
 
 ---
 
-Este guia é um documento vivo e deve ser atualizado conforme novas decisões de arquitetura e padrões são estabelecidos.
-    
+## ✨ Princípios Inquebráveis
+
+1. **Schemas são a Verdade:** Toda entidade tem seu schema definido em `src/schemas/`, usando Zod. Nenhum dado é enviado ou recebido sem validação.
+2. **Serviços são a Ponte com o Firestore:** Toda interação com o banco deve passar por `src/services/[entidade]Service.ts`. Nunca interaja com o Firestore diretamente.
+3. **Validação por Zod:** Sempre use `Zod` para validar, transformar e tipar os dados.
+4. **Documentação Integrada (JSDoc):** Todos os campos e funções devem ter descrições claras para uso humano e por IA.
+5. **Gerador de Entidades Automatizado (futuro):** Este documento serve como base para scripts automatizados de geração.
+
+---
+
+## 🔎 JSON Padrão de Entidade (Modelo para IA)
+
+Este é um modelo que pode ser usado para instruir uma IA a gerar os artefatos para uma nova entidade.
+
+```json
+{
+  "entity": "[nomeSingularDaEntidade]",
+  "schemaFile": "src/schemas/[nomeSingularDaEntidade]Schema.ts",
+  "serviceFile": "src/services/[nomeSingularDaEntidade]Service.ts",
+  "firestoreCollection": "[nomeDaColecaoNoPlural]",
+  "types": {
+    "full": "[NomeEntidadeCapitalizado]",
+    "create": "[NomeEntidadeCapitalizado]CreateData",
+    "update": "[NomeEntidadeCapitalizado]UpdateData"
+  },
+  "fields": [
+    { "name": "campoExemplo1", "type": "string", "required": true, "description": "Descrição do campo 1." },
+    { "name": "campoExemplo2", "type": "number", "required": false, "description": "Descrição do campo 2 (opcional)." },
+    { "name": "campoEnum", "type": "enum", "values": ["VALOR1", "VALOR2"], "required": true, "description": "Campo com valores predefinidos." },
+    { "name": "dataExemplo", "type": "timestamp", "required": false, "description": "Campo de data/hora." }
+  ],
+  "requiresUserId": true,
+  "hasTimestamps": true,
+  "firestoreRules": {
+    "create": "isRequestDataOwner()",
+    "read": "isResourceOwner()",
+    "update": "isResourceOwner()",
+    "delete": "isResourceOwner()"
+  },
+  "defaultSortField": "nome",
+  "customQueries": [
+    { "name": "getByAlgumCampoEspecifico", "params": ["userId: string", "valorCampo: string"], "description": "Busca entidades por um campo específico." }
+  ]
+}
+```
+
+---
+
+## 📃 Como Criar ou Entender uma Nova Entidade (Manual Universal)
+
+Para qualquer entidade de dados no Business Maestro:
+
+### 1. Schema (`src/schemas/[entidade]Schema.ts`)
+
+*   **Definição da Estrutura:** Contém o schema Zod principal (ex: `ClientSchema`), que define todos os campos, tipos e validações.
+*   **Tipos Derivados:** Exporta tipos TypeScript (ex: `Client`) inferidos do schema Zod.
+*   **Schemas de Criação/Atualização:** Exporta schemas específicos para criação (ex: `ClientCreateSchema`) e atualização (ex: `ClientUpdateSchema`), omitindo campos gerenciados pelo sistema (`id`, `userId`, `createdAt`, `updatedAt`) ou tornando campos opcionais para atualização.
+*   **Herança de Base:** Os schemas estendem `BaseSchema`, `BaseCreateSchema`, `BaseUpdateSchema` de `src/schemas/commonSchemas.ts`, que já incluem `id`, `userId`, `createdAt`, `updatedAt` (este último gerenciado pelo `firestoreService`).
+*   **Documentação JSDoc:** Cada campo no schema Zod deve ter um `.describe()` com uma explicação clara.
+
+### 2. Serviço (`src/services/[entidade]Service.ts`)
+
+*   **Ponto de Acesso Único:** Toda interação com a entidade no Firestore DEVE passar por este serviço.
+*   **Funções CRUD:** Exporta funções como `create[Entidade]`, `get[Entidade]ById`, `getAll[Entidades]ByUserId`, `update[Entidade]`, `delete[Entidade]`.
+*   **Uso do `firestoreService`:** Internamente, estas funções utilizam as funções genéricas de `src/services/firestoreService.ts`.
+*   **Validação de Entrada:** Os dados recebidos pelas funções do serviço são validados usando os schemas Zod apropriados (ex: `ClientCreateSchema.parse(data)`).
+*   **Tipagem de Retorno:** As funções retornam os tipos definidos no schema (ex: `Promise<Client>`).
+
+### 3. Exemplo de Interação (Criando uma Fatura)
+
+```typescript
+// Em algum lugar do seu código (ex: um fluxo Genkit, uma página Next.js)
+import { createFatura, type FaturaCreateData } from '@/services/faturaService'; // Supondo que faturaService exista
+
+async function registrarNovaFatura(userId: string) {
+  const dadosNovaFatura: FaturaCreateData = {
+    descricao: "Consultoria de Marketing Digital - Mês de Julho",
+    valor: 1500.50,
+    vencimento: new Date('2024-07-31'), // O schema pode converter para Timestamp ou string
+    pago: false,
+    // campos como clienteId, etc., seriam adicionados aqui
+  };
+
+  try {
+    // A validação dos dadosNovaFatura contra FaturaCreateSchema
+    // é feita DENTRO da função createFatura (ou antes de chamar createDocument no firestoreService).
+    const faturaCriada = await createFatura(userId, dadosNovaFatura);
+    console.log("Fatura criada com sucesso:", faturaCriada);
+    // faturaCriada terá id, userId, createdAt, updatedAt preenchidos.
+  } catch (error) {
+    console.error("Erro ao criar fatura:", error);
+  }
+}
+```
+*Nota: No exemplo acima, a assinatura de `createDocument` no `firestoreService.ts` (neste guia) é idealmente `createDocument<TFull, TCreateInput>(...)` onde `TCreateInput` é validado pelo serviço da entidade ANTES de chamar `createDocument`. A implementação atual do `firestoreService.ts` neste projeto ("Maestro Operacional") pode diferir ligeiramente, recebendo o schema de criação para validação interna.*
+
+### 4. Regras do Firestore (`firestore.rules`)
+
+*   Define quem pode ler e escrever na coleção da entidade.
+*   Normalmente, usa as funções utilitárias `isRequestDataOwner()` e `isResourceOwner()`.
+    ```firestore
+    match /[nomeDaColecaoNoPlural]/{docId} {
+      allow create: if isRequestDataOwner(); // Usuário logado e userId no dado é o do requisitante
+      allow read, update, delete: if isResourceOwner(); // Usuário logado e userId no recurso é o do requisitante
+    }
+    ```
+
+### 5. Índices do Firestore (`firestore.indexes.json`)
+
+*   Se a entidade precisa de consultas compostas ou ordenações específicas não padrão, defina os índices aqui.
+    ```json
+    {
+      "collectionGroup": "[nomeDaColecaoNoPlural]",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "[campoParaOrdenar]", "order": "DESCENDING" }
+      ]
+    }
+    ```
+
+---
+
+## 🤖 Prompt Padrão para Geração de Entidade por IA
+
+> Crie uma nova entidade chamada `[NomeEntidadeSingular]` para o Business Maestro.
+> A coleção no Firestore será `[nomeEntidadePlural]`.
+>
+> Campos obrigatórios:
+> `[campo1: tipo (ex: string, number, boolean, enum:VALOR1,VALOR2, timestamp), descrição]`
+> `[campo2: tipo, descrição]`
+>
+> Campos opcionais:
+> `[campoOpcional1: tipo, descrição]`
+>
+> A entidade requer `userId` e timestamps padrão (`createdAt`, `updatedAt`).
+> As regras do Firestore devem permitir que o proprietário crie, leia, atualize e delete seus próprios documentos.
+> O ordenamento padrão na listagem deve ser por `[campoPadraoDeOrdenacao]`.
+>
+> Gere os seguintes arquivos e trechos de código:
+> 1.  **Schema Zod:** Em `src/schemas/[nomeEntidadeSingular]Schema.ts`, incluindo `[NomeEntidadeCapitalizado]Schema`, `[NomeEntidadeCapitalizado]CreateSchema`, `[NomeEntidadeCapitalizado]UpdateSchema` e os tipos TypeScript correspondentes. Use JSDoc para descrever cada campo.
+> 2.  **Serviço:** Em `src/services/[nomeEntidadeSingular]Service.ts`, com as funções `create[NomeEntidadeCapitalizado]`, `get[NomeEntidadeCapitalizado]ById`, `getAll[NomeEntidadeCapitalizadoPlural]ByUserId`, `update[NomeEntidadeCapitalizado]`, `delete[NomeEntidadeCapitalizado]`. O serviço deve usar o `firestoreService.ts` genérico e os schemas Zod para validação.
+> 3.  **Regras do Firestore:** O trecho para `firestore.rules` para a coleção `[nomeEntidadePlural]`.
+> 4.  **Índice do Firestore (se necessário):** Sugestão para `firestore.indexes.json` para a consulta `getAll` ordenada por `userId` e `[campoPadraoDeOrdenacao]`.
+
+---
+## 🗂️ Entidade Especial: Perfil de Usuário / Empresa (`usuarios`)
+
+A gestão do perfil do usuário e dos dados da empresa é crucial para a consistência entre os diferentes módulos/aplicativos do Business Maestro.
+
+*   **Coleção no Firestore:** `usuarios`
+*   **ID do Documento:** O `uid` do usuário do Firebase Authentication.
+*   **Fonte da Verdade para Dados Básicos de Auth:** Firebase Authentication (nome de exibição, email). Alterações no nome de exibição devem ser feitas via SDK do Firebase Auth.
+*   **Fonte da Verdade para Dados Adicionais:** A coleção `usuarios` no Firestore.
+*   **Schema de Definição:** `src/schemas/userProfileSchema.ts` (contém `UserProfileDataSchema` e `UserProfileUpsertDataSchema`). Este schema define campos como `companyName`, `companyCnpj`, `businessType`, `companyPhone`, `companyEmail`, `personalPhoneNumber`, além de `createdAt` e `updatedAt`.
+*   **Serviço de Interação:** `src/services/userProfileService.ts` (contém `getUserProfile` e `upsertUserProfile`).
+    *   `getUserProfile(userId: string)`: Busca o perfil do Firestore.
+    *   `upsertUserProfile(userId: string, data: UserProfileUpsertData)`: Cria ou atualiza o perfil no Firestore.
+*   **Consistência Entre Módulos/Apps:**
+    *   Todos os módulos/apps do ecossistema Business Maestro que precisam acessar ou modificar dados de perfil/empresa DEVEM:
+        1.  Obter o `uid` do usuário autenticado.
+        2.  Usar o `userProfileService.ts` (ou uma implementação equivalente que utilize a coleção `usuarios` e o `uid` como ID do documento) para ler ou escrever esses dados.
+        3.  Respeitar o `UserProfileDataSchema` para a estrutura dos dados.
+    *   Alterações feitas no perfil do usuário (ex: informações da empresa) através de um app (ex: app de Diagnóstico) serão refletidas nos outros apps (ex: app Operacional) se eles seguirem este padrão de acesso à coleção `usuarios`.
+
+---
+
+## 💡 Entidades Geradas pelo Módulo de Diagnóstico (Relevantes para Integração)
+
+Esta seção detalha as coleções chave que o módulo "Diagnóstico Maestro" (este aplicativo) cria e que são importantes para outros aplicativos do ecossistema "Gestor Maestro" consumirem para uma experiência integrada.
+
+### 1. Metadados da Consulta de Diagnóstico (`consultationsMetadata`)
+*   **Coleção no Firestore:** `consultationsMetadata`
+*   **ID do Documento:** O `uid` do usuário do Firebase Authentication.
+*   **Propósito:** Rastrear o status da consulta de diagnóstico inicial do usuário.
+*   **Campos Chave para Outros Apps:**
+    *   `completed` (boolean): Indica se o usuário completou o diagnóstico inicial. `true` se completou, `false` ou ausente caso contrário.
+    *   `completedAt` (timestamp): Data e hora em que o diagnóstico foi concluído.
+    *   `createdAt` (timestamp): Data e hora em que o registro foi criado (geralmente quando o usuário se registra ou inicia a primeira interação).
+*   **Uso por Outros Apps:**
+    *   Verificar se o usuário já passou pelo diagnóstico inicial para personalizar a experiência ou oferecer prompts para completá-lo.
+    *   Entender quando o usuário entrou no ecossistema.
+*   **Schema de Definição:** (Implícito, mas simples) `userId` (implícito pelo ID do doc), `completed: boolean`, `completedAt: Timestamp`, `createdAt: Timestamp`.
+*   **Serviço de Interação (neste app):** A lógica de atualização está no `AuthContext` (`setAuthConsultationCompleted`) e no `ConsultationContext`.
+*   **Regras do Firestore (Exemplo):**
+    ```firestore
+    match /consultationsMetadata/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId; // Usuário lê seus próprios metadados
+      allow write: if request.auth != null && request.auth.uid == userId; // Usuário pode atualizar seus metadados (ex: via AuthContext)
+    }
+    ```
+
+### 2. Planejamento Estratégico e Metas do Usuário (`userGoals`)
+*   **Coleção no Firestore:** `userGoals`
+*   **ID do Documento:** Gerado automaticamente pelo Firestore. Cada documento representa um planejamento/análise de metas.
+*   **Propósito:** Armazenar os resultados da análise estratégica gerada pela IA na página `/goals` deste aplicativo, incluindo dados financeiros fornecidos pelo usuário, suas metas e o plano de ação sugerido pela IA.
+*   **Campos Chave para Outros Apps:**
+    *   `userId` (string): O UID do usuário proprietário desta meta/planejamento.
+    *   `createdAt` (timestamp): Data e hora da criação do planejamento.
+    *   `inputData` (object): Os dados que o usuário forneceu no formulário da página `/goals`.
+        *   `currentRevenue` (number): Receita mensal atual.
+        *   `currentExpenses` (number): Despesas mensais atuais.
+        *   `targetRevenueGoal` (number): Meta de receita mensal desejada.
+        *   `userQuestion` (string): Cenário ou pergunta do usuário.
+        *   `businessSegment` (string, opcional): Segmento do negócio.
+        *   `ticketMedioAtual` (number, opcional): Ticket médio.
+        *   `taxaConversaoOrcamentos` (number, opcional): Taxa de conversão.
+        *   `principaisFontesReceita` (string, opcional): Fontes de receita.
+        *   `maioresCategoriasDespesa` (string, opcional): Categorias de despesa.
+        *   `saldoCaixaAtual` (number, opcional): Saldo em caixa.
+    *   `analysisResult` (object): A resposta completa da IA (tipo `GenerateGoalsAnalysisOutput` do fluxo `generate-goals-analysis-flow.ts`).
+        *   `currentProfit` (number): Lucro atual calculado.
+        *   `targetProfit` (number): Lucro alvo calculado.
+        *   `revenueGap` (number): Diferença para a meta de receita.
+        *   `businessDiagnosis` (string): Diagnóstico do negócio pela IA.
+        *   `aiConsultantResponse` (string): Resposta consultiva principal da IA.
+        *   `suggestions` (array de strings): Sugestões de foco estratégico.
+        *   `actionPlan` (array de strings): Plano de ação inicial.
+        *   `preventiveAlerts` (array de strings, opcional): Alertas preventivos.
+    *   `status` (string, opcional): Ex: 'active', 'archived'. (Padrão 'active')
+    *   `type` (string, opcional): Ex: 'strategic_planning'. (Padrão 'strategic_planning')
+*   **Uso por Outros Apps:**
+    *   **Visão Clara Financeira:** Pode usar `currentRevenue`, `currentExpenses`, `targetRevenueGoal` e o `actionPlan` para pré-configurar dashboards, metas financeiras e sugerir ações de acompanhamento. Pode também permitir que o usuário marque itens do `actionPlan` como concluídos.
+    *   **Maestro Operacional:** Pode usar o `businessSegment`, `principaisFontesReceita` e `actionPlan` para contextualizar sugestões operacionais ou destacar áreas de foco em vendas e produção.
+    *   Qualquer app pode usar o `userQuestion` e `aiConsultantResponse` para entender as dores e os direcionamentos estratégicos do usuário.
+*   **Consulta:** Outros apps devem buscar o `userGoals` mais recente para o `userId` (ordenando por `createdAt` descendente e pegando o primeiro, se aplicável).
+*   **Schema de Definição:** Os tipos `GenerateGoalsAnalysisInput` e `GenerateGoalsAnalysisOutput` (de `src/ai/flows/generate-goals-analysis-flow.ts`) definem a estrutura de `inputData` e `analysisResult`.
+*   **Serviço de Interação (neste app):** A página `/goals` salva esses dados.
+*   **Regras do Firestore (Exemplo):**
+    ```firestore
+    match /userGoals/{goalId} {
+      allow create: if isRequestDataOwner(); // request.auth.uid == request.resource.data.userId
+      allow read, update, delete: if isResourceOwner(); // request.auth.uid == resource.data.userId
+    }
+    ```
+*   **Índice do Firestore (Sugerido para consulta):**
+    ```json
+    {
+      "collectionGroup": "userGoals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+    ```
+
+### 3. Detalhes da Consulta de Diagnóstico (`consultations`)
+*   **Coleção no Firestore:** `consultations`
+*   **ID do Documento:** Gerado automaticamente pelo Firestore.
+*   **Propósito:** Armazenar todos os detalhes de cada sessão de diagnóstico interativa, incluindo todas as perguntas, respostas do usuário, feedbacks da IA e o diagnóstico final dividido em partes.
+*   **Campos Chave para Outros Apps:**
+    *   `userId` (string): O UID do usuário.
+    *   `consultationCompletedAt` (timestamp): Quando a consulta foi completada.
+    *   `initialFormData` (object): Dados do formulário inicial.
+    *   `userAnswers` (object): Perguntas e respostas.
+    *   `aiFeedbacks` (object): Perguntas e feedbacks da IA.
+    *   `finalDiagnosisParts` (array de objects): As partes do diagnóstico final (`{partId, title, content}`).
+*   **Uso por Outros Apps:**
+    *   Principalmente para este aplicativo (Diagnóstico Maestro) exibir o histórico de consultas.
+    *   Outros aplicativos podem consultar os `finalDiagnosisParts` para obter um entendimento profundo do diagnóstico do usuário, se necessário, embora `userGoals` seja geralmente mais direto para dados estratégicos e financeiros.
+*   **Consulta:** Outros apps podem buscar a consulta mais recente para o `userId` (ordenando por `consultationCompletedAt` descendente).
+*   **Schema de Definição:** (Implícito, baseado nos tipos do `ConsultationContext`).
+*   **Serviço de Interação (neste app):** O `ConsultationContext` salva esses dados ao final da consulta.
+*   **Regras do Firestore (Exemplo):**
+    ```firestore
+    match /consultations/{consultationId} {
+      allow create: if isRequestDataOwner();
+      allow read: if isResourceOwner();
+      // Geralmente, não se espera update/delete dessas consultas históricas por outros apps.
+    }
+    ```
+*   **Índice do Firestore (Sugerido para consulta):**
+    ```json
+    {
+      "collectionGroup": "consultations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "consultationCompletedAt", "order": "DESCENDING" }
+      ]
+    }
+    ```
+
+---
+
+## 🔢 Funções Genéricas no `firestoreService.ts`
+
+O `src/services/firestoreService.ts` contém funções genéricas como `createDocument`, `getDocumentById`, `getAllDocumentsByUserId`, `updateDocument`, e `deleteDocument`. Os serviços específicos de entidade (ex: `clientService.ts`) utilizam essas funções.
+
+A implementação atual do `firestoreService.ts` no projeto "Maestro Operacional" lida com a validação de schemas (tanto o de criação quanto o completo) e a conversão de `Date` para `Timestamp` (e vice-versa), além de adicionar/atualizar campos como `userId`, `createdAt`, e `updatedAt`.
+
+**Assinatura de `createDocument` (conforme implementado atualmente no Maestro Operacional):**
+```ts
+export async function createDocument<TCreate, TFull extends { id: string }>(
+  collectionName: string,
+  userId: string,
+  createSchema: ZodSchema<TCreate>, // Schema para validar os dados de entrada
+  fullSchema: ZodSchema<TFull>,    // Schema para validar o documento completo retornado
+  data: TCreate
+): Promise<TFull>
+```
+
+*   Adiciona `userId`, `createdAt` (como `Date`), `updatedAt` (como `Date`) automaticamente.
+*   Converte os campos `Date` para `Timestamp` antes de salvar no Firestore.
+*   Converte `Timestamp` para `Date` ao ler do Firestore.
+*   Valida `data` contra `createSchema` antes de adicionar campos automáticos.
+*   Valida o documento final (com `id` e campos automáticos) contra `fullSchema` antes de retornar.
+
+---
+
+## 📊 Aplicativos Modulares (Operacional, Financeiro, Gestão)
+
+Os dados das coleções `usuarios`, `consultationsMetadata` e, especialmente, `userGoals` são fundamentais para que os módulos Operacional e Financeiro possam oferecer uma experiência rica e contextualizada.
+
+### 1. Operacional (Exemplo de Entidades)
+
+* Entidades: `clientes`, `fornecedores`, `produtosServicos` (já criado), `ordensServico`, `entregas`, `agendamentos`
+* **Integração:** Pode usar `userGoals.inputData.businessSegment` e `userGoals.actionPlan` para sugerir focos operacionais.
+
+### 2. Financeiro (Exemplo de Entidades)
+
+* Entidades: `faturas`, `lancamentosFinanceiros`, `pagamentos`, `recebimentos`, `transferencias`, `cartoes`, `metasFinanceiras`
+* **Integração:** Pode usar `userGoals.inputData.currentRevenue`, `userGoals.inputData.currentExpenses`, `userGoals.inputData.targetRevenueGoal` para popular dashboards iniciais e comparar com as metas definidas no app de diagnóstico. O `userGoals.actionPlan` pode inspirar a criação de metas financeiras específicas.
+
+### 3. Gestão (Exemplo de Entidades no App de Diagnóstico/Central)
+
+* Entidades: `usuarios` (perfil da empresa), `consultations` (histórico do diagnóstico), `consultationsMetadata` (status do diagnóstico), `userGoals` (planejamento estratégico e metas da IA).
+* **Outros apps podem ter suas próprias entidades de gestão**, como `logs` específicos de cada app, `avisos` internos, etc.
+
+---
+
+## ⚖️ Padrão de Nomeação
+
+| Entidade        | Schema Principal     | Serviço (Arquivo)             | Função de Serviço (Exemplo) | Coleção Firestore    |
+| --------------- | -------------------- | ----------------------------- | --------------------------- | -------------------- |
+| cliente         | ClientSchema         | `clientService.ts`            | `createClient`              | `clientes`           |
+| produto/serviço | ProductServiceSchema | `productServiceService.ts`    | `createProductService`      | `produtosServicos`   |
+| fatura          | FaturaSchema         | `faturaService.ts`            | `createFatura`              | `faturas`            |
+| perfil usuário  | UserProfileDataSchema | `userProfileService.ts` | `upsertUserProfile`         | `usuarios`           |
+| meta/planejamento | (tipos de `generate-goals-analysis-flow.ts`) | (Lógica na página `/goals`) | `addDoc` (direto no Firestore) | `userGoals` |
+| ...             | `[Entidade]Schema`   | `[entidade]Service.ts`        | `create[Entidade]`          | `[entidades]` (plural) |
+
+---
+
+## 🏛️ Diretórios Padrão
+
+```
+src/
+├── schemas/
+│   ├── commonSchemas.ts       # BaseSchema, etc.
+│   ├── clientSchema.ts
+│   ├── productServiceSchema.ts
+│   ├── userProfileSchema.ts   # Schema para a coleção 'usuarios'
+│   ├── faturaSchema.ts        # Exemplo de nova entidade
+│   └── ...
+├── services/
+│   ├── firestoreService.ts    # Funções genéricas CRUD
+│   ├── clientService.ts
+│   ├── productServiceService.ts
+│   ├── userProfileService.ts  # Serviço para a coleção 'usuarios'
+│   ├── faturaService.ts       # Exemplo de novo serviço
+│   └── ...
+```
+
+---
+
+## 🚀 Futuro: CLI para Geração Automática
+
+Com base neste documento, será possível criar um comando como:
+
+```bash
+npx maestro generate-entity fatura --fields "descricao:string,valor:number,vencimento:date,pago:boolean:false"
+```
+
+E ele gerará:
+
+* `src/schemas/faturaSchema.ts` (Schema e Tipos)
+* `src/services/faturaService.ts` (Serviço com CRUD)
+* Sugestão para `firestore.rules`
+* Sugestão para `firestore.indexes.json`
+* Exemplo de uso básico.
+
+---
+
+**Este guia deve ser seguido integralmente por qualquer IA ou humano que deseje interagir com os dados da aplicação Business Maestro.**
