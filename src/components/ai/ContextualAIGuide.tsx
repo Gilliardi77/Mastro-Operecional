@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, X, Loader2 } from 'lucide-react'; // Alterado MessageCircleQuestion para Sparkles
+import { Lightbulb, Send, X, Loader2 } from 'lucide-react'; // Alterado Sparkles para Lightbulb
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
@@ -122,20 +122,20 @@ export default function ContextualAIGuide() {
   return (
     <>
       <Button
-        variant="default" // Mantém default para estrutura, mas cores são sobrescritas abaixo
+        variant="success" // Usando a variante de sucesso para a cor verde
         size="icon"
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50 bg-accent hover:bg-accent/90 text-accent-foreground" // Cor alterada para accent
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50" // Removido bg-accent, hover e text explícitos
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
-        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Sparkles className="h-7 w-7" />} {/* Ícone alterado para Sparkles */}
+        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Lightbulb className="h-7 w-7" />} {/* Ícone alterado para Lightbulb */}
       </Button>
 
       <Sheet open={isAIGuideOpen} onOpenChange={(open) => { if (!open) closeAIGuide(); else toggleAIGuide();}}>
         <SheetContent side="right" className="w-[400px] sm:w-[540px] p-0 flex flex-col">
           <SheetHeader className="p-6 pb-2 border-b">
             <SheetTitle className="text-xl flex items-center gap-2">
-              <Sparkles className="h-6 w-6 text-primary" /> {/* Ícone no título do Sheet também atualizado para consistência */}
+              <Lightbulb className="h-6 w-6 text-primary" /> {/* Ícone no título do Sheet também atualizado para Lightbulb */}
               Guia Inteligente Business Maestro
             </SheetTitle>
             <SheetDescription>
