@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail } from "lucide-react"; // ListOrdered removido
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail } from "lucide-react"; 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
+import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
 import { useAuth } from '@/components/auth/auth-provider';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -39,22 +39,21 @@ import {
   orderBy,
   getDocs,
   doc,
-  updateDoc, // Mantido para ordensDeProducao, mas ordensServico usará o serviço
+  updateDoc, 
   Timestamp,
   runTransaction,
   getDoc,
+  type Firestore
 } from "firebase/firestore";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-import { type OrdemServico, OrdemServicoStatusEnum, updateOrdemServico } from '@/services/ordemServicoService'; // Importando serviço e tipo/enum
-import type { ItemOS } from '@/schemas/ordemServicoSchema'; // Para tipo dos itens da OS original
+import { type OrdemServico, OrdemServicoStatusEnum, updateOrdemServico } from '@/services/ordemServicoService'; 
+import type { ItemOS } from '@/schemas/ordemServicoSchema'; 
 
-// Tipo ProductionOrderStatus já está em ordemServicoSchema.ts, mas vamos manter um local para clareza se necessário
 type ProductionOrderStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
 
-// Interface para os dados da OS original, focando nos itens para baixa de estoque
 interface OrdemServicoOriginalComItens {
   id: string;
   itens: ItemOS[];
@@ -64,7 +63,7 @@ interface OrdemServicoOriginalComItens {
 
 interface ProductionOrderFirestore {
   id: string;
-  agendamentoId: string; // Este é o ID da OrdemServico original
+  agendamentoId: string; 
   clienteId?: string;
   clienteNome: string;
   servicoNome: string; 
@@ -117,6 +116,8 @@ export default function ProducaoPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<ProductionOrder | null>(null);
   const [editingOrderDetails, setEditingOrderDetails] = useState<EditingOrderState | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false); // Added state for modal visibility
+
 
   const bypassAuth = true;
 
@@ -136,8 +137,16 @@ export default function ProducaoPage() {
       return;
     }
     setIsLoading(true);
+
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para buscar OPs.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const collectionRef = collection(db, "ordensDeProducao");
+      const collectionRef = collection(dbInstance, "ordensDeProducao");
       const q = query(
         collectionRef,
         where("userId", "==", userIdToQuery),
@@ -174,7 +183,7 @@ export default function ProducaoPage() {
   useEffect(() => {
     const agendamentoIdFromParams = searchParams.get('agendamentoId'); 
     if (agendamentoIdFromParams) {
-      setSearchTerm(agendamentoIdFromParams); // Para filtrar pela OS original (agendamentoId)
+      setSearchTerm(agendamentoIdFromParams); 
     }
   }, [searchParams]);
 
@@ -191,10 +200,9 @@ export default function ProducaoPage() {
     setIsViewModalOpen(true);
   }
 
-  // Atualizado para usar o serviço
   const updateOriginalOSStatusViaService = async (osId: string, newStatus: ProductionOrderStatus) => {
     try {
-      await updateOrdemServico(osId, { status: newStatus }); // Atualiza apenas o status
+      await updateOrdemServico(osId, { status: newStatus as OrdemServicoStatusEnum }); 
       console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`);
     } catch (error: any) {
       console.error(`Erro ao atualizar status da OS ${osId} via serviço:`, error);
@@ -210,8 +218,16 @@ export default function ProducaoPage() {
   const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: ProductionOrderStatus, newProgress: number) => {
     if (!user && !bypassAuth) return;
     setIsSubmitting(true);
+
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para atualizar OP.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      const prodOrderRef = doc(db, "ordensDeProducao", order.id);
+      const prodOrderRef = doc(dbInstance, "ordensDeProducao", order.id);
       await updateDoc(prodOrderRef, {
         status: newStatus,
         progresso: newProgress,
@@ -221,17 +237,17 @@ export default function ProducaoPage() {
       await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
 
       if (newStatus === "Concluído") {
-        const osOriginalRef = doc(db, "ordensServico", order.agendamentoId); 
+        const osOriginalRef = doc(dbInstance, "ordensServico", order.agendamentoId); 
         const osOriginalSnap = await getDoc(osOriginalRef);
 
         if (osOriginalSnap.exists()) {
-          const osData = osOriginalSnap.data() as OrdemServicoOriginalComItens; // Usando interface ajustada
+          const osData = osOriginalSnap.data() as OrdemServicoOriginalComItens; 
           if (osData.itens && osData.itens.length > 0) {
             for (const itemOS of osData.itens) {
               if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
-                const produtoCatalogoRef = doc(db, "produtosServicos", itemOS.produtoServicoId);
+                const produtoCatalogoRef = doc(dbInstance, "produtosServicos", itemOS.produtoServicoId);
                 try {
-                  await runTransaction(db, async (transaction) => {
+                  await runTransaction(dbInstance, async (transaction) => {
                     const produtoDoc = await transaction.get(produtoCatalogoRef);
                     if (!produtoDoc.exists()) {
                       console.warn(`Produto ${itemOS.nome} (ID: ${itemOS.produtoServicoId}) da OS ${order.agendamentoId} não encontrado no catálogo para baixa de estoque.`);
@@ -275,8 +291,16 @@ export default function ProducaoPage() {
   const handleSaveProductionDetails = async () => {
     if (!viewingOrder || !editingOrderDetails || (!user && !bypassAuth)) return;
     setIsSubmitting(true);
+
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para salvar detalhes da OP.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-        const docRef = doc(db, "ordensDeProducao", viewingOrder.id);
+        const docRef = doc(dbInstance, "ordensDeProducao", viewingOrder.id);
         const newStatus = getStatusFromProgress(editingOrderDetails.progresso);
         
         await updateDoc(docRef, {
@@ -289,7 +313,7 @@ export default function ProducaoPage() {
         await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus);
         
         if (newStatus === "Concluído" && viewingOrder.status !== "Concluído") {
-            const osOriginalRef = doc(db, "ordensServico", viewingOrder.agendamentoId);
+            const osOriginalRef = doc(dbInstance, "ordensServico", viewingOrder.agendamentoId);
             const osOriginalSnap = await getDoc(osOriginalRef);
 
             if (osOriginalSnap.exists()) {
@@ -297,9 +321,9 @@ export default function ProducaoPage() {
                 if (osData.itens && osData.itens.length > 0) {
                     for (const itemOS of osData.itens) {
                         if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
-                            const produtoCatalogoRef = doc(db, "produtosServicos", itemOS.produtoServicoId);
+                            const produtoCatalogoRef = doc(dbInstance, "produtosServicos", itemOS.produtoServicoId);
                              try {
-                                await runTransaction(db, async (transaction) => {
+                                await runTransaction(dbInstance, async (transaction) => {
                                     const produtoDoc = await transaction.get(produtoCatalogoRef);
                                     if (!produtoDoc.exists()) {
                                         console.warn(`Produto ${itemOS.nome} (ID: ${itemOS.produtoServicoId}) da OS ${viewingOrder.agendamentoId} não encontrado.`);
@@ -360,7 +384,7 @@ export default function ProducaoPage() {
         (order.observacoesAgendamento && order.observacoesAgendamento.toLowerCase().includes(searchTermLower)) ||
         (order.observacoesProducao && order.observacoesProducao.toLowerCase().includes(searchTermLower)) ||
         order.id.toLowerCase().includes(searchTermLower) ||
-        (order.agendamentoId && order.agendamentoId.toLowerCase().includes(searchTermLower)); // Filtrar por agendamentoId (OS ID)
+        (order.agendamentoId && order.agendamentoId.toLowerCase().includes(searchTermLower)); 
       return statusMatch && searchTermMatch;
     });
   }, [productionOrders, statusFilters, searchTerm]);
@@ -542,5 +566,3 @@ export default function ProducaoPage() {
     </div>
   );
 }
-
-    

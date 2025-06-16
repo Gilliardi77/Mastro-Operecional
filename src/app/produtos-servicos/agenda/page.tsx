@@ -33,14 +33,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod"; // Zod ainda é usado para o formulário
+import { z } from "zod"; 
 import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase"; // Necessário para criar ordem de produção diretamente
+import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-import { collection, addDoc, Timestamp } from "firebase/firestore"; // Para ordem de produção
+import { collection, addDoc, Timestamp, type Firestore } from "firebase/firestore";
 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
@@ -48,10 +48,8 @@ import {
   createAppointment, 
   getAllAppointmentsByUserId, 
   updateAppointment,
-  // deleteAppointment // Não usado atualmente nesta página
 } from '@/services/appointmentService';
 import { 
-  AppointmentSchema,
   AppointmentFormSchema, 
   type Appointment, 
   type AppointmentStatus, 
@@ -61,13 +59,11 @@ import {
 } from '@/schemas/appointmentSchema';
 
 
-// Interface Servico mantida pois é uma amostra local
 interface Servico {
   id: string;
   nome: string;
 }
 
-// ProductionOrderStatusAgenda mantida pois é específica para a lógica de OS na Agenda
 type ProductionOrderStatusAgenda = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
 
@@ -173,7 +169,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     if (editingAppointment) {
-      const data = new Date(editingAppointment.dataHora); // dataHora é Date no tipo Appointment
+      const data = new Date(editingAppointment.dataHora); 
       let clienteIdForm = editingAppointment.clienteId;
       let clienteNomeInputForm = "";
       if (editingAppointment.clienteId.startsWith("manual_cliente_")) {
@@ -280,21 +276,19 @@ export default function AgendaPage() {
             finalClienteId = selectedClientObj.id;
             finalClienteNome = selectedClientObj.nome;
         } else {
-            // Se clienteId foi fornecido mas não encontrado, E nome manual foi fornecido
             if (values.clienteNomeInput && values.clienteNomeInput.trim() !== "") {
                 finalClienteId = `manual_cliente_${Date.now()}`;
                 finalClienteNome = values.clienteNomeInput.trim();
-            } else { // clienteId inválido E sem nome manual
+            } else { 
                  toast({ title: "Erro de Cliente", description: "Cliente selecionado não encontrado e nenhum nome manual fornecido.", variant: "destructive"});
                  setIsSubmitting(false);
                  return;
             }
         }
     } else if (values.clienteNomeInput && values.clienteNomeInput.trim() !== "") {
-        // Apenas nome manual fornecido
         finalClienteId = `manual_cliente_${Date.now()}`;
         finalClienteNome = values.clienteNomeInput.trim();
-    } else { // Nenhum cliente selecionado nem nome manual
+    } else { 
         toast({ title: "Erro de Validação do Cliente", description: "É necessário selecionar um cliente ou informar o nome manualmente.", variant: "destructive"});
         setIsSubmitting(false);
         return;
@@ -334,7 +328,7 @@ export default function AgendaPage() {
       clienteNome: finalClienteNome,
       servicoId: finalServicoId,
       servicoNome: finalServicoNome,
-      dataHora: dataHoraCombined, // Passando Date diretamente, o service/firestoreService converterá para Timestamp
+      dataHora: dataHoraCombined, 
       observacoes: values.observacoes || "",
       status: values.status,
       geraOrdemProducao: values.geraOrdemProducao,
@@ -353,13 +347,19 @@ export default function AgendaPage() {
       }
 
       if (values.geraOrdemProducao && savedAppointment.id && userIdToSave) {
+        const { db: dbInstance } = getFirebaseInstances();
+        if (!dbInstance) {
+          toast({ title: "Erro de Firebase", description: "DB não disponível para criar OP.", variant: "destructive" });
+          setIsSubmitting(false);
+          return;
+        }
         const productionOrderData = {
           agendamentoId: savedAppointment.id,
           clienteId: finalClienteId,
           clienteNome: finalClienteNome,
-          servicoId: finalServicoId, // Mantido para referência, mesmo que servicoNome seja o principal
+          servicoId: finalServicoId, 
           servicoNome: finalServicoNome,
-          dataAgendamento: Timestamp.fromDate(dataHoraCombined), // Firestore espera Timestamp
+          dataAgendamento: Timestamp.fromDate(dataHoraCombined), 
           status: "Pendente" as ProductionOrderStatusAgenda,
           progresso: 0,
           observacoesAgendamento: values.observacoes || "",
@@ -367,8 +367,7 @@ export default function AgendaPage() {
           criadoEm: Timestamp.now(),
           atualizadoEm: Timestamp.now(),
         };
-        // Lógica de criação de Ordem de Produção ainda direta ao Firestore
-        await addDoc(collection(db, "ordensDeProducao"), productionOrderData);
+        await addDoc(collection(dbInstance, "ordensDeProducao"), productionOrderData);
         toast({ title: "Ordem de Produção Iniciada!", description: `Uma ordem de produção para ${finalServicoNome} foi criada.` });
       }
 

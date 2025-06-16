@@ -16,12 +16,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-// import { db } from "@/lib/firebase"; // Removido, usar serviço
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-// import { collection, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, addDoc } from "firebase/firestore"; // Removido
-import { Timestamp, collection, addDoc } from "firebase/firestore"; // Mantido para addDoc de lancamentosFinanceiros
-import { db } from "@/lib/firebase"; // Mantido para addDoc de lancamentosFinanceiros
+import { Timestamp, collection, addDoc, type Firestore } from "firebase/firestore"; 
+import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
 
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -33,22 +31,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-// import { z } from "zod"; // Removido, usar do schema
 import { cn } from '@/lib/utils';
 
 import { 
   getAllOrdensServicoByUserId, 
   updateOrdemServico,
-  // getOrdemServicoById, // Não usado diretamente aqui
-  // createOrdemServico, // Não usado diretamente aqui
-  // deleteOrdemServico // Não usado diretamente aqui
 } from '@/services/ordemServicoService';
 import { 
   type OrdemServico, 
   type OrdemServicoStatus, 
   type PaymentStatus,
-  PagamentoOsSchema, // Usar o schema do arquivo de OS
-  type PagamentoOsFormValues // Usar o tipo do arquivo de OS
+  PagamentoOsSchema, 
+  type PagamentoOsFormValues 
 } from '@/schemas/ordemServicoSchema';
 
 
@@ -60,9 +54,8 @@ const paymentMethods = [
   { value: "boleto", label: "Boleto Bancário" },
 ];
 
-// OrdemServicoListData combina OrdemServico com campos transformados para UI
 interface OrdemServicoListData extends OrdemServico {
-  servicoDescricao: string; // Campo calculado para UI
+  servicoDescricao: string; 
 }
 
 
@@ -164,7 +157,7 @@ export default function OrdensServicoPage() {
     setSelectedOrderForPayment(order);
     const valorPendente = order.valorTotal - (order.valorPagoTotal || 0);
     paymentForm.reset({
-      valorPago: valorPendente > 0 ? parseFloat(valorPendente.toFixed(2)) : 0, // Garantir que é número e com 2 casas decimais
+      valorPago: valorPendente > 0 ? parseFloat(valorPendente.toFixed(2)) : 0, 
       formaPagamento: paymentMethods[0].value,
       dataPagamento: new Date(),
       observacoesPagamento: order.observacoesPagamento || "",
@@ -185,6 +178,13 @@ export default function OrdensServicoPage() {
       return;
     }
 
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para salvar pagamento.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
     const valorTotalDaOS = selectedOrderForPayment.valorTotal;
     const valorJaPagoAnteriormente = selectedOrderForPayment.valorPagoTotal || 0;
     const valorAcumuladoPago = valorJaPagoAnteriormente + data.valorPago;
@@ -200,13 +200,12 @@ export default function OrdensServicoPage() {
       await updateOrdemServico(selectedOrderForPayment.id, {
         valorPagoTotal: valorAcumuladoPago,
         statusPagamento: novoStatusPagamento,
-        dataUltimoPagamento: data.dataPagamento, // Enviando Date, será convertido pelo firestoreService
+        dataUltimoPagamento: data.dataPagamento, 
         formaUltimoPagamento: data.formaPagamento,
         observacoesPagamento: data.observacoesPagamento || "",
       });
 
-      // Lógica de lançamento financeiro mantida, mas agora usa Timestamp.fromDate
-      await addDoc(collection(db, "lancamentosFinanceiros"), {
+      await addDoc(collection(dbInstance, "lancamentosFinanceiros"), {
         titulo: `Pagamento OS #${selectedOrderForPayment.numeroOS.substring(0,6)} - ${selectedOrderForPayment.clienteNome}`,
         valor: data.valorPago,
         tipo: 'receita',
@@ -215,8 +214,8 @@ export default function OrdensServicoPage() {
         status: "recebido", 
         referenciaOSId: selectedOrderForPayment.id,
         userId: userIdToSave,
-        createdAt: Timestamp.now(), // Usando Timestamp do Firestore
-        updatedAt: Timestamp.now(), // Usando Timestamp do Firestore
+        createdAt: Timestamp.now(), 
+        updatedAt: Timestamp.now(), 
       });
 
       toast({ title: "Pagamento Registrado!", description: "O pagamento foi registrado e um lançamento financeiro foi criado." });
@@ -432,6 +431,3 @@ export default function OrdensServicoPage() {
     </div>
   );
 }
-    
-
-    

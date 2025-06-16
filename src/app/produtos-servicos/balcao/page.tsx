@@ -22,23 +22,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from '@/components/auth/auth-provider';
-import { db } from "@/lib/firebase"; // Mantido para transações, mas getAllProductServicesByUserId vem do serviço
-import { collection, addDoc, Timestamp, doc, runTransaction } from "firebase/firestore"; // runTransaction é usado
+import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
+import { collection, addDoc, Timestamp, doc, runTransaction, type Firestore } from "firebase/firestore"; 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
-import { getAllProductServicesByUserId } from '@/services/productServiceService'; // Importado
-import type { ProductService } from '@/schemas/productServiceSchema'; // Importado
-
-// Product foi removida, usaremos ProductService e mapearemos se necessário na UI
-// interface Product {
-//   id: string;
-//   name: string;
-//   price: number;
-//   type: "Serviço" | "Produto";
-//   imageHint: string;
-//   cost?: number;
-//   stock?: number;
-// }
+import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
+import type { ProductService } from '@/schemas/productServiceSchema'; 
 
 interface CartItem {
   id: string;
@@ -47,7 +36,7 @@ interface CartItem {
   valorUnitario: number;
   valorTotal: number;
   manual?: boolean;
-  imageHint?: string; // Mantido para a UI, gerado a partir do nome
+  imageHint?: string; 
   productId?: string;
   productType?: "Serviço" | "Produto"; 
 }
@@ -75,7 +64,7 @@ export default function BalcaoPage() {
   const [manualItemPrice, setManualItemPrice] = useState(0);
 
   const [totalVenda, setTotalVenda] = useState(0);
-  const [availableProducts, setAvailableProducts] = useState<ProductService[]>([]); // Alterado para ProductService
+  const [availableProducts, setAvailableProducts] = useState<ProductService[]>([]); 
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [searchTermProducts, setSearchTermProducts] = useState("");
 
@@ -94,7 +83,6 @@ export default function BalcaoPage() {
     }
     setIsLoadingProducts(true);
     try {
-      // Usando o productServiceService para buscar produtos/serviços
       const fetchedItems = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
       setAvailableProducts(fetchedItems);
     } catch (error) {
@@ -138,7 +126,7 @@ export default function BalcaoPage() {
     setTotalVenda(newTotal);
   }, [cartItems]);
 
-  const addToCart = (product: ProductService) => { // Alterado para ProductService
+  const addToCart = (product: ProductService) => { 
     setCartItems((prevItems) => {
       const existingItem = prevItems.find(item => item.productId === product.id && !item.manual);
       if (existingItem) {
@@ -158,7 +146,7 @@ export default function BalcaoPage() {
             valorUnitario: product.valorVenda,
             valorTotal: product.valorVenda,
             manual: false,
-            imageHint: product.nome.toLowerCase().split(" ").slice(0,2).join(" "), // Gerar imageHint
+            imageHint: product.nome.toLowerCase().split(" ").slice(0,2).join(" "), 
             productType: product.tipo, 
           },
         ];
@@ -190,7 +178,6 @@ export default function BalcaoPage() {
       valorTotal: manualItemQuantity * manualItemPrice,
       manual: true,
       imageHint: manualItemName.toLowerCase().split(" ").slice(0,2).join(" "),
-      // productType não se aplica a manual da mesma forma, mas pode ser inferido ou deixado como undefined
     };
     setCartItems((prevItems) => [...prevItems, newItem]);
     toast({ title: "Item manual adicionado", description: `${manualItemName} adicionado ao carrinho.` });
@@ -222,6 +209,13 @@ export default function BalcaoPage() {
     }
     setIsFinalizingSale(true);
 
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para finalizar venda.", variant: "destructive" });
+      setIsFinalizingSale(false);
+      return;
+    }
+
     try {
       const dataVenda = Timestamp.now();
       const clienteSelecionado = fetchedClients.find(c => c.id === selectedClient);
@@ -247,7 +241,7 @@ export default function BalcaoPage() {
         criadoEm: dataVenda,
         atualizadoEm: dataVenda,
       };
-      const vendaDocRef = await addDoc(collection(db, "vendas"), vendaData);
+      const vendaDocRef = await addDoc(collection(dbInstance, "vendas"), vendaData);
 
       const lancamentoReceita = {
         userId: userIdToSave,
@@ -262,18 +256,18 @@ export default function BalcaoPage() {
         criadoEm: dataVenda,
         atualizadoEm: dataVenda,
       };
-      await addDoc(collection(db, "lancamentosFinanceiros"), lancamentoReceita);
+      await addDoc(collection(dbInstance, "lancamentosFinanceiros"), lancamentoReceita);
 
       for (const item of cartItems) {
         if (item.productId && !item.manual && item.productType === 'Produto') {
-          const productRef = doc(db, "produtosServicos", item.productId);
+          const productRef = doc(dbInstance, "produtosServicos", item.productId);
           try {
-            await runTransaction(db, async (transaction) => {
+            await runTransaction(dbInstance, async (transaction) => {
               const productDoc = await transaction.get(productRef);
               if (!productDoc.exists()) {
                 throw new Error(`Produto ${item.nome} (ID: ${item.productId}) não encontrado no catálogo.`);
               }
-              const productData = productDoc.data() as ProductService; // Usando ProductService
+              const productData = productDoc.data() as ProductService; 
               const estoqueAtual = productData.quantidadeEstoque ?? 0;
               
               const novoEstoque = estoqueAtual - item.quantidade;
@@ -604,12 +598,3 @@ export default function BalcaoPage() {
     </div>
   );
 }
-    
-
-    
-
-
-
-
-
-    

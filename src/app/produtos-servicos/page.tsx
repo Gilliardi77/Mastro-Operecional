@@ -6,18 +6,19 @@ import Link from 'next/link';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  collection, query, where, getDocs, Timestamp, orderBy, limit
+  collection, query, where, getDocs, Timestamp, orderBy, limit, type Firestore
 } from 'firebase/firestore';
 import { useAuth } from '@/components/auth/auth-provider';
-import { db } from '@/lib/firebase';
+import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   CalendarDays, PlusCircle, BarChart3, Users,
   Package, Settings, ActivitySquare, ListOrdered,
-  CheckCircle, AlertTriangle
+  CheckCircle, AlertTriangle, Loader2
 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface AgendamentoResumo {
   id: string;
@@ -35,6 +36,7 @@ interface ResumoOperacional {
 
 export default function ProdutosServicosPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [agendaHoje, setAgendaHoje] = useState<AgendamentoResumo[]>([]);
   const [resumoOperacional, setResumoOperacional] = useState<ResumoOperacional>({
     osConcluidasHoje: 0,
@@ -43,7 +45,7 @@ export default function ProdutosServicosPage() {
   });
   const [loading, setLoading] = useState({ agenda: true, resumo: true });
 
-  const userId = user?.uid || 'bypass_user_placeholder';
+  const userId = user?.uid || 'bypass_user_placeholder'; // Ensure userId is available for queries
 
   const getStatusClass = (status: string): string => {
     const map: Record<string, string> = {
@@ -57,11 +59,18 @@ export default function ProdutosServicosPage() {
 
   const fetchAgendaHoje = useCallback(async () => {
     setLoading(prev => ({ ...prev, agenda: true }));
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para buscar agenda.", variant: "destructive" });
+      setLoading(prev => ({ ...prev, agenda: false }));
+      return;
+    }
+
     try {
       const hojeInicio = startOfDay(new Date());
       const hojeFim = endOfDay(new Date());
       const q = query(
-        collection(db!, 'agendamentos'),
+        collection(dbInstance, 'agendamentos'),
         where('userId', '==', userId),
         where('dataHora', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataHora', '<=', Timestamp.fromDate(hojeFim)),
@@ -75,33 +84,43 @@ export default function ProdutosServicosPage() {
         dataHora: (doc.data().dataHora as Timestamp).toDate(),
       })) as AgendamentoResumo[];
       setAgendaHoje(data);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Erro na agenda:', e);
+      toast({ title: "Erro ao buscar agenda", description: e.message, variant: "destructive" });
     } finally {
       setLoading(prev => ({ ...prev, agenda: false }));
     }
-  }, [userId]);
+  }, [userId, toast]);
 
   const fetchResumo = useCallback(async () => {
     setLoading(prev => ({ ...prev, resumo: true }));
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) {
+      toast({ title: "Erro de Firebase", description: "DB não disponível para buscar resumo.", variant: "destructive" });
+      setLoading(prev => ({ ...prev, resumo: false }));
+      return;
+    }
+
     try {
       const hojeInicio = startOfDay(new Date());
       const hojeFim = endOfDay(new Date());
       let osConcluidasHoje = 0, vendasHojeValor = 0, osAtrasadas = 0;
 
       const osSnap = await getDocs(query(
-        collection(db!, 'ordensServico'),
+        collection(dbInstance, 'ordensServico'),
         where('userId', '==', userId),
         where('status', '==', 'Concluído')
       ));
       osSnap.forEach(doc => {
         const d = doc.data();
-        const atual = (d.atualizadoEm as Timestamp).toDate();
-        if (atual >= hojeInicio && atual <= hojeFim) osConcluidasHoje++;
+        if (d.atualizadoEm && d.atualizadoEm instanceof Timestamp) {
+          const atual = (d.atualizadoEm as Timestamp).toDate();
+          if (atual >= hojeInicio && atual <= hojeFim) osConcluidasHoje++;
+        }
       });
 
       const vendasSnap = await getDocs(query(
-        collection(db!, 'vendas'),
+        collection(dbInstance, 'vendas'),
         where('userId', '==', userId),
         where('dataVenda', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataVenda', '<=', Timestamp.fromDate(hojeFim))
@@ -109,7 +128,7 @@ export default function ProdutosServicosPage() {
       vendasSnap.forEach(doc => vendasHojeValor += doc.data().totalVenda);
 
       const atrasadasSnap = await getDocs(query(
-        collection(db!, 'ordensServico'),
+        collection(dbInstance, 'ordensServico'),
         where('userId', '==', userId),
         where('dataEntrega', '<', Timestamp.fromDate(hojeInicio))
       ));
@@ -119,17 +138,20 @@ export default function ProdutosServicosPage() {
       });
 
       setResumoOperacional({ osConcluidasHoje, vendasHojeValor, osAtrasadas });
-    } catch (e) {
+    } catch (e:any) {
       console.error('Erro resumo operacional:', e);
+      toast({ title: "Erro ao buscar resumo", description: e.message, variant: "destructive" });
     } finally {
       setLoading(prev => ({ ...prev, resumo: false }));
     }
-  }, [userId]);
+  }, [userId, toast]);
 
   useEffect(() => {
-    fetchAgendaHoje();
-    fetchResumo();
-  }, [fetchAgendaHoje, fetchResumo]);
+    if (userId) { // Only fetch if userId is available
+        fetchAgendaHoje();
+        fetchResumo();
+    }
+  }, [fetchAgendaHoje, fetchResumo, userId]);
 
   return (
     <div className="space-y-8">
@@ -138,8 +160,103 @@ export default function ProdutosServicosPage() {
         <p className="mt-4 text-lg text-muted-foreground">Gestão completa de atendimentos, orçamentos, ordens de serviço e mais.</p>
       </section>
 
-      {/* Demais componentes de UI mantidos como estão, pois não causam erro */}
-      {/* ... */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">OS Concluídas Hoje</CardTitle>
+            <CheckCircle className="h-5 w-5 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.osConcluidasHoje}</div>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Vendas de Hoje (R$)</CardTitle>
+            <BarChart3 className="h-5 w-5 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+          {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">R$ {resumoOperacional.vendasHojeValor.toFixed(2)}</div>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">OS em Atraso</CardTitle>
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.osAtrasadas}</div>}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> Agenda para Hoje</CardTitle>
+            <CardDescription>Próximos 3 compromissos de hoje.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading.agenda ? (
+              <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : agendaHoje.length > 0 ? (
+              <ul className="space-y-3">
+                {agendaHoje.map(ag => (
+                  <li key={ag.id} className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                    <div>
+                      <p className="font-medium">{ag.servicoNome}</p>
+                      <p className="text-sm text-muted-foreground">{ag.clienteNome} - {format(ag.dataHora, 'HH:mm', { locale: ptBR })}</p>
+                    </div>
+                    <Badge variant="outline" className={getStatusClass(ag.status)}>{ag.status}</Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-center text-muted-foreground py-4">Nenhum agendamento para hoje.</p>
+            )}
+            <Button variant="outline" className="mt-4 w-full" asChild><Link href="/produtos-servicos/agenda">Ver Agenda Completa</Link></Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ActivitySquare className="h-5 w-5 text-primary" /> Ações Rápidas</CardTitle>
+            <CardDescription>Principais funcionalidades do módulo.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4">
+            <Button asChild size="lg" className="h-auto py-4 flex-col">
+              <Link href="/produtos-servicos/atendimentos/novo">
+                <PlusCircle className="mb-1 h-6 w-6" /> Nova OS
+              </Link>
+            </Button>
+            <Button asChild size="lg" className="h-auto py-4 flex-col">
+              <Link href="/produtos-servicos/balcao">
+                <Package className="mb-1 h-6 w-6" /> Balcão PDV
+              </Link>
+            </Button>
+            <Button asChild size="lg" className="h-auto py-4 flex-col" variant="secondary">
+              <Link href="/produtos-servicos/clientes">
+                <Users className="mb-1 h-6 w-6" /> Clientes
+              </Link>
+            </Button>
+            <Button asChild size="lg" className="h-auto py-4 flex-col" variant="secondary">
+              <Link href="/produtos-servicos/produtos">
+                <ListOrdered className="mb-1 h-6 w-6" /> Produtos/Serviços
+              </Link>
+            </Button>
+             <Button asChild size="lg" className="h-auto py-4 flex-col" variant="outline">
+              <Link href="/produtos-servicos/producao">
+                <Settings className="mb-1 h-6 w-6" /> Controle de Produção
+              </Link>
+            </Button>
+             <Button asChild size="lg" className="h-auto py-4 flex-col" variant="outline">
+              <Link href="/produtos-servicos/estoque">
+                <BarChart3 className="mb-1 h-6 w-6" /> Controle de Estoque
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
