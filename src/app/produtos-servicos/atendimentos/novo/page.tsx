@@ -95,12 +95,11 @@ export default function OrdemServicoPage() {
   const [isSavingNewClient, setIsSavingNewClient] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]);
-  const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(true);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   
-  // Ref to track if the initial prefill has occurred to avoid race conditions with manual edits
-  const initialPrefillDone = useRef(false);
+  const searchParamsAppliedRef = useRef(false);
 
 
   const fetchClientsAndCatalogo = useCallback(async () => {
@@ -121,7 +120,7 @@ export default function OrdemServicoPage() {
       setCatalogoItens(fetchedCatalogoItens);
     } catch (err: any) {
       console.error("Erro ao carregar dados iniciais (clientes/catálogo):", err);
-      toast({ title: "Erro ao carregar dados", description: `Não foi possível carregar clientes ou catálogo. Verifique suas permissões do Firestore. Detalhe: ${err.message}`, variant: "destructive", duration: 7000 });
+      toast({ title: "Erro ao carregar dados", description: `Não foi possível carregar clientes ou catálogo. Detalhe: ${err.message}`, variant: "destructive", duration: 7000 });
     } finally {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
@@ -140,117 +139,100 @@ export default function OrdemServicoPage() {
     });
   }, [watchedOsFormValues, updateAICurrentPageContext]);
 
-  // Effect 1: Prefill form based on searchParams. Runs ONCE or when searchParams/clients change.
+  // Effect 1: Process searchParams and reset form ONCE when data is ready
   useEffect(() => {
+    if (typeof window === 'undefined' || isLoadingClients || isLoadingCatalogo || searchParamsAppliedRef.current) {
+      return;
+    }
+
     const clienteIdParam = searchParams.get('clienteId');
     const clienteNomeParam = searchParams.get('clienteNome');
     const descricaoParam = searchParams.get('descricao');
     const valorTotalParam = searchParams.get('valorTotal');
 
-    // Construct prefillData only if params exist to avoid unnecessary resets
     let prefillData: Partial<OrdemServicoFormValues> & { itens?: ItemOSFormValues[] } = {};
-    let shouldPrefill = false;
-
-    let determinedClienteId = clienteIdParam;
-    let determinedClienteNome = clienteNomeParam;
+    let shouldReset = false;
 
     if (clienteIdParam) {
-        shouldPrefill = true;
-        if (clienteIdParam !== "avulso" && clients.length > 0) {
-            const client = clients.find(c => c.id === clienteIdParam);
-            if (client) {
-                determinedClienteNome = client.nome; // Prioritize fetched client name
-            } else { // Client ID from param not in fetched list, treat as avulso
-                determinedClienteId = "avulso";
-                determinedClienteNome = clienteNomeParam || "Cliente Avulso";
-            }
-        } else if (clienteIdParam === "avulso") {
-            determinedClienteNome = clienteNomeParam || "Cliente Avulso";
-        }
-        prefillData.clienteId = determinedClienteId;
-        prefillData.clienteNome = determinedClienteNome;
+      const client = clients.find(c => c.id === clienteIdParam);
+      prefillData.clienteId = client ? client.id : "avulso";
+      prefillData.clienteNome = client ? client.nome : (clienteNomeParam || "Cliente Avulso");
+      shouldReset = true;
     } else if (clienteNomeParam) {
-        shouldPrefill = true;
-        prefillData.clienteId = "avulso";
-        prefillData.clienteNome = clienteNomeParam;
+      prefillData.clienteId = "avulso";
+      prefillData.clienteNome = clienteNomeParam;
+      shouldReset = true;
     }
-
 
     if (descricaoParam) {
-        shouldPrefill = true;
-        let valorUnitarioDoItem = 0;
-        if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
-            valorUnitarioDoItem = parseFloat(valorTotalParam);
-        }
-        const newItem: ItemOSFormValues = {
-            idTemp: `item-${Date.now()}`,
-            produtoServicoId: undefined,
-            nome: descricaoParam,
-            quantidade: 1,
-            valorUnitario: valorUnitarioDoItem,
-            tipo: 'Manual',
-        };
-        prefillData.itens = [newItem];
-    }
-    
-    if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
-        shouldPrefill = true;
+      let valorUnitarioDoItem = 0;
+      if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
+        valorUnitarioDoItem = parseFloat(valorTotalParam);
+      }
+      prefillData.itens = [{
+        idTemp: `item-${Date.now()}`,
+        produtoServicoId: undefined,
+        nome: descricaoParam,
+        quantidade: 1,
+        valorUnitario: valorUnitarioDoItem,
+        tipo: 'Manual',
+      }];
+      if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
+          prefillData.valorTotalOS = parseFloat(valorTotalParam);
+      }
+      shouldReset = true;
+    } else if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
         prefillData.valorTotalOS = parseFloat(valorTotalParam);
+        shouldReset = true;
     }
 
-    if (shouldPrefill) {
-        osForm.reset({
-            ...osForm.getValues(), // Get current values to preserve anything not being prefilled
-            ...prefillData,
-            // Explicitly set clienteId and clienteNome from determined values if they exist in prefillData
-            clienteId: prefillData.hasOwnProperty('clienteId') ? prefillData.clienteId : osForm.getValues('clienteId'),
-            clienteNome: prefillData.hasOwnProperty('clienteNome') ? prefillData.clienteNome : osForm.getValues('clienteNome'),
-            dataEntrega: prefillData.dataEntrega instanceof Date ? prefillData.dataEntrega : (osForm.getValues('dataEntrega') || undefined),
-        }, { keepDefaultValues: false }); // ensure new values override defaults
-        initialPrefillDone.current = true;
+    if (shouldReset) {
+      osForm.reset({
+        ...osForm.getValues(), // Start with current values (which are defaults at this stage)
+        ...prefillData,
+        // Explicitly set fields that might be in prefillData
+        clienteId: prefillData.hasOwnProperty('clienteId') ? prefillData.clienteId : osForm.getValues('clienteId'),
+        clienteNome: prefillData.hasOwnProperty('clienteNome') ? prefillData.clienteNome : osForm.getValues('clienteNome'),
+        itens: prefillData.itens || osForm.getValues('itens'),
+        valorTotalOS: prefillData.valorTotalOS !== undefined ? prefillData.valorTotalOS : osForm.getValues('valorTotalOS'),
+      });
     }
-    setLastSavedOsData(null); // Reset last saved data whenever params might change things
-  }, [searchParams, clients, osForm]); // osForm is stable
+    searchParamsAppliedRef.current = true; // Mark as applied after attempting reset
+    setLastSavedOsData(null);
 
-  // Effect 2: Sync clienteNome when clienteId (dropdown) changes by user interaction.
+  }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo]);
+
+
+  // Effect 2: Sync clienteNome when clienteId (dropdown) changes by user, AFTER initial params are applied.
+  const watchedClienteId = osForm.watch('clienteId'); // For dependency array
   useEffect(() => {
-    const selectedClienteId = watchedOsFormValues.clienteId; // Watch for changes
-    
-    // Only run if not the initial prefill phase, or if clienteId is dirty (user changed it)
-    if (!initialPrefillDone.current && !osForm.formState.dirtyFields.clienteId) {
-       // return; // Might be too restrictive, let's allow it if selectedClienteId is defined
+    if (!searchParamsAppliedRef.current || isLoadingClients) {
+      // Don't run if initial params prefill isn't done or clients are still loading
+      return;
     }
     
+    // Only react to actual changes in clienteId, not initial undefined state from reset
+    if (watchedClienteId === undefined && !osForm.formState.dirtyFields.clienteId) return;
+
+
+    const currentFormClienteId = osForm.getValues('clienteId'); // Get the true current value
     const currentFormClienteNome = osForm.getValues('clienteNome');
 
-    if (selectedClienteId && selectedClienteId !== "avulso") {
-        const client = clients.find(c => c.id === selectedClienteId);
-        if (client && client.nome !== currentFormClienteNome) {
-            osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
-        }
-    } else if (selectedClienteId === "avulso") {
-        // If user explicitly selects "Cliente Avulso" from dropdown,
-        // and the current name isn't "Cliente Avulso" already (and not a custom avulso name from params)
-        // This logic relies on the fact that the input field for "Nome do Cliente Avulso" is shown when clienteId is 'avulso'.
-        // The `searchParams` effect should have set the name correctly if `clienteNomeParam` was present.
-        // Here, we primarily want to set it to "Cliente Avulso" if the user picked it from the select.
-        const clienteNomeParam = searchParams.get('clienteNome');
-        if (osForm.formState.dirtyFields.clienteId && (!clienteNomeParam || currentFormClienteNome !== clienteNomeParam) && currentFormClienteNome !== "Cliente Avulso" ) {
-            // osForm.setValue('clienteNome', "Cliente Avulso", { shouldValidate: true, shouldDirty: true });
-            // Let's be more conservative: if user selected "Cliente Avulso", and there's no clienteNomeParam,
-            // and the current name isn't empty, it means they might want to type a custom avulso name.
-            // So, only set to "Cliente Avulso" if current name is from a previous client.
-            // This is tricky. A simpler rule: if clienteId becomes "avulso" via SELECT, set to "Cliente Avulso"
-            // The conditional rendering of the input field handles the rest.
-            // The previous prefill effect is more robust for setting initial param-based names.
-             if (currentFormClienteNome !== "Cliente Avulso" && clients.some(c => c.nome === currentFormClienteNome)) {
-                // if current name was a client name, then switch to default avulso.
-                 osForm.setValue('clienteNome', "Cliente Avulso", { shouldValidate: true, shouldDirty: true });
-             }
-        }
+    if (currentFormClienteId && currentFormClienteId !== "avulso") {
+      const client = clients.find(c => c.id === currentFormClienteId);
+      if (client && client.nome !== currentFormClienteNome) {
+        osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
+      }
+    } else if (currentFormClienteId === "avulso") {
+      // If user explicitly selects "Cliente Avulso" from dropdown,
+      // and the current name was from a specific client.
+      const isCurrentNomeFromSpecificClient = clients.some(c => c.id !== "avulso" && c.nome === currentFormClienteNome);
+      if (isCurrentNomeFromSpecificClient && currentFormClienteNome !== "Cliente Avulso") {
+         osForm.setValue('clienteNome', "Cliente Avulso", { shouldValidate: true, shouldDirty: true });
+      }
+      // Otherwise, allow manual input for "Cliente Avulso" which is handled by the input field itself.
     }
-    // No setValue if clienteId is empty or undefined, the input field for avulso handles it.
-  }, [watchedOsFormValues.clienteId, clients, osForm, searchParams]);
+  }, [watchedClienteId, clients, osForm, isLoadingClients]);
 
 
   useEffect(() => {
@@ -370,7 +352,7 @@ export default function OrdemServicoPage() {
         observacoes: "", 
         dataEntrega: undefined 
       });
-      initialPrefillDone.current = false; // Reset for next potential prefill
+      searchParamsAppliedRef.current = false; // Reset for next potential prefill if page is revisited with new params
     } catch (error: any) {
       toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
@@ -400,8 +382,8 @@ export default function OrdemServicoPage() {
     try {
       const clienteCriado = await createClient(userIdToSave, clientDataToCreate);
       setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
-      osForm.setValue('clienteId', clienteCriado.id); 
-      // The useEffect for clienteId change will handle setting clienteNome
+      osForm.setValue('clienteId', clienteCriado.id, {shouldDirty: true}); 
+      // The useEffect for watchedClienteId will handle setting clienteNome
       toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
       newClientForm.reset();
@@ -465,7 +447,7 @@ export default function OrdemServicoPage() {
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
-  if (isAuthLoading || isLoadingClients || isLoadingCatalogo) {
+  if (isAuthLoading || (isLoadingClients && !searchParamsAppliedRef.current) || (isLoadingCatalogo && !searchParamsAppliedRef.current)) { // Show loading if critical data for initial render isn't ready
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
   }
   
@@ -753,3 +735,4 @@ export default function OrdemServicoPage() {
 }
     
 
+    
