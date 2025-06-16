@@ -48,3 +48,5 @@ export const OrdemProducaoUpdateSchema = BaseUpdateSchema.extend({
   observacoesProducao: z.string().optional().or(z.literal('')),
   // Outros campos que podem ser atualizados, como dataAgendamento se for reagendado.
   dataAgendamento: FirestoreTimestampSchema.optional(),
+}); // <-- Chave de fechamento adicionada aqui
+export type OrdemProducaoUpdateData = z.infer<typeof OrdemProducaoUpdateSchema>;
