@@ -3,7 +3,7 @@
 "use client";
 
 // Imports agrupados por funcionalidade
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useForm, useFieldArray, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -98,6 +98,10 @@ export default function OrdemServicoPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+  
+  // Ref to track if the initial prefill has occurred to avoid race conditions with manual edits
+  const initialPrefillDone = useRef(false);
+
 
   const fetchClientsAndCatalogo = useCallback(async () => {
     const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : "");
@@ -135,6 +139,119 @@ export default function OrdemServicoPage() {
       formSnapshotJSON: formSnapshotJSON,
     });
   }, [watchedOsFormValues, updateAICurrentPageContext]);
+
+  // Effect 1: Prefill form based on searchParams. Runs ONCE or when searchParams/clients change.
+  useEffect(() => {
+    const clienteIdParam = searchParams.get('clienteId');
+    const clienteNomeParam = searchParams.get('clienteNome');
+    const descricaoParam = searchParams.get('descricao');
+    const valorTotalParam = searchParams.get('valorTotal');
+
+    // Construct prefillData only if params exist to avoid unnecessary resets
+    let prefillData: Partial<OrdemServicoFormValues> & { itens?: ItemOSFormValues[] } = {};
+    let shouldPrefill = false;
+
+    let determinedClienteId = clienteIdParam;
+    let determinedClienteNome = clienteNomeParam;
+
+    if (clienteIdParam) {
+        shouldPrefill = true;
+        if (clienteIdParam !== "avulso" && clients.length > 0) {
+            const client = clients.find(c => c.id === clienteIdParam);
+            if (client) {
+                determinedClienteNome = client.nome; // Prioritize fetched client name
+            } else { // Client ID from param not in fetched list, treat as avulso
+                determinedClienteId = "avulso";
+                determinedClienteNome = clienteNomeParam || "Cliente Avulso";
+            }
+        } else if (clienteIdParam === "avulso") {
+            determinedClienteNome = clienteNomeParam || "Cliente Avulso";
+        }
+        prefillData.clienteId = determinedClienteId;
+        prefillData.clienteNome = determinedClienteNome;
+    } else if (clienteNomeParam) {
+        shouldPrefill = true;
+        prefillData.clienteId = "avulso";
+        prefillData.clienteNome = clienteNomeParam;
+    }
+
+
+    if (descricaoParam) {
+        shouldPrefill = true;
+        let valorUnitarioDoItem = 0;
+        if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
+            valorUnitarioDoItem = parseFloat(valorTotalParam);
+        }
+        const newItem: ItemOSFormValues = {
+            idTemp: `item-${Date.now()}`,
+            produtoServicoId: undefined,
+            nome: descricaoParam,
+            quantidade: 1,
+            valorUnitario: valorUnitarioDoItem,
+            tipo: 'Manual',
+        };
+        prefillData.itens = [newItem];
+    }
+    
+    if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
+        shouldPrefill = true;
+        prefillData.valorTotalOS = parseFloat(valorTotalParam);
+    }
+
+    if (shouldPrefill) {
+        osForm.reset({
+            ...osForm.getValues(), // Get current values to preserve anything not being prefilled
+            ...prefillData,
+            // Explicitly set clienteId and clienteNome from determined values if they exist in prefillData
+            clienteId: prefillData.hasOwnProperty('clienteId') ? prefillData.clienteId : osForm.getValues('clienteId'),
+            clienteNome: prefillData.hasOwnProperty('clienteNome') ? prefillData.clienteNome : osForm.getValues('clienteNome'),
+            dataEntrega: prefillData.dataEntrega instanceof Date ? prefillData.dataEntrega : (osForm.getValues('dataEntrega') || undefined),
+        }, { keepDefaultValues: false }); // ensure new values override defaults
+        initialPrefillDone.current = true;
+    }
+    setLastSavedOsData(null); // Reset last saved data whenever params might change things
+  }, [searchParams, clients, osForm]); // osForm is stable
+
+  // Effect 2: Sync clienteNome when clienteId (dropdown) changes by user interaction.
+  useEffect(() => {
+    const selectedClienteId = watchedOsFormValues.clienteId; // Watch for changes
+    
+    // Only run if not the initial prefill phase, or if clienteId is dirty (user changed it)
+    if (!initialPrefillDone.current && !osForm.formState.dirtyFields.clienteId) {
+       // return; // Might be too restrictive, let's allow it if selectedClienteId is defined
+    }
+    
+    const currentFormClienteNome = osForm.getValues('clienteNome');
+
+    if (selectedClienteId && selectedClienteId !== "avulso") {
+        const client = clients.find(c => c.id === selectedClienteId);
+        if (client && client.nome !== currentFormClienteNome) {
+            osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
+        }
+    } else if (selectedClienteId === "avulso") {
+        // If user explicitly selects "Cliente Avulso" from dropdown,
+        // and the current name isn't "Cliente Avulso" already (and not a custom avulso name from params)
+        // This logic relies on the fact that the input field for "Nome do Cliente Avulso" is shown when clienteId is 'avulso'.
+        // The `searchParams` effect should have set the name correctly if `clienteNomeParam` was present.
+        // Here, we primarily want to set it to "Cliente Avulso" if the user picked it from the select.
+        const clienteNomeParam = searchParams.get('clienteNome');
+        if (osForm.formState.dirtyFields.clienteId && (!clienteNomeParam || currentFormClienteNome !== clienteNomeParam) && currentFormClienteNome !== "Cliente Avulso" ) {
+            // osForm.setValue('clienteNome', "Cliente Avulso", { shouldValidate: true, shouldDirty: true });
+            // Let's be more conservative: if user selected "Cliente Avulso", and there's no clienteNomeParam,
+            // and the current name isn't empty, it means they might want to type a custom avulso name.
+            // So, only set to "Cliente Avulso" if current name is from a previous client.
+            // This is tricky. A simpler rule: if clienteId becomes "avulso" via SELECT, set to "Cliente Avulso"
+            // The conditional rendering of the input field handles the rest.
+            // The previous prefill effect is more robust for setting initial param-based names.
+             if (currentFormClienteNome !== "Cliente Avulso" && clients.some(c => c.nome === currentFormClienteNome)) {
+                // if current name was a client name, then switch to default avulso.
+                 osForm.setValue('clienteNome', "Cliente Avulso", { shouldValidate: true, shouldDirty: true });
+             }
+        }
+    }
+    // No setValue if clienteId is empty or undefined, the input field for avulso handles it.
+  }, [watchedOsFormValues.clienteId, clients, osForm, searchParams]);
+
 
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
@@ -189,94 +306,6 @@ export default function OrdemServicoPage() {
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
     return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
   }, [osForm, toast, fields, update]);
-
-  useEffect(() => {
-    const clienteIdParam = searchParams.get('clienteId');
-    const clienteNomeParam = searchParams.get('clienteNome'); 
-    const descricaoParam = searchParams.get('descricao');
-    const valorTotalParam = searchParams.get('valorTotal'); 
-
-    let prefillData: Partial<OrdemServicoFormValues> = { itens: [] };
-
-    if (clienteIdParam) {
-      prefillData.clienteId = clienteIdParam;
-      const clientExists = clients.some(c => c.id === clienteIdParam);
-      if (clientExists && clienteNomeParam) {
-        prefillData.clienteNome = clienteNomeParam;
-      } else if (clienteIdParam === "avulso") {
-        prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
-      } else if (clienteIdParam !== "avulso" && !clientExists && clienteNomeParam) { // Se ID não existe, mas nome foi passado
-         prefillData.clienteId = "avulso"; // Trata como avulso
-         prefillData.clienteNome = clienteNomeParam; 
-      }
-    } else if (clienteNomeParam) { 
-        prefillData.clienteId = "avulso";
-        prefillData.clienteNome = clienteNomeParam;
-    }
-
-    if (descricaoParam) {
-      let valorUnitarioDoItem = 0;
-      if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
-        valorUnitarioDoItem = parseFloat(valorTotalParam);
-      }
-      const newItem: ItemOSFormValues = {
-        idTemp: `item-${Date.now()}`,
-        produtoServicoId: undefined,
-        nome: descricaoParam,
-        quantidade: 1,
-        valorUnitario: valorUnitarioDoItem,
-        tipo: 'Manual',
-      };
-      prefillData.itens?.push(newItem);
-    }
-    
-    if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
-      prefillData.valorTotalOS = parseFloat(valorTotalParam);
-    }
-
-    if (Object.keys(prefillData).length > 1 || (prefillData.itens && prefillData.itens.length > 0)) { 
-      osForm.reset(currentValues => ({
-        ...currentValues,
-        ...prefillData,
-        dataEntrega: prefillData.dataEntrega instanceof Date ? prefillData.dataEntrega : (currentValues.dataEntrega || undefined),
-        // If prefillData.clienteId is set, use it. Otherwise, keep current or default to avulso.
-        clienteId: prefillData.clienteId || currentValues.clienteId || "avulso",
-        // If prefillData.clienteNome is set, use it. Otherwise, keep current or derive.
-        clienteNome: prefillData.clienteNome || (prefillData.clienteId === "avulso" ? "Cliente Avulso" : currentValues.clienteNome),
-      }), { keepDefaultValues: false }); // keepDefaultValues: false ensures reset overrides defaults
-    }
-    setLastSavedOsData(null);
-  }, [searchParams, clients, osForm.reset]); // osForm.reset is stable
-
-  useEffect(() => {
-    const idDoClienteNoForm = watchedOsFormValues.clienteId;
-    const nomeAtualDoClienteNoForm = watchedOsFormValues.clienteNome;
-
-    let nomeAlvoParaCliente = nomeAtualDoClienteNoForm; 
-
-    if (idDoClienteNoForm && idDoClienteNoForm !== 'avulso' && clients.length > 0) {
-      const client = clients.find(c => c.id === idDoClienteNoForm);
-      if (client) {
-        nomeAlvoParaCliente = client.nome;
-      }
-    } else if (idDoClienteNoForm === 'avulso') {
-      const nomeParam = searchParams.get('clienteNome');
-      // Se estamos resetando para avulso e há um nomeParam, este deve ter prioridade
-      // apenas se o nome atual for diferente do que seria o default para "avulso" + nomeParam.
-      // Se não há nomeParam, o alvo é "Cliente Avulso".
-      nomeAlvoParaCliente = nomeParam || "Cliente Avulso";
-    }
-
-    if (nomeAtualDoClienteNoForm !== nomeAlvoParaCliente) {
-      osForm.setValue('clienteNome', nomeAlvoParaCliente, { shouldValidate: true, shouldDirty: true });
-    }
-  }, [
-      watchedOsFormValues.clienteId, 
-      watchedOsFormValues.clienteNome, // Adding this to ensure effect runs if nome changes externally too
-      clients, 
-      searchParams, 
-      osForm.setValue
-    ]);
 
 
   async function onOsSubmit(data: OrdemServicoFormValues) {
@@ -341,6 +370,7 @@ export default function OrdemServicoPage() {
         observacoes: "", 
         dataEntrega: undefined 
       });
+      initialPrefillDone.current = false; // Reset for next potential prefill
     } catch (error: any) {
       toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
@@ -371,7 +401,7 @@ export default function OrdemServicoPage() {
       const clienteCriado = await createClient(userIdToSave, clientDataToCreate);
       setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
       osForm.setValue('clienteId', clienteCriado.id); 
-      osForm.setValue('clienteNome', clienteCriado.nome);
+      // The useEffect for clienteId change will handle setting clienteNome
       toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
       newClientForm.reset();
@@ -464,7 +494,6 @@ export default function OrdemServicoPage() {
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value);
-                          // A sincronização do nome será tratada pelo useEffect dedicado
                         }}
                         value={field.value || "avulso"} 
                         disabled={isLoadingClients}
@@ -490,7 +519,6 @@ export default function OrdemServicoPage() {
                 )}
               />
 
-              {/* Renderiza o campo de nome do cliente avulso apenas se 'avulso' estiver selecionado */}
               {watchedOsFormValues.clienteId === 'avulso' && (
                 <FormField
                   control={osForm.control}
@@ -504,7 +532,6 @@ export default function OrdemServicoPage() {
                   )}
                 />
               )}
-              {/* O nome do cliente selecionado (não avulso) é gerenciado/exibido pelo useEffect e não precisa de um campo Input separado aqui */}
 
 
               <Card className="pt-4">
@@ -725,3 +752,4 @@ export default function OrdemServicoPage() {
   );
 }
     
+
