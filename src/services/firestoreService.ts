@@ -46,6 +46,8 @@ function convertTimestampsToDates<T extends DocumentData>(docData: T): T {
   return dataWithDates;
 }
 
+const FIRESTORE_UNAVAILABLE_ERROR_MSG = "Instância do Firestore DB não disponível. Verifique a inicialização e configuração do Firebase (ex: API Key, Project ID no seu arquivo .env ou de configuração do ambiente).";
+
 /**
  * Cria um novo documento em uma coleção do Firestore.
  * @param collectionName Nome da coleção.
@@ -65,7 +67,7 @@ export async function createDocument<TCreate, TFull extends { id: string }>(
 ): Promise<TFull> {
   const { db: firestoreDb } = getFirebaseInstances();
   if (!firestoreDb) {
-    throw new Error(`Firestore DB instance is not available in firestoreService.createDocument. Check Firebase initialization and config (API Key, Project ID in .env).`);
+    throw new Error(`firestoreService.createDocument: ${FIRESTORE_UNAVAILABLE_ERROR_MSG}`);
   }
   try {
     const validatedData = createSchema.parse(data);
@@ -111,7 +113,7 @@ export async function getDocumentById<T extends { id: string }>(
 ): Promise<T | null> {
   const { db: firestoreDb } = getFirebaseInstances();
   if (!firestoreDb) {
-    throw new Error(`Firestore DB instance is not available in firestoreService.getDocumentById. Check Firebase initialization and config.`);
+    throw new Error(`firestoreService.getDocumentById: ${FIRESTORE_UNAVAILABLE_ERROR_MSG}`);
   }
   try {
     const docRef = doc(firestoreDb, collectionName, id);
@@ -163,7 +165,7 @@ export async function getAllDocumentsByUserId<T extends { id: string }>(
 ): Promise<T[]> {
   const { db: firestoreDb } = getFirebaseInstances();
   if (!firestoreDb) {
-    throw new Error(`Firestore DB instance is not available in firestoreService.getAllDocumentsByUserId. Check Firebase initialization and config.`);
+    throw new Error(`firestoreService.getAllDocumentsByUserId: ${FIRESTORE_UNAVAILABLE_ERROR_MSG}`);
   }
   try {
     const qConstraints: QueryConstraint[] = [where("userId", "==", userId)];
@@ -218,7 +220,7 @@ export async function updateDocument<TUpdate, TFull extends { id: string }>(
 ): Promise<TFull> {
   const { db: firestoreDb } = getFirebaseInstances();
   if (!firestoreDb) {
-    throw new Error(`Firestore DB instance is not available in firestoreService.updateDocument. Check Firebase initialization and config.`);
+    throw new Error(`firestoreService.updateDocument: ${FIRESTORE_UNAVAILABLE_ERROR_MSG}`);
   }
   try {
     const validatedData = updateSchema.parse(data);
@@ -275,7 +277,7 @@ export async function updateDocument<TUpdate, TFull extends { id: string }>(
 export async function deleteDocument(collectionName: string, id: string): Promise<void> {
   const { db: firestoreDb } = getFirebaseInstances();
   if (!firestoreDb) {
-    throw new Error(`Firestore DB instance is not available in firestoreService.deleteDocument. Check Firebase initialization and config.`);
+    throw new Error(`firestoreService.deleteDocument: ${FIRESTORE_UNAVAILABLE_ERROR_MSG}`);
   }
   try {
     const docRef = doc(firestoreDb, collectionName, id);
@@ -301,7 +303,7 @@ export async function queryDocuments<T extends { id: string }>(
 ): Promise<T[]> {
   const { db: firestoreDb } = getFirebaseInstances();
   if (!firestoreDb) {
-    throw new Error(`Firestore DB instance is not available in firestoreService.queryDocuments. Check Firebase initialization and config.`);
+    throw new Error(`firestoreService.queryDocuments: ${FIRESTORE_UNAVAILABLE_ERROR_MSG}`);
   }
   try {
     const q = query(collection(firestoreDb, collectionName), ...qConstraints);
