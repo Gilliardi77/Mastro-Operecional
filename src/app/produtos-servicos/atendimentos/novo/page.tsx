@@ -99,49 +99,40 @@ export default function OrdemServicoPage() {
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(true);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   
-  const searchParamsAppliedRef = useRef(false);
+  const [isInitialPrefillComplete, setIsInitialPrefillComplete] = useState(false);
 
 
-  const fetchClientsAndCatalogo = useCallback(async () => {
+  // Effect 1: Fetch initial data (clients and catalog)
+  useEffect(() => {
     const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : "");
     if (!userIdToQuery) {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
       return;
     }
+
     setIsLoadingClients(true);
     setIsLoadingCatalogo(true);
-    try {
-      const [fetchedClients, fetchedCatalogoItens] = await Promise.all([
-        getAllClientsByUserId(userIdToQuery),
-        getAllProductServicesByUserId(userIdToQuery, "nome", "asc"),
-      ]);
+
+    Promise.all([
+      getAllClientsByUserId(userIdToQuery),
+      getAllProductServicesByUserId(userIdToQuery, "nome", "asc"),
+    ]).then(([fetchedClients, fetchedCatalogoItens]) => {
       setClients(fetchedClients);
       setCatalogoItens(fetchedCatalogoItens);
-    } catch (err: any) {
+    }).catch((err: any) => {
       console.error("Erro ao carregar dados iniciais (clientes/catálogo):", err);
       toast({ title: "Erro ao carregar dados", description: `Não foi possível carregar clientes ou catálogo. Detalhe: ${err.message}`, variant: "destructive", duration: 7000 });
-    } finally {
+    }).finally(() => {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
-    }
+    });
   }, [user, bypassAuth, toast]);
 
-  useEffect(() => { if (user || bypassAuth) fetchClientsAndCatalogo(); }, [fetchClientsAndCatalogo, user, bypassAuth]);
 
-  const watchedOsFormValues = osForm.watch();
-  
+  // Effect 2: Prefill form from searchParams ONCE after data is loaded and if not already done
   useEffect(() => {
-    const formSnapshotJSON = JSON.stringify(watchedOsFormValues);
-    updateAICurrentPageContext({
-      pageName: "Nova Ordem de Serviço",
-      formSnapshotJSON: formSnapshotJSON,
-    });
-  }, [watchedOsFormValues, updateAICurrentPageContext]);
-
-  // Effect 1: Process searchParams and reset form ONCE when data is ready
-  useEffect(() => {
-    if (typeof window === 'undefined' || isLoadingClients || isLoadingCatalogo || searchParamsAppliedRef.current) {
+    if (isLoadingClients || isLoadingCatalogo || isInitialPrefillComplete) {
       return;
     }
 
@@ -150,18 +141,18 @@ export default function OrdemServicoPage() {
     const descricaoParam = searchParams.get('descricao');
     const valorTotalParam = searchParams.get('valorTotal');
 
-    let prefillData: Partial<OrdemServicoFormValues> & { itens?: ItemOSFormValues[] } = {};
-    let shouldReset = false;
+    let prefillValues: Partial<OrdemServicoFormValues> & { itens?: ItemOSFormValues[] } = {};
+    let shouldApplyPrefill = false;
 
     if (clienteIdParam) {
       const client = clients.find(c => c.id === clienteIdParam);
-      prefillData.clienteId = client ? client.id : "avulso";
-      prefillData.clienteNome = client ? client.nome : (clienteNomeParam || "Cliente Avulso");
-      shouldReset = true;
+      prefillValues.clienteId = client ? client.id : "avulso";
+      prefillValues.clienteNome = client ? client.nome : (clienteNomeParam || "Cliente Avulso");
+      shouldApplyPrefill = true;
     } else if (clienteNomeParam) {
-      prefillData.clienteId = "avulso";
-      prefillData.clienteNome = clienteNomeParam;
-      shouldReset = true;
+      prefillValues.clienteId = "avulso";
+      prefillValues.clienteNome = clienteNomeParam;
+      shouldApplyPrefill = true;
     }
 
     if (descricaoParam) {
@@ -169,7 +160,7 @@ export default function OrdemServicoPage() {
       if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
         valorUnitarioDoItem = parseFloat(valorTotalParam);
       }
-      prefillData.itens = [{
+      prefillValues.itens = [{
         idTemp: `item-${Date.now()}`,
         produtoServicoId: undefined,
         nome: descricaoParam,
@@ -178,45 +169,35 @@ export default function OrdemServicoPage() {
         tipo: 'Manual',
       }];
       if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
-          prefillData.valorTotalOS = parseFloat(valorTotalParam);
+        prefillValues.valorTotalOS = parseFloat(valorTotalParam);
       }
-      shouldReset = true;
+      shouldApplyPrefill = true;
     } else if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
-        prefillData.valorTotalOS = parseFloat(valorTotalParam);
-        shouldReset = true;
+      prefillValues.valorTotalOS = parseFloat(valorTotalParam);
+      shouldApplyPrefill = true;
     }
 
-    if (shouldReset) {
+    if (shouldApplyPrefill) {
       osForm.reset({
-        ...osForm.getValues(), // Start with current values (which are defaults at this stage)
-        ...prefillData,
-        // Explicitly set fields that might be in prefillData
-        clienteId: prefillData.hasOwnProperty('clienteId') ? prefillData.clienteId : osForm.getValues('clienteId'),
-        clienteNome: prefillData.hasOwnProperty('clienteNome') ? prefillData.clienteNome : osForm.getValues('clienteNome'),
-        itens: prefillData.itens || osForm.getValues('itens'),
-        valorTotalOS: prefillData.valorTotalOS !== undefined ? prefillData.valorTotalOS : osForm.getValues('valorTotalOS'),
+        ...osForm.formState.defaultValues, // Start with defined defaults
+        ...prefillValues,                 // Override with prefill values
       });
     }
-    searchParamsAppliedRef.current = true; // Mark as applied after attempting reset
+    setIsInitialPrefillComplete(true); // Mark as complete regardless of whether prefill happened
     setLastSavedOsData(null);
 
-  }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo]);
+  }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo, isInitialPrefillComplete]);
 
 
-  // Effect 2: Sync clienteNome when clienteId (dropdown) changes by user, AFTER initial params are applied.
-  const watchedClienteId = osForm.watch('clienteId'); // For dependency array
+  // Effect 3: Sync clienteNome when clienteId (dropdown) changes, AFTER initial prefill is complete
+  const watchedClienteId = osForm.watch('clienteId');
   useEffect(() => {
-    if (!searchParamsAppliedRef.current || isLoadingClients) {
-      // Don't run if initial params prefill isn't done or clients are still loading
-      return;
+    if (!isInitialPrefillComplete || isLoadingClients) {
+      return; // Don't run if initial prefill isn't done or clients are still loading
     }
-    
-    // Only react to actual changes in clienteId, not initial undefined state from reset
-    if (watchedClienteId === undefined && !osForm.formState.dirtyFields.clienteId) return;
 
-
-    const currentFormClienteId = osForm.getValues('clienteId'); // Get the true current value
-    const currentFormClienteNome = osForm.getValues('clienteNome');
+    const currentFormClienteId = watchedClienteId; // Value from watch is fine for dependency
+    const currentFormClienteNome = osForm.getValues('clienteNome'); // Get current value directly to avoid loop
 
     if (currentFormClienteId && currentFormClienteId !== "avulso") {
       const client = clients.find(c => c.id === currentFormClienteId);
@@ -224,15 +205,27 @@ export default function OrdemServicoPage() {
         osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
       }
     } else if (currentFormClienteId === "avulso") {
-      // If user explicitly selects "Cliente Avulso" from dropdown,
-      // and the current name was from a specific client.
-      const isCurrentNomeFromSpecificClient = clients.some(c => c.id !== "avulso" && c.nome === currentFormClienteNome);
-      if (isCurrentNomeFromSpecificClient && currentFormClienteNome !== "Cliente Avulso") {
-         osForm.setValue('clienteNome', "Cliente Avulso", { shouldValidate: true, shouldDirty: true });
+      const defaultAvulsoName = "Cliente Avulso";
+      // Only set to "Cliente Avulso" if the name is not already that AND it's not empty (allowing manual input)
+      // AND it was previously a name of a specific client.
+      const isPreviouslySpecificClient = clients.some(c => c.nome === currentFormClienteNome && c.id !== "avulso");
+      if (currentFormClienteNome !== defaultAvulsoName && (currentFormClienteNome === "" || isPreviouslySpecificClient) ) {
+         osForm.setValue('clienteNome', defaultAvulsoName, { shouldValidate: true, shouldDirty: true });
       }
-      // Otherwise, allow manual input for "Cliente Avulso" which is handled by the input field itself.
     }
-  }, [watchedClienteId, clients, osForm, isLoadingClients]);
+  }, [watchedClienteId, clients, osForm, isInitialPrefillComplete, isLoadingClients]);
+
+
+  const watchedOsFormValues = osForm.watch();
+  useEffect(() => {
+    if (!isLoadingClients && !isLoadingCatalogo && isInitialPrefillComplete) { // Ensure context is updated after initial load and prefill attempt
+        const formSnapshotJSON = JSON.stringify(watchedOsFormValues);
+        updateAICurrentPageContext({
+            pageName: "Nova Ordem de Serviço",
+            formSnapshotJSON: formSnapshotJSON,
+        });
+    }
+  }, [watchedOsFormValues, updateAICurrentPageContext, isLoadingClients, isLoadingCatalogo, isInitialPrefillComplete]);
 
 
   useEffect(() => {
@@ -287,7 +280,7 @@ export default function OrdemServicoPage() {
     };
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
     return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
-  }, [osForm, toast, fields, update]);
+  }, [osForm, toast, fields, update]); // Keep dependencies as they were
 
 
   async function onOsSubmit(data: OrdemServicoFormValues) {
@@ -352,7 +345,8 @@ export default function OrdemServicoPage() {
         observacoes: "", 
         dataEntrega: undefined 
       });
-      searchParamsAppliedRef.current = false; // Reset for next potential prefill if page is revisited with new params
+      // Reset the prefill complete flag so new searchParams can be applied if the page is reloaded or params change
+      setIsInitialPrefillComplete(false); 
     } catch (error: any) {
       toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
@@ -447,7 +441,7 @@ export default function OrdemServicoPage() {
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
-  if (isAuthLoading || (isLoadingClients && !searchParamsAppliedRef.current) || (isLoadingCatalogo && !searchParamsAppliedRef.current)) { // Show loading if critical data for initial render isn't ready
+  if (isAuthLoading || (isLoadingClients && !isInitialPrefillComplete) || (isLoadingCatalogo && !isInitialPrefillComplete)) { 
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
   }
   
@@ -501,7 +495,7 @@ export default function OrdemServicoPage() {
                 )}
               />
 
-              {watchedOsFormValues.clienteId === 'avulso' && (
+              {watchedClienteId === 'avulso' && ( // Use watchedClienteId for reactive UI
                 <FormField
                   control={osForm.control}
                   name="clienteNome"
