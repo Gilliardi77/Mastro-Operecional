@@ -122,9 +122,12 @@ export default function ContextualAIGuide() {
   return (
     <>
       <Button
-        variant="success"
         size="icon"
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50"
+        className={cn(
+            "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50",
+            "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))]",
+            "hover:bg-[hsl(var(--success))]/90" 
+          )}
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
