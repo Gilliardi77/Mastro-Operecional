@@ -31,7 +31,7 @@ import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircl
 // Schemas e Tipagens
 import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData } from "@/schemas/ordemServicoSchema";
 import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schemas/ordemProducaoSchema"; // Importando o tipo de status
-import { newClientSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema";
+import { ClientFormSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema"; // CORRIGIDO: ClientFormSchema
 import type { ProductService } from "@/schemas/productServiceSchema";
 
 // Services
@@ -98,7 +98,7 @@ export default function OrdemServicoPage() {
 
   // Formulário Cliente
   const newClientForm = useForm<NewClientFormValues>({
-    resolver: zodResolver(newClientSchema),
+    resolver: zodResolver(ClientFormSchema), // CORRIGIDO: ClientFormSchema
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
@@ -295,16 +295,16 @@ export default function OrdemServicoPage() {
     }));
 
     const osDataToCreate: OrdemServicoCreateData = {
+      // numeroOS será gerado pelo serviço
       clienteId: data.clienteId && data.clienteId !== "avulso" ? data.clienteId : null,
       clienteNome: nomeClienteFinal,
       itens: itensParaSalvar,
       valorTotal: data.valorTotalOS || 0,
       valorAdiantado: data.valorAdiantado || 0,
-      valorPagoTotal: data.valorAdiantado || 0,
-      dataEntrega: data.dataEntrega,
+      // valorPagoTotal já é tratado pelo schema/serviço com default
+      dataEntrega: data.dataEntrega, // Aqui passamos Date, o serviço/firestoreService lida com a conversão para Timestamp
       observacoes: data.observacoes || "",
-      status: "Pendente",
-      statusPagamento: "Pendente",
+      // status e statusPagamento já são tratados pelo schema/serviço com default
     };
 
     try {
@@ -312,21 +312,21 @@ export default function OrdemServicoPage() {
       
       const primeiroItemNome = itensParaSalvar[0]?.nome || "Serviço Detalhado na OS";
       const opDataToCreate: OrdemProducaoCreateData = {
-        agendamentoId: osDoc.id,
+        agendamentoId: osDoc.id, // ID da OS criada
         clienteId: osDoc.clienteId,
         clienteNome: osDoc.clienteNome,
         servicoNome: primeiroItemNome + (itensParaSalvar.length > 1 ? " e outros" : ""),
-        dataAgendamento: osDoc.dataEntrega, // FirestoreTimestampSchema espera Date
-        status: "Pendente" as OrdemProducaoStatus,
+        dataAgendamento: osDoc.dataEntrega, // Passando Date, o serviço de OP converterá
+        status: "Pendente" as OrdemProducaoStatus, // Ajuste aqui, pois OrdemProducaoStatusEnum não é importado
         progresso: 0,
         observacoesAgendamento: osDoc.observacoes,
       };
       await createOrdemProducao(uid, opDataToCreate);
 
-      toast({ title: "OS Criada", description: `OS #${osDoc.id.substring(0, 6)}... salva e OP criada.` });
+      toast({ title: "OS Criada", description: `OS #${osDoc.numeroOS.substring(0, 6)}... salva e OP criada.` });
       setLastSavedOsData({
         ...data,
-        numeroOS: osDoc.id,
+        numeroOS: osDoc.numeroOS, // Usar o numeroOS retornado pelo serviço
         clienteNomeFinal: nomeClienteFinal,
         clienteTelefone: selectedClient?.telefone,
         clienteEmail: selectedClient?.email,
@@ -720,5 +720,4 @@ export default function OrdemServicoPage() {
     </div>
   );
 }
-
     
