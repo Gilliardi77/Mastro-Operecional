@@ -66,6 +66,7 @@ export default function Header() {
         </Button>
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
+          {/* Certifique-se que o arquivo /public/images/logo-maestro-operacional.svg existe */}
           <Image
             src="/images/logo-maestro-operacional.svg" 
             alt="Maestro Operacional Logo"

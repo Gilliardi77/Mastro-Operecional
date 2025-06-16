@@ -21,7 +21,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 
 import { cn } from "@/lib/utils";
-// import { db } from "@/lib/firebase"; // Removido, pois addDoc direto não será mais usado aqui
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useAIGuide } from "@/contexts/AIGuideContext";
@@ -30,7 +29,7 @@ import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircl
 
 // Schemas e Tipagens
 import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData } from "@/schemas/ordemServicoSchema";
-import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schemas/ordemProducaoSchema"; // Importando o tipo de status
+import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schemas/ordemProducaoSchema";
 import { ClientFormSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema";
 import type { ProductService } from "@/schemas/productServiceSchema";
 
@@ -42,14 +41,6 @@ import { createOrdemProducao } from "@/services/ordemProducaoService";
 
 // Constantes
 const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
-
-// Helper: WhatsApp (mantido como estava no seu código)
-const formatPhoneNumberForWhatsApp = (phone?: string): string | null => {
-  if (!phone) return null;
-  let digits = phone.replace(/\D/g, "");
-  if (!digits.startsWith("55") && digits.length >= 10) return `55${digits}`;
-  return digits.length >= 10 ? digits : null;
-};
 
 interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   numeroOS?: string;
@@ -67,7 +58,6 @@ interface AIFillFormEventPayload {
   itemIndex?: number;
 }
 
-// Componente principal
 export default function OrdemServicoPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -76,7 +66,6 @@ export default function OrdemServicoPage() {
   const { updateAICurrentPageContext } = useAIGuide();
   const bypassAuth = true;
 
-  // Formulário OS
   const osForm = useForm<OrdemServicoFormValues>({
     resolver: zodResolver(OrdemServicoFormSchema),
     defaultValues: {
@@ -95,13 +84,11 @@ export default function OrdemServicoPage() {
     name: "itens",
   });
 
-  // Formulário Cliente
   const newClientForm = useForm<NewClientFormValues>({
     resolver: zodResolver(ClientFormSchema),
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
-  // Estados
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [lastSavedOsData, setLastSavedOsData] = useState<LastSavedOsDataType | null>(null);
@@ -112,7 +99,6 @@ export default function OrdemServicoPage() {
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
 
-  // Fetch de dados iniciais
   const fetchClientsAndCatalogo = useCallback(async () => {
     const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : "");
     if (!userIdToQuery) {
@@ -130,7 +116,8 @@ export default function OrdemServicoPage() {
       setClients(fetchedClients);
       setCatalogoItens(fetchedCatalogoItens);
     } catch (err: any) {
-      toast({ title: "Erro ao carregar dados", description: err.message, variant: "destructive" });
+      console.error("Erro ao carregar dados iniciais (clientes/catálogo):", err);
+      toast({ title: "Erro ao carregar dados", description: `Não foi possível carregar clientes ou catálogo. Verifique suas permissões do Firestore. Detalhe: ${err.message}`, variant: "destructive", duration: 7000 });
     } finally {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
@@ -139,8 +126,8 @@ export default function OrdemServicoPage() {
 
   useEffect(() => { if (user || bypassAuth) fetchClientsAndCatalogo(); }, [fetchClientsAndCatalogo, user, bypassAuth]);
 
-  // Atualiza contexto da IA com nome da página e snapshot do formulário
   const watchedOsFormValues = osForm.watch();
+  
   useEffect(() => {
     const formSnapshotJSON = JSON.stringify(watchedOsFormValues);
     updateAICurrentPageContext({
@@ -148,7 +135,6 @@ export default function OrdemServicoPage() {
       formSnapshotJSON: formSnapshotJSON,
     });
   }, [watchedOsFormValues, updateAICurrentPageContext]);
-
 
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
@@ -177,7 +163,6 @@ export default function OrdemServicoPage() {
             const fieldNameParts = detail.fieldName.split('.');
             const itemIndex = parseInt(fieldNameParts[1], 10);
             const itemFieldName = fieldNameParts[2] as keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>;
-
 
             if (itemIndex >= 0 && itemIndex < fields.length && itemFieldName) {
                 let valueToSet = detail.value;
@@ -220,18 +205,14 @@ export default function OrdemServicoPage() {
         prefillData.clienteNome = clienteNomeParam;
       } else if (clienteIdParam === "avulso") {
         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso";
-      } else if (clienteIdParam !== "avulso" && !clientExists) {
-         prefillData.clienteId = "avulso";
-         prefillData.clienteNome = clienteNomeParam || "Cliente Avulso"; 
+      } else if (clienteIdParam !== "avulso" && !clientExists && clienteNomeParam) { // Se ID não existe, mas nome foi passado
+         prefillData.clienteId = "avulso"; // Trata como avulso
+         prefillData.clienteNome = clienteNomeParam; 
       }
     } else if (clienteNomeParam) { 
         prefillData.clienteId = "avulso";
         prefillData.clienteNome = clienteNomeParam;
-    } else { 
-        prefillData.clienteId = "avulso";
-        prefillData.clienteNome = "Cliente Avulso";
     }
-
 
     if (descricaoParam) {
       let valorUnitarioDoItem = 0;
@@ -257,31 +238,47 @@ export default function OrdemServicoPage() {
       osForm.reset(currentValues => ({
         ...currentValues,
         ...prefillData,
-        dataEntrega: currentValues.dataEntrega || undefined, 
-      }));
+        dataEntrega: prefillData.dataEntrega instanceof Date ? prefillData.dataEntrega : (currentValues.dataEntrega || undefined),
+        // If prefillData.clienteId is set, use it. Otherwise, keep current or default to avulso.
+        clienteId: prefillData.clienteId || currentValues.clienteId || "avulso",
+        // If prefillData.clienteNome is set, use it. Otherwise, keep current or derive.
+        clienteNome: prefillData.clienteNome || (prefillData.clienteId === "avulso" ? "Cliente Avulso" : currentValues.clienteNome),
+      }), { keepDefaultValues: false }); // keepDefaultValues: false ensures reset overrides defaults
     }
     setLastSavedOsData(null);
-  }, [searchParams, osForm, clients]);
+  }, [searchParams, clients, osForm.reset]); // osForm.reset is stable
 
   useEffect(() => {
-    const clienteId = osForm.getValues('clienteId');
-    if (clienteId && clienteId !== 'avulso' && clients.length > 0) {
-      const client = clients.find(c => c.id === clienteId);
-      if (client && osForm.getValues('clienteNome') !== client.nome) {
-        osForm.setValue('clienteNome', client.nome);
-      }
-    } else if (clienteId === 'avulso') {
-        const nomeParam = searchParams.get('clienteNome');
-        const nomeForm = osForm.getValues('clienteNome');
-        if (nomeParam && nomeParam !== nomeForm) {
-             osForm.setValue('clienteNome', nomeParam);
-        } else if (!nomeForm && !nomeParam) {
-             osForm.setValue('clienteNome', "Cliente Avulso");
-        }
-    }
-  }, [osForm, clients, searchParams, osForm.watch('clienteId')]);
+    const idDoClienteNoForm = watchedOsFormValues.clienteId;
+    const nomeAtualDoClienteNoForm = watchedOsFormValues.clienteNome;
 
-  // Submit da OS
+    let nomeAlvoParaCliente = nomeAtualDoClienteNoForm; 
+
+    if (idDoClienteNoForm && idDoClienteNoForm !== 'avulso' && clients.length > 0) {
+      const client = clients.find(c => c.id === idDoClienteNoForm);
+      if (client) {
+        nomeAlvoParaCliente = client.nome;
+      }
+    } else if (idDoClienteNoForm === 'avulso') {
+      const nomeParam = searchParams.get('clienteNome');
+      // Se estamos resetando para avulso e há um nomeParam, este deve ter prioridade
+      // apenas se o nome atual for diferente do que seria o default para "avulso" + nomeParam.
+      // Se não há nomeParam, o alvo é "Cliente Avulso".
+      nomeAlvoParaCliente = nomeParam || "Cliente Avulso";
+    }
+
+    if (nomeAtualDoClienteNoForm !== nomeAlvoParaCliente) {
+      osForm.setValue('clienteNome', nomeAlvoParaCliente, { shouldValidate: true, shouldDirty: true });
+    }
+  }, [
+      watchedOsFormValues.clienteId, 
+      watchedOsFormValues.clienteNome, // Adding this to ensure effect runs if nome changes externally too
+      clients, 
+      searchParams, 
+      osForm.setValue
+    ]);
+
+
   async function onOsSubmit(data: OrdemServicoFormValues) {
     setIsSaving(true);
     setLastSavedOsData(null);
@@ -335,7 +332,15 @@ export default function OrdemServicoPage() {
         clienteEmail: selectedClient?.email,
         itensSalvos: itensParaSalvar,
       });
-      osForm.reset({ clienteId: "avulso", clienteNome: "Cliente Avulso", itens: [], valorTotalOS: 0, valorAdiantado: 0, observacoes: "", dataEntrega: undefined });
+      osForm.reset({ 
+        clienteId: "avulso", 
+        clienteNome: "Cliente Avulso", 
+        itens: [], 
+        valorTotalOS: 0, 
+        valorAdiantado: 0, 
+        observacoes: "", 
+        dataEntrega: undefined 
+      });
     } catch (error: any) {
       toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
@@ -430,12 +435,10 @@ export default function OrdemServicoPage() {
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
-
   if (isAuthLoading || isLoadingClients || isLoadingCatalogo) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
   }
   
-
   return (
     <div className="space-y-6">
       <Card>
@@ -461,12 +464,7 @@ export default function OrdemServicoPage() {
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value);
-                          if (value !== 'avulso') {
-                            const client = clients.find(c => c.id === value);
-                            if (client) osForm.setValue('clienteNome', client.nome);
-                          } else {
-                            osForm.setValue('clienteNome', 'Cliente Avulso');
-                          }
+                          // A sincronização do nome será tratada pelo useEffect dedicado
                         }}
                         value={field.value || "avulso"} 
                         disabled={isLoadingClients}
@@ -492,7 +490,8 @@ export default function OrdemServicoPage() {
                 )}
               />
 
-              {osForm.watch('clienteId') === 'avulso' && (
+              {/* Renderiza o campo de nome do cliente avulso apenas se 'avulso' estiver selecionado */}
+              {watchedOsFormValues.clienteId === 'avulso' && (
                 <FormField
                   control={osForm.control}
                   name="clienteNome"
@@ -505,6 +504,8 @@ export default function OrdemServicoPage() {
                   )}
                 />
               )}
+              {/* O nome do cliente selecionado (não avulso) é gerenciado/exibido pelo useEffect e não precisa de um campo Input separado aqui */}
+
 
               <Card className="pt-4">
                 <CardHeader><CardTitle className="text-lg">Itens da Ordem de Serviço</CardTitle></CardHeader>
@@ -537,10 +538,10 @@ export default function OrdemServicoPage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                              <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} min="1" /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)} min="1" /></FormControl><FormMessage /></FormItem>
                              )}/>
                              <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                              )}/>
                         </div>
                          <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
