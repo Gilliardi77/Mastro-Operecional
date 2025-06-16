@@ -12,17 +12,16 @@ export const metadata: Metadata = {
   title: 'Maestro Operacional',
   description: 'Gerado pelo Firebase Studio para Maestro Operacional',
   icons: {
-    icon: [
-      { url: '/logos/192.png', type: 'image/png', sizes: '192x192' }, // Favicon PNG principal
-      { url: '/logos/512.png', type: 'image/png', sizes: '512x512' }  // Favicon PNG maior
-      // Você pode adicionar um /favicon.ico aqui se tiver um, ou um SVG
-      // { url: '/favicon.ico', sizes: 'any', rel: 'icon' },
+    icon: [ // Para favicons
+      // { url: '/favicon.ico', sizes: 'any', rel: 'icon' }, // Descomente se você tiver um favicon.ico na pasta public
+      { url: '/images/192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/images/512.png', type: 'image/png', sizes: '512x512' }
     ],
-    apple: [
-      { url: '/logos/180.png', sizes: '180x180', type: 'image/png' },
+    apple: [ // Para apple-touch-icon
+      { url: '/images/180.png', sizes: '180x180', type: 'image/png' },
     ],
   },
-  manifest: '/manifest.json',
+  manifest: '/manifest.json', // Caminho para seu arquivo de manifesto PWA
 };
 
 export default function RootLayout({
