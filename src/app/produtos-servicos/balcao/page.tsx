@@ -22,36 +22,23 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from '@/components/auth/auth-provider';
-import { db } from "@/lib/firebase";
-import { collection, addDoc, Timestamp, getDocs, query, where, orderBy, doc, runTransaction } from "firebase/firestore";
+import { db } from "@/lib/firebase"; // Mantido para transações, mas getAllProductServicesByUserId vem do serviço
+import { collection, addDoc, Timestamp, doc, runTransaction } from "firebase/firestore"; // runTransaction é usado
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
+import { getAllProductServicesByUserId } from '@/services/productServiceService'; // Importado
+import type { ProductService } from '@/schemas/productServiceSchema'; // Importado
 
-
-interface ProductServicoFirestore {
-  id: string;
-  nome: string;
-  tipo: 'Produto' | 'Serviço';
-  descricao?: string;
-  valorVenda: number;
-  unidade: string;
-  custoUnitario?: number | null;
-  quantidadeEstoque?: number | null;
-  estoqueMinimo?: number | null;
-  userId: string;
-  criadoEm: Timestamp;
-  atualizadoEm: Timestamp;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  type: "Serviço" | "Produto";
-  imageHint: string;
-  cost?: number;
-  stock?: number;
-}
+// Product foi removida, usaremos ProductService e mapearemos se necessário na UI
+// interface Product {
+//   id: string;
+//   name: string;
+//   price: number;
+//   type: "Serviço" | "Produto";
+//   imageHint: string;
+//   cost?: number;
+//   stock?: number;
+// }
 
 interface CartItem {
   id: string;
@@ -60,13 +47,10 @@ interface CartItem {
   valorUnitario: number;
   valorTotal: number;
   manual?: boolean;
-  imageHint?: string;
+  imageHint?: string; // Mantido para a UI, gerado a partir do nome
   productId?: string;
   productType?: "Serviço" | "Produto"; 
 }
-
-// Interface Cliente foi removida pois usaremos o tipo Client de clientSchema
-
 
 const paymentMethods = [
   { value: "dinheiro", label: "Dinheiro" },
@@ -91,11 +75,11 @@ export default function BalcaoPage() {
   const [manualItemPrice, setManualItemPrice] = useState(0);
 
   const [totalVenda, setTotalVenda] = useState(0);
-  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<ProductService[]>([]); // Alterado para ProductService
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [searchTermProducts, setSearchTermProducts] = useState("");
 
-  const [fetchedClients, setFetchedClients] = useState<Client[]>([]); // Alterado para usar o tipo Client
+  const [fetchedClients, setFetchedClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
 
 
@@ -110,23 +94,11 @@ export default function BalcaoPage() {
     }
     setIsLoadingProducts(true);
     try {
-      const q = query(collection(db, "produtosServicos"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
-      const querySnapshot = await getDocs(q);
-      const fetchedItems = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data() as Omit<ProductServicoFirestore, 'id'>;
-        return {
-          id: docSnap.id,
-          name: data.nome,
-          price: data.valorVenda,
-          type: data.tipo,
-          imageHint: data.nome.toLowerCase().split(" ").slice(0,2).join(" "),
-          cost: data.custoUnitario ?? undefined,
-          stock: data.quantidadeEstoque ?? undefined,
-        } as Product;
-      });
+      // Usando o productServiceService para buscar produtos/serviços
+      const fetchedItems = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
       setAvailableProducts(fetchedItems);
     } catch (error) {
-      console.error("Erro ao buscar produtos/serviços:", error);
+      console.error("Erro ao buscar produtos/serviços via service:", error);
       toast({ title: "Erro ao buscar itens", description: "Não foi possível carregar os produtos e serviços.", variant: "destructive" });
     } finally {
       setIsLoadingProducts(false);
@@ -142,7 +114,6 @@ export default function BalcaoPage() {
     }
     setIsLoadingClients(true);
     try {
-      // Usando o clientService para buscar clientes
       const clientsData = await getAllClientsByUserId(userIdToQuery);
       setFetchedClients(clientsData);
     } catch (error: any) {
@@ -167,7 +138,7 @@ export default function BalcaoPage() {
     setTotalVenda(newTotal);
   }, [cartItems]);
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: ProductService) => { // Alterado para ProductService
     setCartItems((prevItems) => {
       const existingItem = prevItems.find(item => item.productId === product.id && !item.manual);
       if (existingItem) {
@@ -182,18 +153,18 @@ export default function BalcaoPage() {
           {
             id: `cart-${product.id}-${Date.now()}`,
             productId: product.id,
-            nome: product.name,
+            nome: product.nome,
             quantidade: 1,
-            valorUnitario: product.price,
-            valorTotal: product.price,
+            valorUnitario: product.valorVenda,
+            valorTotal: product.valorVenda,
             manual: false,
-            imageHint: product.imageHint,
-            productType: product.type, 
+            imageHint: product.nome.toLowerCase().split(" ").slice(0,2).join(" "), // Gerar imageHint
+            productType: product.tipo, 
           },
         ];
       }
     });
-    toast({ title: "Item adicionado", description: `${product.name} adicionado ao carrinho.` });
+    toast({ title: "Item adicionado", description: `${product.nome} adicionado ao carrinho.` });
   };
 
   const removeFromCart = (itemId: string) => {
@@ -218,6 +189,8 @@ export default function BalcaoPage() {
       valorUnitario: manualItemPrice,
       valorTotal: manualItemQuantity * manualItemPrice,
       manual: true,
+      imageHint: manualItemName.toLowerCase().split(" ").slice(0,2).join(" "),
+      // productType não se aplica a manual da mesma forma, mas pode ser inferido ou deixado como undefined
     };
     setCartItems((prevItems) => [...prevItems, newItem]);
     toast({ title: "Item manual adicionado", description: `${manualItemName} adicionado ao carrinho.` });
@@ -300,7 +273,7 @@ export default function BalcaoPage() {
               if (!productDoc.exists()) {
                 throw new Error(`Produto ${item.nome} (ID: ${item.productId}) não encontrado no catálogo.`);
               }
-              const productData = productDoc.data() as ProductServicoFirestore;
+              const productData = productDoc.data() as ProductService; // Usando ProductService
               const estoqueAtual = productData.quantidadeEstoque ?? 0;
               
               const novoEstoque = estoqueAtual - item.quantidade;
@@ -371,8 +344,8 @@ export default function BalcaoPage() {
   };
 
   const filteredAvailableProducts = availableProducts.filter(product =>
-    product.name.toLowerCase().includes(searchTermProducts.toLowerCase()) ||
-    product.type.toLowerCase().includes(searchTermProducts.toLowerCase())
+    product.nome.toLowerCase().includes(searchTermProducts.toLowerCase()) ||
+    product.tipo.toLowerCase().includes(searchTermProducts.toLowerCase())
   );
 
   if (!bypassAuth && !user && !isLoadingProducts && !isLoadingClients) {
@@ -440,16 +413,16 @@ export default function BalcaoPage() {
                   <Card key={product.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToCart(product)}>
                     <CardContent className="p-3 flex flex-col items-center text-center">
                       <Image
-                        src={`https://placehold.co/100x80.png?text=${encodeURIComponent(product.name.substring(0,12))}`}
-                        alt={product.name}
+                        src={`https://placehold.co/100x80.png?text=${encodeURIComponent(product.nome.substring(0,12))}`}
+                        alt={product.nome}
                         width={100}
                         height={80}
                         className="rounded-md mb-2 object-cover"
-                        data-ai-hint={product.imageHint}
+                        data-ai-hint={product.nome.toLowerCase().split(" ").slice(0,2).join(" ")}
                       />
-                      <p className="text-sm font-medium truncate w-full" title={product.name}>{product.name}</p>
-                      <p className="text-xs text-muted-foreground">R$ {product.price.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">({product.type})</p>
+                      <p className="text-sm font-medium truncate w-full" title={product.nome}>{product.nome}</p>
+                      <p className="text-xs text-muted-foreground">R$ {product.valorVenda.toFixed(2)}</p>
+                      <p className="text-xs text-muted-foreground">({product.tipo})</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -637,3 +610,6 @@ export default function BalcaoPage() {
 
 
 
+
+
+    

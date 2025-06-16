@@ -35,31 +35,24 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
+import { db } from "@/lib/firebase"; // Mantido para transações
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, doc, updateDoc, runTransaction } from "firebase/firestore";
+import { collection, Timestamp, doc, updateDoc, runTransaction } from "firebase/firestore"; // addDoc e query removidos daqui
 import { cn } from '@/lib/utils';
+import { 
+  getAllProductServicesByUserId, 
+  createProductService, 
+  // updateProductService, // Comentado pois as atualizações de estoque usam runTransaction
+} from '@/services/productServiceService';
+import { 
+  type ProductService, 
+  ProductServiceFormSchema, // Usaremos este para o novo produto
+  type ProductServiceFormValues, // Tipo para o formulário de novo produto
+  type ProductServiceCreateData, // Tipo para criar
+} from '@/schemas/productServiceSchema';
 
-interface ProdutoEstoqueFirestore {
-  id: string;
-  nome: string;
-  tipo: 'Produto' | 'Serviço';
-  unidade: string;
-  valorVenda: number;
-  custoUnitario?: number | null;
-  quantidadeEstoque?: number | null;
-  estoqueMinimo?: number | null;
-  userId: string;
-  criadoEm: Timestamp;
-  atualizadoEm: Timestamp;
-  descricao?: string;
-}
-
-interface ProdutoEstoque extends Omit<ProdutoEstoqueFirestore, 'criadoEm' | 'atualizadoEm'> {
-  criadoEm: Date;
-  atualizadoEm: Date;
-}
+// ProdutoEstoque e ProdutoEstoqueFirestore removidos, usaremos ProductService
 
 const movimentacaoSchemaBase = z.object({
   produtoId: z.string().min(1, "Selecione um produto."),
@@ -85,23 +78,14 @@ const ajusteSchema = z.object({
 });
 type AjusteFormValues = z.infer<typeof ajusteSchema>;
 
-const newProductSchema = z.object({
-  nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
-  descricao: z.string().optional(),
-  valorVenda: z.coerce.number().positive({ message: "Valor de venda deve ser positivo." }),
-  unidade: z.string().min(1, { message: "Unidade é obrigatória (Ex: UN, KG, HR, M²)." }),
-  custoUnitario: z.coerce.number().nonnegative({ message: "Custo Unitário é obrigatório e deve ser não-negativo." }).default(0),
-  quantidadeEstoque: z.coerce.number().nonnegative({ message: "Estoque Inicial é obrigatório e deve ser não-negativo." }).default(0),
-  estoqueMinimo: z.coerce.number().nonnegative({ message: "Estoque Mínimo é obrigatório e deve ser não-negativo." }).default(0),
-});
-type NewProductFormValues = z.infer<typeof newProductSchema>;
-
+// Schema para o formulário de novo produto já está em ProductServiceFormSchema
+// type NewProductFormValues foi substituído por ProductServiceFormValues
 
 export default function ControleEstoquePage() {
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
-  const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
+  const [produtos, setProdutos] = useState<ProductService[]>([]); // Alterado para ProductService
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -110,17 +94,20 @@ export default function ControleEstoquePage() {
   const [isSaidaModalOpen, setIsSaidaModalOpen] = useState(false);
   const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false);
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
-  const [selectedProductForModal, setSelectedProductForModal] = useState<ProdutoEstoque | null>(null);
+  const [selectedProductForModal, setSelectedProductForModal] = useState<ProductService | null>(null);
 
   const bypassAuth = true;
 
   const entradaForm = useForm<EntradaFormValues>({ resolver: zodResolver(entradaSchema), defaultValues: { quantidade: 1, data: new Date(), custoUnitario: 0 } });
   const saidaForm = useForm<SaidaFormValues>({ resolver: zodResolver(saidaSchema), defaultValues: { quantidade: 1, data: new Date() } });
   const ajusteForm = useForm<AjusteFormValues>({ resolver: zodResolver(ajusteSchema), defaultValues: { novaQuantidade: 0 } });
-  const newProductForm = useForm<NewProductFormValues>({
-    resolver: zodResolver(newProductSchema),
+  
+  // Usando ProductServiceFormSchema para o novo produto
+  const newProductForm = useForm<ProductServiceFormValues>({
+    resolver: zodResolver(ProductServiceFormSchema),
     defaultValues: {
       nome: "",
+      tipo: "Produto", // Default para Produto já que estamos em Estoque
       descricao: "",
       valorVenda: 0,
       unidade: "UN",
@@ -139,28 +126,12 @@ export default function ControleEstoquePage() {
     }
     setIsLoading(true);
     try {
-      const q = query(
-        collection(db, "produtosServicos"), 
-        where("userId", "==", userIdToQuery),
-        where("tipo", "==", "Produto"), 
-        orderBy("nome", "asc")
-      );
-      const querySnapshot = await getDocs(q);
-      const fetchedProdutos = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data() as Omit<ProdutoEstoqueFirestore, 'id'>;
-        return {
-          id: docSnap.id,
-          ...data,
-          quantidadeEstoque: data.quantidadeEstoque ?? 0,
-          estoqueMinimo: data.estoqueMinimo ?? 0,
-          custoUnitario: data.custoUnitario ?? 0,
-          criadoEm: data.criadoEm.toDate(),
-          atualizadoEm: data.atualizadoEm.toDate(),
-        } as ProdutoEstoque;
-      });
-      setProdutos(fetchedProdutos);
+      // Usando productServiceService
+      const fetchedProdutos = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
+      // Filtrar apenas produtos, já que esta página é de estoque
+      setProdutos(fetchedProdutos.filter(p => p.tipo === 'Produto'));
     } catch (error: any) {
-      console.error("Erro ao buscar produtos para estoque:", error);
+      console.error("Erro ao buscar produtos para estoque via service:", error);
       toast({ title: "Erro ao buscar produtos", description: `Não foi possível carregar. ${error.message}`, variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -173,19 +144,22 @@ export default function ControleEstoquePage() {
     }
   }, [fetchProdutos, user, bypassAuth]);
 
-  const openModal = (type: 'entrada' | 'saida' | 'ajuste' | 'newProduct', product?: ProdutoEstoque) => {
+  const openModal = (type: 'entrada' | 'saida' | 'ajuste' | 'newProduct', product?: ProductService) => {
     setSelectedProductForModal(product || null);
     if (type === 'entrada') {
-      entradaForm.reset({ produtoId: product?.id || "", quantidade: 1, data: new Date(), custoUnitario: product?.custoUnitario || 0, observacoes: "" });
+      entradaForm.reset({ produtoId: product?.id || "", quantidade: 1, data: new Date(), custoUnitario: product?.custoUnitario ?? 0, observacoes: "" });
       setIsEntradaModalOpen(true);
     } else if (type === 'saida') {
       saidaForm.reset({ produtoId: product?.id || "", quantidade: 1, data: new Date(), motivo: undefined, observacoes: "" });
       setIsSaidaModalOpen(true);
     } else if (type === 'ajuste') {
-      ajusteForm.reset({ produtoId: product?.id || "", novaQuantidade: product?.quantidadeEstoque || 0, observacoes: "" });
+      ajusteForm.reset({ produtoId: product?.id || "", novaQuantidade: product?.quantidadeEstoque ?? 0, observacoes: "" });
       setIsAjusteModalOpen(true);
     } else if (type === 'newProduct') {
-      newProductForm.reset({ nome: "", descricao: "", valorVenda: 0, unidade: "UN", custoUnitario: 0, quantidadeEstoque: 0, estoqueMinimo: 0 });
+      newProductForm.reset({ 
+        nome: "", tipo: "Produto", descricao: "", valorVenda: 0, unidade: "UN",
+        custoUnitario: 0, quantidadeEstoque: 0, estoqueMinimo: 0 
+      });
       setIsNewProductModalOpen(true);
     }
   };
@@ -198,7 +172,7 @@ export default function ControleEstoquePage() {
         const productDoc = await transaction.get(productRef);
         if (!productDoc.exists()) throw new Error("Produto não encontrado.");
         
-        const currentData = productDoc.data() as ProdutoEstoqueFirestore;
+        const currentData = productDoc.data() as ProductService;
         const currentStock = currentData.quantidadeEstoque ?? 0;
         const newStock = currentStock + values.quantidade;
         
@@ -226,7 +200,7 @@ export default function ControleEstoquePage() {
         const productDoc = await transaction.get(productRef);
         if (!productDoc.exists()) throw new Error("Produto não encontrado.");
 
-        const currentData = productDoc.data() as ProdutoEstoqueFirestore;
+        const currentData = productDoc.data() as ProductService;
         const currentStock = currentData.quantidadeEstoque ?? 0;
         if (values.quantidade > currentStock) throw new Error("Quantidade de saída maior que estoque atual.");
         
@@ -254,6 +228,7 @@ export default function ControleEstoquePage() {
         quantidadeEstoque: values.novaQuantidade,
         atualizadoEm: Timestamp.now(),
       });
+      // Aqui poderia chamar updateProductService se a transação fosse movida para lá.
       toast({ title: "Estoque Ajustado!", description: `Estoque atualizado para ${values.novaQuantidade} unidades.` });
       fetchProdutos();
       setIsAjusteModalOpen(false);
@@ -264,30 +239,33 @@ export default function ControleEstoquePage() {
     }
   };
 
-  const handleSaveNewProduct = async (data: NewProductFormValues) => {
+  const handleSaveNewProduct = async (data: ProductServiceFormValues) => {
     if (!user && !bypassAuth) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
     const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
-    const now = Timestamp.now();
 
-    const newProductData = {
-      ...data,
-      tipo: 'Produto' as 'Produto' | 'Serviço',
-      userId: userIdToSave,
-      criadoEm: now,
-      atualizadoEm: now,
+    const createData: ProductServiceCreateData = {
+      nome: data.nome,
+      tipo: "Produto", // Forçado para Produto, já que é a página de estoque
+      descricao: data.descricao,
+      valorVenda: data.valorVenda,
+      unidade: data.unidade,
+      custoUnitario: data.custoUnitario ?? 0,
+      quantidadeEstoque: data.quantidadeEstoque ?? 0,
+      estoqueMinimo: data.estoqueMinimo ?? 0,
     };
 
     try {
-      await addDoc(collection(db, "produtosServicos"), newProductData);
+      await createProductService(userIdToSave, createData);
       toast({ title: "Produto Cadastrado!", description: `${data.nome} foi adicionado ao catálogo e ao estoque.` });
       fetchProdutos();
       setIsNewProductModalOpen(false);
+      newProductForm.reset(); // Resetar o formulário
     } catch (error: any) {
-      console.error("Erro ao salvar novo produto:", error);
+      console.error("Erro ao salvar novo produto via service:", error);
       toast({ title: "Erro ao Salvar Produto", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
@@ -393,7 +371,7 @@ export default function ControleEstoquePage() {
                     <TableCell className="text-center hidden md:table-cell">{p.estoqueMinimo ?? 0}</TableCell>
                     <TableCell className="hidden sm:table-cell">{p.unidade}</TableCell>
                     <TableCell className="hidden lg:table-cell text-right">R$ {(p.custoUnitario ?? 0).toFixed(2)}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-right">{format(p.atualizadoEm, 'dd/MM/yy')}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-right">{format(new Date(p.updatedAt), 'dd/MM/yy')}</TableCell>
                     <TableCell className="text-right space-x-1">
                       <Button variant="ghost" size="icon" onClick={() => openModal('entrada', p)} title="Registrar Entrada"><PlusCircle className="h-4 w-4 text-green-600" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => openModal('saida', p)} title="Registrar Saída"><MinusCircle className="h-4 w-4 text-red-600" /></Button>
@@ -422,6 +400,7 @@ export default function ControleEstoquePage() {
               <FormField control={newProductForm.control} name="nome" render={({ field }) => (
                 <FormItem><FormLabel>Nome do Produto</FormLabel><FormControl><Input placeholder="Ex: Parafuso Sextavado 1/4" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
+              {/* Tipo é fixo como Produto aqui, não precisa de seleção */}
               <FormField control={newProductForm.control} name="valorVenda" render={({ field }) => (
                 <FormItem><FormLabel>Preço de Venda (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0"/></FormControl><FormMessage /></FormItem>
               )} />
@@ -584,5 +563,7 @@ export default function ControleEstoquePage() {
   );
 }
 
+
+    
 
     

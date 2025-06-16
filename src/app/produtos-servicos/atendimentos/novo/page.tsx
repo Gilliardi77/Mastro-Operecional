@@ -9,7 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { CalendarIcon, FileText, MessageSquare, Mail, Loader2, UserPlus, Trash2, PlusCircle } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import React, { useState, useEffect, useCallback } from "react";
-import { collection, addDoc, Timestamp, query, where, getDocs, orderBy, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, Timestamp, doc, updateDoc } from "firebase/firestore"; // Removido query, where, getDocs, orderBy, serverTimestamp
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,8 +26,10 @@ import { db } from "@/lib/firebase";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { createClient, getAllClientsByUserId } from '@/services/clientService';
-import type { Client, ClientCreateData, ClientFormValues as NewClientFormValues } from '@/schemas/clientSchema'; // Ajustado para usar ClientFormValues para o modal
-import { ClientFormSchema as newClientSchema } from '@/schemas/clientSchema'; // Usando o schema direto para o form
+import type { Client, ClientCreateData, ClientFormValues as NewClientFormValues } from '@/schemas/clientSchema';
+import { ClientFormSchema as newClientSchema } from '@/schemas/clientSchema';
+import { getAllProductServicesByUserId } from '@/services/productServiceService'; // Importado
+import type { ProductService } from '@/schemas/productServiceSchema'; // Importado
 
 type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
@@ -55,14 +57,14 @@ const ordemServicoFormSchema = z.object({
 
 type OrdemServicoFormValues = z.infer<typeof ordemServicoFormSchema>;
 
-// Interface Cliente e CatalogoItem mantidas como antes, pois não são o foco desta refatoração de cliente
-interface CatalogoItem {
-  id: string;
-  nome: string;
-  valorVenda: number;
-  tipo: 'Produto' | 'Serviço';
-  unidade?: string;
-}
+// CatalogoItem foi removido, usaremos ProductService
+// interface CatalogoItem {
+//   id: string;
+//   nome: string;
+//   valorVenda: number;
+//   tipo: 'Produto' | 'Serviço';
+//   unidade?: string;
+// }
 
 interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   numeroOS?: string;
@@ -110,9 +112,9 @@ export default function OrdemServicoPage() {
   const searchParams = useSearchParams();
   const { updateAICurrentPageContext } = useAIGuide();
 
-  const [clients, setClients] = useState<Client[]>([]); // Alterado para usar o tipo Client
+  const [clients, setClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [catalogoItens, setCatalogoItens] = useState<CatalogoItem[]>([]);
+  const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]); // Alterado para ProductService[]
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [isSavingNewClient, setIsSavingNewClient] = useState(false);
@@ -138,7 +140,7 @@ export default function OrdemServicoPage() {
   });
 
   const newClientForm = useForm<NewClientFormValues>({
-    resolver: zodResolver(newClientSchema), // Usando o schema importado diretamente
+    resolver: zodResolver(newClientSchema),
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
@@ -205,14 +207,11 @@ export default function OrdemServicoPage() {
     setIsLoadingClients(true);
     setIsLoadingCatalogo(true);
     try {
-      // Buscando clientes com o clientService
       const fetchedClients = await getAllClientsByUserId(userIdToQuery);
       setClients(fetchedClients);
 
-      // Lógica para buscar catálogo mantida, pois não foi refatorada ainda
-      const catalogoQuery = query(collection(db, "produtosServicos"), where("userId", "==", userIdToQuery), orderBy("nome", "asc"));
-      const catalogoSnapshot = await getDocs(catalogoQuery);
-      const fetchedCatalogoItens = catalogoSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...(docSnap.data() as Omit<CatalogoItem, 'id'>) }));
+      // Buscando catálogo com productServiceService
+      const fetchedCatalogoItens = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
       setCatalogoItens(fetchedCatalogoItens);
 
     } catch (error: any) {
@@ -404,7 +403,6 @@ export default function OrdemServicoPage() {
     setIsSavingNewClient(true);
     const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
     
-    // Os campos como createdAt e updatedAt são gerenciados pelo clientService/firestoreService
     const clientDataToCreate: ClientCreateData = {
         nome: data.nome,
         email: data.email,
@@ -417,10 +415,7 @@ export default function OrdemServicoPage() {
     };
 
     try {
-      // Usando o clientService para criar o cliente
       const clienteCriado = await createClient(userIdToSave, clientDataToCreate);
-      
-      // O clientService já retorna o cliente com id, createdAt, updatedAt
       setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
       osForm.setValue('clienteId', clienteCriado.id); 
       osForm.setValue('clienteNome', clienteCriado.nome);
@@ -435,7 +430,7 @@ export default function OrdemServicoPage() {
     }
   }
 
-  const handleAddItem = (itemCatalogo?: CatalogoItem) => {
+  const handleAddItem = (itemCatalogo?: ProductService) => { // Alterado para ProductService
     const newItem: ItemOSFormValues = itemCatalogo ? {
         idTemp: `item-${Date.now()}`,
         produtoServicoId: itemCatalogo.id,
@@ -780,3 +775,6 @@ export default function OrdemServicoPage() {
   );
 }
 
+
+
+    
