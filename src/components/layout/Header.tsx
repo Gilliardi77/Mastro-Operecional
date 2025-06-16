@@ -66,14 +66,13 @@ export default function Header() {
         </Button>
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
-          {/* Atualizado para usar uma logo local */}
           <Image
-            src="/images/logo-maestro-operacional.svg" // Assumindo SVG. Mude para .png se necessário.
+            src="/images/logo-maestro-operacional.svg" 
             alt="Maestro Operacional Logo"
-            width={140} // Mantenha ou ajuste conforme a proporção da sua logo
-            height={36}  // Mantenha ou ajuste conforme a proporção da sua logo
+            width={140} 
+            height={36}  
             priority
-            data-ai-hint="company logo" // Adicionado data-ai-hint
+            data-ai-hint="company logo"
           />
         </Link>
       </div>
