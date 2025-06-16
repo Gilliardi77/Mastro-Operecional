@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Select, SelectTrigger, SelectValue, SelectItem, SelectContent } from "@/components/ui/select";
+import { Select, /*SelectTrigger,*/ SelectValue, SelectItem, SelectContent } from "@/components/ui/select"; // SelectTrigger original comentado
+import { SelectTrigger } from "@/components/ui/SelectTrigger"; // Importando o novo SelectTrigger memoizado
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogPrimitiveDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
@@ -100,6 +101,7 @@ export default function OrdemServicoPage() {
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   
   const [isInitialPrefillComplete, setIsInitialPrefillComplete] = useState(false);
+  const searchParamsAppliedRef = useRef(false);
   const prevClienteIdRef = useRef<string | undefined>(osForm.getValues('clienteId'));
 
 
@@ -133,7 +135,7 @@ export default function OrdemServicoPage() {
 
   // Effect 2: Prefill form from searchParams ONCE after data is loaded
   useEffect(() => {
-    if (isLoadingClients || isLoadingCatalogo || isInitialPrefillComplete) {
+    if (isLoadingClients || isLoadingCatalogo || searchParamsAppliedRef.current) {
       return;
     }
 
@@ -177,30 +179,27 @@ export default function OrdemServicoPage() {
       prefillValues.valorTotalOS = parseFloat(valorTotalParam);
       shouldApplyPrefill = true;
     }
-
+    
+    const baseValues = osForm.formState.defaultValues || {};
     if (shouldApplyPrefill) {
-      osForm.reset({
-        ...osForm.formState.defaultValues,
-        ...prefillValues,
-      });
+      osForm.reset({ ...baseValues, ...prefillValues });
     } else {
-      // If no specific prefill params, ensure form is reset to its defined defaults
-      osForm.reset(osForm.formState.defaultValues);
+      osForm.reset(baseValues); // Reset to defaults if no prefill
     }
     
-    setIsInitialPrefillComplete(true);
+    searchParamsAppliedRef.current = true;
+    setIsInitialPrefillComplete(true); // Set state to trigger other effects
     setLastSavedOsData(null);
     prevClienteIdRef.current = osForm.getValues('clienteId'); // Initialize prevClienteIdRef after reset
-
-  }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo, isInitialPrefillComplete]);
+  }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo, setIsInitialPrefillComplete]);
 
 
   // Effect 3: Sync clienteNome when clienteId (dropdown) changes, AFTER initial prefill is complete
   const watchedClienteId = osForm.watch('clienteId');
   useEffect(() => {
     if (!isInitialPrefillComplete || isLoadingClients || watchedClienteId === prevClienteIdRef.current) {
-      // Only run if prefill is complete, clients are loaded, and clienteId actually changed
-      if (watchedClienteId !== prevClienteIdRef.current) { // Update ref if it changed but other conditions failed
+      // Update ref if watchedClienteId changed but other conditions failed, to prevent stale ref
+      if (watchedClienteId !== prevClienteIdRef.current) {
          prevClienteIdRef.current = watchedClienteId;
       }
       return;
@@ -215,29 +214,33 @@ export default function OrdemServicoPage() {
       }
     } else if (watchedClienteId === "avulso") {
       const defaultAvulsoName = "Cliente Avulso";
-      // Set to "Cliente Avulso" only if it's not already that AND (it's empty OR it was a specific client previously)
-      if (currentFormClienteNome !== defaultAvulsoName && 
-          (currentFormClienteNome === "" || (prevClienteIdRef.current && prevClienteIdRef.current !== "avulso"))) {
-         osForm.setValue('clienteNome', defaultAvulsoName, { shouldValidate: true, shouldDirty: true });
+      // Only set to default if it's not already that, and it was previously a specific client OR it's empty
+      if (currentFormClienteNome !== defaultAvulsoName) {
+        const previousIdWasSpecificClient = prevClienteIdRef.current && prevClienteIdRef.current !== "avulso";
+        if (previousIdWasSpecificClient || currentFormClienteNome === "") {
+          osForm.setValue('clienteNome', defaultAvulsoName, { shouldValidate: true, shouldDirty: true });
+        }
       }
     }
-    prevClienteIdRef.current = watchedClienteId; // Update ref after handling the change
-
+    prevClienteIdRef.current = watchedClienteId; 
   }, [watchedClienteId, clients, osForm, isInitialPrefillComplete, isLoadingClients]);
 
 
-  const watchedOsFormValues = osForm.watch();
+  // Effect 4: Update AI Guide Context with form snapshot
+  const formValuesForSnapshot = osForm.watch();
+  const formSnapshot = JSON.stringify(formValuesForSnapshot);
+
   useEffect(() => {
-    if (isInitialPrefillComplete) { 
-        const formSnapshotJSON = JSON.stringify(watchedOsFormValues);
+    if (isInitialPrefillComplete && !isLoadingClients && !isLoadingCatalogo) { 
         updateAICurrentPageContext({
             pageName: "Nova Ordem de Serviço",
-            formSnapshotJSON: formSnapshotJSON,
+            formSnapshotJSON: formSnapshot,
         });
     }
-  }, [watchedOsFormValues, updateAICurrentPageContext, isInitialPrefillComplete]);
+  }, [formSnapshot, updateAICurrentPageContext, isInitialPrefillComplete, isLoadingClients, isLoadingCatalogo]);
 
 
+  // Effect 5: Event listener for AI form fill
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
       const customEvent = event as CustomEvent<AIFillFormEventPayload>;
@@ -355,8 +358,10 @@ export default function OrdemServicoPage() {
         observacoes: "", 
         dataEntrega: undefined 
       });
+      // Resetar flags para permitir novo preenchimento se a página for navegada/atualizada com params
+      searchParamsAppliedRef.current = false;
       setIsInitialPrefillComplete(false); 
-      prevClienteIdRef.current = "avulso"; // Reset ref for next form interaction
+      prevClienteIdRef.current = "avulso";
     } catch (error: any) {
       toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
@@ -388,7 +393,6 @@ export default function OrdemServicoPage() {
       setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
       osForm.setValue('clienteId', clienteCriado.id, {shouldDirty: true}); 
       prevClienteIdRef.current = clienteCriado.id; // Update ref as selection changed
-      // The useEffect for watchedClienteId will handle setting clienteNome
       toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
       newClientForm.reset();
@@ -484,14 +488,13 @@ export default function OrdemServicoPage() {
                       <div className="flex items-center gap-2">
                         <Select
                           onValueChange={(value) => {
-                            // prevClienteIdRef.current = field.value; // Update ref before field changes
                             field.onChange(value);
                           }}
                           value={field.value || "avulso"} 
                           disabled={isLoadingClients}
                         >
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger> {/* Usando o SelectTrigger memoizado */}
                               <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} />
                             </SelectTrigger>
                           </FormControl>
@@ -544,7 +547,11 @@ export default function OrdemServicoPage() {
                                       value={item.produtoServicoId || MANUAL_ITEM_PLACEHOLDER_VALUE}
                                       disabled={isLoadingCatalogo}
                                   >
-                                      <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} /></SelectTrigger></FormControl>
+                                      <FormControl>
+                                        <SelectTrigger> {/* Usando o SelectTrigger memoizado */}
+                                          <SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} />
+                                        </SelectTrigger>
+                                      </FormControl>
                                       <SelectContent>
                                           <SelectItem value={MANUAL_ITEM_PLACEHOLDER_VALUE}>-- Item Manual --</SelectItem>
                                           {catalogoItens.map(catItem => <SelectItem key={catItem.id} value={catItem.id}>{catItem.nome} ({catItem.tipo}) - R${catItem.valorVenda.toFixed(2)}</SelectItem>)}
@@ -747,4 +754,5 @@ export default function OrdemServicoPage() {
     
 
     
+
 
