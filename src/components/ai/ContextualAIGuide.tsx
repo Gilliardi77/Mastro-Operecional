@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Lightbulb, Send, X, Loader2 } from 'lucide-react'; // Alterado Sparkles para Lightbulb
+import { Lightbulb, Send, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
@@ -122,20 +122,20 @@ export default function ContextualAIGuide() {
   return (
     <>
       <Button
-        variant="success" // Usando a variante de sucesso para a cor verde
+        variant="success"
         size="icon"
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50" // Removido bg-accent, hover e text explícitos
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50"
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
-        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Lightbulb className="h-7 w-7" />} {/* Ícone alterado para Lightbulb */}
+        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Lightbulb className="h-7 w-7 text-yellow-400" />}
       </Button>
 
       <Sheet open={isAIGuideOpen} onOpenChange={(open) => { if (!open) closeAIGuide(); else toggleAIGuide();}}>
         <SheetContent side="right" className="w-[400px] sm:w-[540px] p-0 flex flex-col">
           <SheetHeader className="p-6 pb-2 border-b">
             <SheetTitle className="text-xl flex items-center gap-2">
-              <Lightbulb className="h-6 w-6 text-primary" /> {/* Ícone no título do Sheet também atualizado para Lightbulb */}
+              <Lightbulb className="h-6 w-6 text-primary" />
               Guia Inteligente Business Maestro
             </SheetTitle>
             <SheetDescription>
