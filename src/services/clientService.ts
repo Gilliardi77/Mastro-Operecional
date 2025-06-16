@@ -24,6 +24,7 @@ const COLLECTION_NAME = 'clientes';
  * @returns O cliente criado.
  */
 export async function createClient(userId: string, data: ClientCreateData): Promise<Client> {
+  // A validação de 'data' contra ClientCreateSchema ocorre dentro de createDocument
   return createDocument(COLLECTION_NAME, userId, ClientCreateSchema, ClientSchema, data);
 }
 
@@ -58,8 +59,7 @@ export async function getAllClientsByUserId(
  * @returns O cliente atualizado.
  */
 export async function updateClient(id: string, data: ClientUpdateData): Promise<Client> {
-  // Assegurar que o `updateDocument` retorne `Promise<Client>` e não `Promise<Client | null>`
-  // pois se o documento não existir, ele deve lançar um erro.
+  // A validação de 'data' contra ClientUpdateSchema ocorre dentro de updateDocument
   const updatedClient = await updateDocument(COLLECTION_NAME, id, data, ClientUpdateSchema, ClientSchema);
   if (!updatedClient) {
     // Este caso não deveria acontecer se updateDocument lança erro quando doc não existe
