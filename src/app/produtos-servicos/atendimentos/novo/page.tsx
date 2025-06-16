@@ -100,6 +100,7 @@ export default function OrdemServicoPage() {
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   
   const [isInitialPrefillComplete, setIsInitialPrefillComplete] = useState(false);
+  const prevClienteIdRef = useRef<string | undefined>(osForm.getValues('clienteId'));
 
 
   // Effect 1: Fetch initial data (clients and catalog)
@@ -130,7 +131,7 @@ export default function OrdemServicoPage() {
   }, [user, bypassAuth, toast]);
 
 
-  // Effect 2: Prefill form from searchParams ONCE after data is loaded and if not already done
+  // Effect 2: Prefill form from searchParams ONCE after data is loaded
   useEffect(() => {
     if (isLoadingClients || isLoadingCatalogo || isInitialPrefillComplete) {
       return;
@@ -140,7 +141,7 @@ export default function OrdemServicoPage() {
     const clienteNomeParam = searchParams.get('clienteNome');
     const descricaoParam = searchParams.get('descricao');
     const valorTotalParam = searchParams.get('valorTotal');
-
+    
     let prefillValues: Partial<OrdemServicoFormValues> & { itens?: ItemOSFormValues[] } = {};
     let shouldApplyPrefill = false;
 
@@ -179,12 +180,17 @@ export default function OrdemServicoPage() {
 
     if (shouldApplyPrefill) {
       osForm.reset({
-        ...osForm.formState.defaultValues, // Start with defined defaults
-        ...prefillValues,                 // Override with prefill values
+        ...osForm.formState.defaultValues,
+        ...prefillValues,
       });
+    } else {
+      // If no specific prefill params, ensure form is reset to its defined defaults
+      osForm.reset(osForm.formState.defaultValues);
     }
-    setIsInitialPrefillComplete(true); // Mark as complete regardless of whether prefill happened
+    
+    setIsInitialPrefillComplete(true);
     setLastSavedOsData(null);
+    prevClienteIdRef.current = osForm.getValues('clienteId'); // Initialize prevClienteIdRef after reset
 
   }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo, isInitialPrefillComplete]);
 
@@ -192,40 +198,44 @@ export default function OrdemServicoPage() {
   // Effect 3: Sync clienteNome when clienteId (dropdown) changes, AFTER initial prefill is complete
   const watchedClienteId = osForm.watch('clienteId');
   useEffect(() => {
-    if (!isInitialPrefillComplete || isLoadingClients) {
-      return; // Don't run if initial prefill isn't done or clients are still loading
+    if (!isInitialPrefillComplete || isLoadingClients || watchedClienteId === prevClienteIdRef.current) {
+      // Only run if prefill is complete, clients are loaded, and clienteId actually changed
+      if (watchedClienteId !== prevClienteIdRef.current) { // Update ref if it changed but other conditions failed
+         prevClienteIdRef.current = watchedClienteId;
+      }
+      return;
     }
 
-    const currentFormClienteId = watchedClienteId; // Value from watch is fine for dependency
-    const currentFormClienteNome = osForm.getValues('clienteNome'); // Get current value directly to avoid loop
+    const currentFormClienteNome = osForm.getValues('clienteNome');
 
-    if (currentFormClienteId && currentFormClienteId !== "avulso") {
-      const client = clients.find(c => c.id === currentFormClienteId);
+    if (watchedClienteId && watchedClienteId !== "avulso") {
+      const client = clients.find(c => c.id === watchedClienteId);
       if (client && client.nome !== currentFormClienteNome) {
         osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
       }
-    } else if (currentFormClienteId === "avulso") {
+    } else if (watchedClienteId === "avulso") {
       const defaultAvulsoName = "Cliente Avulso";
-      // Only set to "Cliente Avulso" if the name is not already that AND it's not empty (allowing manual input)
-      // AND it was previously a name of a specific client.
-      const isPreviouslySpecificClient = clients.some(c => c.nome === currentFormClienteNome && c.id !== "avulso");
-      if (currentFormClienteNome !== defaultAvulsoName && (currentFormClienteNome === "" || isPreviouslySpecificClient) ) {
+      // Set to "Cliente Avulso" only if it's not already that AND (it's empty OR it was a specific client previously)
+      if (currentFormClienteNome !== defaultAvulsoName && 
+          (currentFormClienteNome === "" || (prevClienteIdRef.current && prevClienteIdRef.current !== "avulso"))) {
          osForm.setValue('clienteNome', defaultAvulsoName, { shouldValidate: true, shouldDirty: true });
       }
     }
+    prevClienteIdRef.current = watchedClienteId; // Update ref after handling the change
+
   }, [watchedClienteId, clients, osForm, isInitialPrefillComplete, isLoadingClients]);
 
 
   const watchedOsFormValues = osForm.watch();
   useEffect(() => {
-    if (!isLoadingClients && !isLoadingCatalogo && isInitialPrefillComplete) { // Ensure context is updated after initial load and prefill attempt
+    if (isInitialPrefillComplete) { 
         const formSnapshotJSON = JSON.stringify(watchedOsFormValues);
         updateAICurrentPageContext({
             pageName: "Nova Ordem de Serviço",
             formSnapshotJSON: formSnapshotJSON,
         });
     }
-  }, [watchedOsFormValues, updateAICurrentPageContext, isLoadingClients, isLoadingCatalogo, isInitialPrefillComplete]);
+  }, [watchedOsFormValues, updateAICurrentPageContext, isInitialPrefillComplete]);
 
 
   useEffect(() => {
@@ -280,7 +290,7 @@ export default function OrdemServicoPage() {
     };
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
     return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
-  }, [osForm, toast, fields, update]); // Keep dependencies as they were
+  }, [osForm, toast, fields, update]);
 
 
   async function onOsSubmit(data: OrdemServicoFormValues) {
@@ -345,8 +355,8 @@ export default function OrdemServicoPage() {
         observacoes: "", 
         dataEntrega: undefined 
       });
-      // Reset the prefill complete flag so new searchParams can be applied if the page is reloaded or params change
       setIsInitialPrefillComplete(false); 
+      prevClienteIdRef.current = "avulso"; // Reset ref for next form interaction
     } catch (error: any) {
       toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
@@ -377,6 +387,7 @@ export default function OrdemServicoPage() {
       const clienteCriado = await createClient(userIdToSave, clientDataToCreate);
       setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
       osForm.setValue('clienteId', clienteCriado.id, {shouldDirty: true}); 
+      prevClienteIdRef.current = clienteCriado.id; // Update ref as selection changed
       // The useEffect for watchedClienteId will handle setting clienteNome
       toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
@@ -441,8 +452,8 @@ export default function OrdemServicoPage() {
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
 
-  if (isAuthLoading || (isLoadingClients && !isInitialPrefillComplete) || (isLoadingCatalogo && !isInitialPrefillComplete)) { 
-     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
+  if (isAuthLoading) { 
+     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando autenticação...</p></div>;
   }
   
   return (
@@ -458,193 +469,199 @@ export default function OrdemServicoPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Form {...osForm}>
-            <form onSubmit={osForm.handleSubmit(onOsSubmit)} className="space-y-6">
-              <FormField
-                control={osForm.control}
-                name="clienteId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cliente</FormLabel>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                        }}
-                        value={field.value || "avulso"} 
-                        disabled={isLoadingClients}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="avulso">Cliente Avulso</SelectItem>
-                          {clients.map(client => (
-                            <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button type="button" variant="outline" size="icon" onClick={() => setIsNewClientModalOpen(true)} disabled={isLoadingClients} title="Adicionar Novo Cliente">
-                        <UserPlus className="h-4 w-4"/>
-                      </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {watchedClienteId === 'avulso' && ( // Use watchedClienteId for reactive UI
+          {(isLoadingClients || isLoadingCatalogo) && !isInitialPrefillComplete && (
+             <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados do formulário...</p></div>
+          )}
+          {(!isLoadingClients && !isLoadingCatalogo) && (
+            <Form {...osForm}>
+              <form onSubmit={osForm.handleSubmit(onOsSubmit)} className="space-y-6">
                 <FormField
                   control={osForm.control}
-                  name="clienteNome"
+                  name="clienteId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome do Cliente Avulso</FormLabel>
-                      <FormControl><Input placeholder="Nome para cliente avulso" {...field} value={field.value || ''} /></FormControl>
+                      <FormLabel>Cliente</FormLabel>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          onValueChange={(value) => {
+                            // prevClienteIdRef.current = field.value; // Update ref before field changes
+                            field.onChange(value);
+                          }}
+                          value={field.value || "avulso"} 
+                          disabled={isLoadingClients}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="avulso">Cliente Avulso</SelectItem>
+                            {clients.map(client => (
+                              <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" size="icon" onClick={() => setIsNewClientModalOpen(true)} disabled={isLoadingClients} title="Adicionar Novo Cliente">
+                          <UserPlus className="h-4 w-4"/>
+                        </Button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              )}
 
-
-              <Card className="pt-4">
-                <CardHeader><CardTitle className="text-lg">Itens da Ordem de Serviço</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  {fields.map((item, index) => {
-                    const isCatalogoSelected = !!item.produtoServicoId && item.produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE;
-                    return (
-                    <div key={item.idTemp} className="p-3 border rounded-md space-y-3 relative bg-muted/20">
-                       <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => remove(index)} title="Remover Item">
-                         <Trash2 className="h-4 w-4" />
-                       </Button>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormItem>
-                                <FormLabel>Item do Catálogo</FormLabel>
-                                <Select
-                                    onValueChange={(value) => handleItemCatalogoSelect(index, value)}
-                                    value={item.produtoServicoId || MANUAL_ITEM_PLACEHOLDER_VALUE}
-                                    disabled={isLoadingCatalogo}
-                                >
-                                    <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value={MANUAL_ITEM_PLACEHOLDER_VALUE}>-- Item Manual --</SelectItem>
-                                        {catalogoItens.map(catItem => <SelectItem key={catItem.id} value={catItem.id}>{catItem.nome} ({catItem.tipo}) - R${catItem.valorVenda.toFixed(2)}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </FormItem>
-                             <FormField name={`itens.${index}.nome`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Nome do Item</FormLabel><FormControl><Input placeholder="Nome do produto/serviço" {...field} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
-                             )}/>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                             <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)} min="1" /></FormControl><FormMessage /></FormItem>
-                             )}/>
-                             <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
-                             )}/>
-                        </div>
-                         <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
-                            <FormItem className="hidden">
-                                <FormControl><Input {...field} value={field.value || 'Manual'} /></FormControl>
-                            </FormItem>
-                         )}/>
-                    </div>
-                  );
-                })}
-                  <Button type="button" variant="outline" onClick={() => handleAddItem()} className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4"/> Adicionar Item</Button>
-                  <FormMessage>{osForm.formState.errors.itens?.message || osForm.formState.errors.itens?.root?.message}</FormMessage>
-                </CardContent>
-              </Card>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={osForm.control}
-                  name="valorTotalOS"
-                  render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Valor Total da OS (R$) (Opcional)</FormLabel>
-                        <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
-                        <FormDescription>Se não informado, será calculado com base nos itens ao salvar.</FormDescription>
+                {watchedClienteId === 'avulso' && ( 
+                  <FormField
+                    control={osForm.control}
+                    name="clienteNome"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome do Cliente Avulso</FormLabel>
+                        <FormControl><Input placeholder="Nome para cliente avulso" {...field} value={field.value || ''} /></FormControl>
                         <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+
+                <Card className="pt-4">
+                  <CardHeader><CardTitle className="text-lg">Itens da Ordem de Serviço</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    {fields.map((item, index) => {
+                      const isCatalogoSelected = !!item.produtoServicoId && item.produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE;
+                      return (
+                      <div key={item.idTemp} className="p-3 border rounded-md space-y-3 relative bg-muted/20">
+                        <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => remove(index)} title="Remover Item">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormItem>
+                                  <FormLabel>Item do Catálogo</FormLabel>
+                                  <Select
+                                      onValueChange={(value) => handleItemCatalogoSelect(index, value)}
+                                      value={item.produtoServicoId || MANUAL_ITEM_PLACEHOLDER_VALUE}
+                                      disabled={isLoadingCatalogo}
+                                  >
+                                      <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} /></SelectTrigger></FormControl>
+                                      <SelectContent>
+                                          <SelectItem value={MANUAL_ITEM_PLACEHOLDER_VALUE}>-- Item Manual --</SelectItem>
+                                          {catalogoItens.map(catItem => <SelectItem key={catItem.id} value={catItem.id}>{catItem.nome} ({catItem.tipo}) - R${catItem.valorVenda.toFixed(2)}</SelectItem>)}
+                                      </SelectContent>
+                                  </Select>
+                              </FormItem>
+                              <FormField name={`itens.${index}.nome`} control={osForm.control} render={({ field }) => (
+                                  <FormItem><FormLabel>Nome do Item</FormLabel><FormControl><Input placeholder="Nome do produto/serviço" {...field} disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                              )}/>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <FormField name={`itens.${index}.quantidade`} control={osForm.control} render={({ field }) => (
+                                  <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)} min="1" /></FormControl><FormMessage /></FormItem>
+                              )}/>
+                              <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
+                                  <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                              )}/>
+                          </div>
+                          <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
+                              <FormItem className="hidden">
+                                  <FormControl><Input {...field} value={field.value || 'Manual'} /></FormControl>
+                              </FormItem>
+                          )}/>
+                      </div>
+                    );
+                  })}
+                    <Button type="button" variant="outline" onClick={() => handleAddItem()} className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4"/> Adicionar Item</Button>
+                    <FormMessage>{osForm.formState.errors.itens?.message || osForm.formState.errors.itens?.root?.message}</FormMessage>
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={osForm.control}
+                    name="valorTotalOS"
+                    render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Valor Total da OS (R$) (Opcional)</FormLabel>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
+                          <FormDescription>Se não informado, será calculado com base nos itens ao salvar.</FormDescription>
+                          <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={osForm.control}
+                    name="valorAdiantado"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor Adiantado (R$) (Opcional)</FormLabel>
+                        <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={osForm.control}
+                  name="dataEntrega"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Data de Entrega Prevista</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP", { locale: ptBR })
+                              ) : (
+                                <span>Escolha uma data</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))} 
+                            initialFocus
+                            locale={ptBR}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
                   control={osForm.control}
-                  name="valorAdiantado"
+                  name="observacoes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Valor Adiantado (R$) (Opcional)</FormLabel>
-                      <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
+                      <FormLabel>Observações (Opcional)</FormLabel>
+                      <FormControl><Textarea placeholder="Detalhes importantes, instruções especiais, etc." {...field} value={field.value || ''} rows={3} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              </div>
 
-              <FormField
-                control={osForm.control}
-                name="dataEntrega"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de Entrega Prevista</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP", { locale: ptBR })
-                            ) : (
-                              <span>Escolha uma data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))} 
-                          initialFocus
-                          locale={ptBR}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={osForm.control}
-                name="observacoes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Observações (Opcional)</FormLabel>
-                    <FormControl><Textarea placeholder="Detalhes importantes, instruções especiais, etc." {...field} value={field.value || ''} rows={3} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="flex flex-col sm:flex-row gap-2 pt-4">
-                <Button type="submit" disabled={isSaving || isSendingEmail} className="w-full sm:w-auto">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Salvando...</> : "Salvar Ordem de Serviço"}</Button>
-                <Button type="button" variant="outline" onClick={handleEnviarWhatsApp} disabled={!canSendActions || isSaving || isSendingEmail} className="w-full sm:w-auto"><MessageSquare className="mr-2 h-4 w-4" /> Enviar por WhatsApp</Button>
-                <Button type="button" variant="outline" onClick={handleEnviarEmail} disabled={!canSendActions || isSaving || isSendingEmail} className="w-full sm:w-auto">{isSendingEmail ? <><Mail className="mr-2 h-4 w-4 animate-pulse" /> Enviando...</> : <><Mail className="mr-2 h-4 w-4" /> Enviar por E-mail</>}</Button>
-              </div>
-            </form>
-          </Form>
+                <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                  <Button type="submit" disabled={isSaving || isSendingEmail} className="w-full sm:w-auto">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Salvando...</> : "Salvar Ordem de Serviço"}</Button>
+                  <Button type="button" variant="outline" onClick={handleEnviarWhatsApp} disabled={!canSendActions || isSaving || isSendingEmail} className="w-full sm:w-auto"><MessageSquare className="mr-2 h-4 w-4" /> Enviar por WhatsApp</Button>
+                  <Button type="button" variant="outline" onClick={handleEnviarEmail} disabled={!canSendActions || isSaving || isSendingEmail} className="w-full sm:w-auto">{isSendingEmail ? <><Mail className="mr-2 h-4 w-4 animate-pulse" /> Enviando...</> : <><Mail className="mr-2 h-4 w-4" /> Enviar por E-mail</>}</Button>
+                </div>
+              </form>
+            </Form>
+          )}
         </CardContent>
       </Card>
 
@@ -730,3 +747,4 @@ export default function OrdemServicoPage() {
     
 
     
+
