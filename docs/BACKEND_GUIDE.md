@@ -81,13 +81,13 @@ Podem existir schemas Zod específicos para formulários na UI, localizados pró
 ### 6.1. `bypassAuth` e `bypass_user_placeholder`
 - Para facilitar o desenvolvimento local sem autenticação completa, o padrão de usar uma flag `bypassAuth: boolean` e um `userId` placeholder (ex: `"bypass_user_placeholder"`) pode ser adotado.
 - **Regras de Segurança Firestore:** O Guia deve instruir que, para este modo de desenvolvimento, as Regras de Segurança do Firestore precisam ser temporariamente ajustadas para permitir acesso (leitura/escrita conforme necessário) para este `userId` placeholder ou para usuários não autenticados (`request.auth == null`).
-  \`\`\`rules
+  ```rules
   // Exemplo para desenvolvimento - NÃO USAR EM PRODUÇÃO SEM REVISÃO
   match /suaColecao/{docId} {
     allow read: if request.auth != null || request.auth.uid == "bypass_user_placeholder";
     allow write: if request.auth != null && request.auth.uid == resource.data.userId;
   }
-  \`\`\`
+  ```
 - **Aviso de Segurança:** Incluir um aviso **MUITO CLARO** de que estas regras permissivas são **APENAS PARA DESENVOLVIMENTO** e devem ser substituídas por regras restritivas e seguras antes de qualquer implantação em produção. Em produção, o `bypass_user_placeholder` não deve ter acesso.
 
 ---
