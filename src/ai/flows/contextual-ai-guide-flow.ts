@@ -33,7 +33,7 @@ Seu tom deve ser: Simples, Humano, Direto e Levemente Consultivo.
 {{#if chatHistory}}
 Histórico da Conversa Recente (para contexto):
 {{#each chatHistory}}
-- {{#if (eq role "user")}}Usuário{{else}}Assistente{{/if}}: {{{text}}}
+- {{role}}: {{{text}}}
 {{/each}}
 
 Considere o histórico acima para manter a conversa coesa e evitar repetições.
@@ -110,3 +110,4 @@ const contextualAIGuideInternalFlow = ai.defineFlow(
     return output;
   }
 );
+
