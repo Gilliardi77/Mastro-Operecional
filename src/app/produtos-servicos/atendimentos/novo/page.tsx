@@ -1,49 +1,56 @@
 
-'use client';
+/// REFORMULADO E OTIMIZADO ///
+"use client";
 
+// Imports agrupados por funcionalidade
+import React, { useState, useEffect, useCallback } from "react";
+import { useForm, useFieldArray, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type FieldPath, useFieldArray } from "react-hook-form";
-// import { z } from "zod"; // Removido, usar do schema de OS
+import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, FileText, MessageSquare, Mail, Loader2, UserPlus, Trash2, PlusCircle } from "lucide-react";
-import { useSearchParams, useRouter } from "next/navigation";
-import React, { useState, useEffect, useCallback } from "react";
-import { collection, addDoc, Timestamp, doc, updateDoc } from "firebase/firestore"; 
 
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Select, SelectTrigger, SelectValue, SelectItem, SelectContent } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogPrimitiveDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+
 import { cn } from "@/lib/utils";
+// import { db } from "@/lib/firebase"; // Removido, pois addDoc direto não será mais usado aqui
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
-import { useAuth } from '@/components/auth/auth-provider';
-import { useAIGuide } from '@/contexts/AIGuideContext';
-import { createClient, getAllClientsByUserId } from '@/services/clientService';
-import type { Client, ClientCreateData, ClientFormValues as NewClientFormValues } from '@/schemas/clientSchema';
-import { ClientFormSchema as newClientSchema } from '@/schemas/clientSchema';
-import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
-import type { ProductService } from '@/schemas/productServiceSchema'; 
+import { useAuth } from "@/components/auth/auth-provider";
+import { useAIGuide } from "@/contexts/AIGuideContext";
 
-import { createOrdemServico, type OrdemServicoCreateData } from '@/services/ordemServicoService';
-import { 
-  OrdemServicoFormSchema, // Schema para o formulário desta página
-  type ItemOSFormValues, // Tipo para os itens do formulário
-  type OrdemServicoFormValues // Tipo para os valores do formulário
-} from '@/schemas/ordemServicoSchema';
-import type { ProductionOrderStatus } from '@/schemas/ordemServicoSchema'; // Para tipo da OP
+import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus } from "lucide-react";
 
+// Schemas e Tipagens
+import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData } from "@/schemas/ordemServicoSchema";
+import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schemas/ordemProducaoSchema"; // Importando o tipo de status
+import { newClientSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema";
+import type { ProductService } from "@/schemas/productServiceSchema";
+
+// Services
+import { getAllClientsByUserId, createClient } from "@/services/clientService";
+import { getAllProductServicesByUserId } from "@/services/productServiceService";
+import { createOrdemServico } from "@/services/ordemServicoService";
+import { createOrdemProducao } from "@/services/ordemProducaoService"; // Importando o novo serviço
+// import { collection, addDoc, Timestamp } from "firebase/firestore"; // Timestamp ainda pode ser útil para dataAgendamento da OP, mas a conversão ocorre no firestoreService
+
+// Constantes
 const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
 
-// Tipos locais para ProductionOrderStatusOSPage e LastSavedOsDataType são mantidos
-// pois são específicos da lógica desta página e não diretamente parte do schema da OS
-type ProductionOrderStatusOSPage = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
+// Helper: WhatsApp (mantido como estava no seu código)
+const formatPhoneNumberForWhatsApp = (phone?: string): string | null => {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (!digits.startsWith("55") && digits.length >= 10) return `55${digits}`;
+  return digits.length >= 10 ? digits : null; // Ajuste para retornar digits se já tiver 55 e for válido
+};
 
 interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   numeroOS?: string;
@@ -61,49 +68,18 @@ interface AIFillFormEventPayload {
   itemIndex?: number;
 }
 
-interface AIOpenNewClientModalOSEventPayload {
-  suggestedClientName?: string;
-  actionLabel?: string;
-}
-
-// Função formatPhoneNumberForWhatsApp mantida como está
-const formatPhoneNumberForWhatsApp = (phone: string | undefined): string | null => {
-  if (!phone) return null;
-  let digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('55') && digits.length > 11) {
-    // Already has 55, likely correct
-  }
-  if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
-    return `55${digits}`;
-  }
-  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-    return digits;
-  }
-  return digits.length >= 10 ? digits : null;
-};
-
-
+// Componente principal
 export default function OrdemServicoPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  const [lastSavedOsData, setLastSavedOsData] = useState<LastSavedOsDataType | null>(null);
   const searchParams = useSearchParams();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const { updateAICurrentPageContext } = useAIGuide();
-
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]);
-  const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
-  const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
-  const [isSavingNewClient, setIsSavingNewClient] = useState(false);
-
   const bypassAuth = true;
 
+  // Formulário OS
   const osForm = useForm<OrdemServicoFormValues>({
-    resolver: zodResolver(OrdemServicoFormSchema), // Usando o schema importado
+    resolver: zodResolver(OrdemServicoFormSchema),
     defaultValues: {
       clienteId: "avulso",
       clienteNome: "Cliente Avulso",
@@ -111,7 +87,7 @@ export default function OrdemServicoPage() {
       valorTotalOS: 0,
       valorAdiantado: 0,
       observacoes: "",
-      dataEntrega: undefined, // Zod validará isso como obrigatório
+      dataEntrega: undefined,
     },
   });
 
@@ -120,16 +96,54 @@ export default function OrdemServicoPage() {
     name: "itens",
   });
 
+  // Formulário Cliente
   const newClientForm = useForm<NewClientFormValues>({
     resolver: zodResolver(newClientSchema),
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
+  // Estados
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [lastSavedOsData, setLastSavedOsData] = useState<LastSavedOsDataType | null>(null);
+  const [isSavingNewClient, setIsSavingNewClient] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
+  const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false);
+  const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+
+  // Fetch de dados iniciais
+  const fetchClientsAndCatalogo = useCallback(async () => {
+    const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : "");
+    if (!userIdToQuery) {
+      setIsLoadingClients(false);
+      setIsLoadingCatalogo(false);
+      return;
+    }
+    setIsLoadingClients(true);
+    setIsLoadingCatalogo(true);
+    try {
+      const [fetchedClients, fetchedCatalogoItens] = await Promise.all([
+        getAllClientsByUserId(userIdToQuery),
+        getAllProductServicesByUserId(userIdToQuery, "nome", "asc"),
+      ]);
+      setClients(fetchedClients);
+      setCatalogoItens(fetchedCatalogoItens);
+    } catch (err: any) {
+      toast({ title: "Erro ao carregar dados", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoadingClients(false);
+      setIsLoadingCatalogo(false);
+    }
+  }, [user, bypassAuth, toast]);
+
+  useEffect(() => { if (user || bypassAuth) fetchClientsAndCatalogo(); }, [fetchClientsAndCatalogo, user, bypassAuth]);
+
   useEffect(() => {
     updateAICurrentPageContext({pageName: "Nova Ordem de Serviço"});
   }, [updateAICurrentPageContext]);
 
-  // handleAiFormFill effect
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
       const customEvent = event as CustomEvent<AIFillFormEventPayload>;
@@ -185,38 +199,6 @@ export default function OrdemServicoPage() {
     return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
   }, [osForm, toast, fields, update]);
 
-
-  const fetchClientsAndCatalogo = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
-      setClients([]);
-      setCatalogoItens([]);
-      setIsLoadingClients(false);
-      setIsLoadingCatalogo(false);
-      return;
-    }
-    setIsLoadingClients(true);
-    setIsLoadingCatalogo(true);
-    try {
-      const fetchedClients = await getAllClientsByUserId(userIdToQuery);
-      setClients(fetchedClients);
-      const fetchedCatalogoItens = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
-      setCatalogoItens(fetchedCatalogoItens);
-    } catch (error: any) {
-      console.error("Erro ao buscar clientes ou catálogo:", error);
-      toast({ title: "Erro ao buscar dados", variant: "destructive", description: `Não foi possível carregar. ${error.message}` });
-    } finally {
-      setIsLoadingClients(false);
-      setIsLoadingCatalogo(false);
-    }
-  }, [user, bypassAuth, toast]);
-
-  useEffect(() => {
-    if (user || bypassAuth) {
-      fetchClientsAndCatalogo();
-    }
-  }, [fetchClientsAndCatalogo, user, bypassAuth]);
-
   useEffect(() => {
     const clienteIdParam = searchParams.get('clienteId');
     const clienteNomeParam = searchParams.get('clienteNome'); 
@@ -250,7 +232,6 @@ export default function OrdemServicoPage() {
       if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
         valorUnitarioDoItem = parseFloat(valorTotalParam);
       }
-      // Usando o tipo ItemOSFormValues para o item
       const newItem: ItemOSFormValues = {
         idTemp: `item-${Date.now()}`,
         produtoServicoId: undefined,
@@ -294,13 +275,12 @@ export default function OrdemServicoPage() {
     }
   }, [osForm, clients, searchParams, osForm.watch('clienteId')]);
 
-
+  // Submit da OS
   async function onOsSubmit(data: OrdemServicoFormValues) {
     setIsSaving(true);
     setLastSavedOsData(null);
-    let userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-
-    if (!userIdToSave) {
+    const uid = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
+    if (!uid) {
       toast({ title: "Erro de Autenticação", variant: "destructive" });
       setIsSaving(false);
       return;
@@ -309,12 +289,9 @@ export default function OrdemServicoPage() {
     const selectedClient = data.clienteId && data.clienteId !== "avulso" ? clients.find(c => c.id === data.clienteId) : null;
     const nomeClienteFinal = selectedClient ? selectedClient.nome : (data.clienteNome || "Cliente Avulso");
 
-    const itensParaSalvar = data.itens.map(item => ({
-      produtoServicoId: (item.produtoServicoId && item.produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE) ? item.produtoServicoId : null,
-      nome: item.nome,
-      quantidade: item.quantidade,
-      valorUnitario: item.valorUnitario,
-      tipo: item.tipo,
+    const itensParaSalvar = data.itens.map(({ produtoServicoId, nome, quantidade, valorUnitario, tipo }) => ({
+      produtoServicoId: (produtoServicoId && produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE) ? produtoServicoId : null,
+      nome, quantidade, valorUnitario, tipo
     }));
 
     const osDataToCreate: OrdemServicoCreateData = {
@@ -323,56 +300,46 @@ export default function OrdemServicoPage() {
       itens: itensParaSalvar,
       valorTotal: data.valorTotalOS || 0,
       valorAdiantado: data.valorAdiantado || 0,
-      dataEntrega: data.dataEntrega, // dataEntrega já é Date do formulário
+      valorPagoTotal: data.valorAdiantado || 0,
+      dataEntrega: data.dataEntrega,
       observacoes: data.observacoes || "",
-      status: "Pendente", // Default status
-      statusPagamento: "Pendente", // Default payment status
-      valorPagoTotal: data.valorAdiantado || 0, // Adiantamento é o primeiro valor pago
+      status: "Pendente",
+      statusPagamento: "Pendente",
     };
 
     try {
-      const osCriada = await createOrdemServico(userIdToSave, osDataToCreate);
-      const osDocRefId = osCriada.id;
-
-      // Lógica de adiantamento e saldo (se necessário futuramente para lançamentos financeiros diretos)
-      // ...
-
-      const primeiroItemNome = data.itens[0]?.nome || "Serviço Detalhado na OS";
-      const productionOrderData = {
-        agendamentoId: osDocRefId, // Usar o ID da OS criada como referência
-        clienteId: osCriada.clienteId,
-        clienteNome: osCriada.clienteNome,
-        servicoNome: primeiroItemNome + (data.itens.length > 1 ? " e outros" : ""),
-        dataAgendamento: Timestamp.fromDate(osCriada.dataEntrega), // Timestamp para Firestore
-        status: "Pendente" as ProductionOrderStatusOSPage, // Tipo local, mas compatível
-        progresso: 0,
-        observacoesAgendamento: osCriada.observacoes,
-        userId: userIdToSave,
-        criadoEm: Timestamp.now(),
-        atualizadoEm: Timestamp.now(),
-      };
-      await addDoc(collection(db, "ordensDeProducao"), productionOrderData);
+      const osDoc = await createOrdemServico(uid, osDataToCreate);
       
-      toast({ title: "Ordem de Serviço Salva!", description: `OS #${osDocRefId.substring(0,6)}... salva e ordem de produção criada.` });
+      const primeiroItemNome = itensParaSalvar[0]?.nome || "Serviço Detalhado na OS";
+      const opDataToCreate: OrdemProducaoCreateData = {
+        agendamentoId: osDoc.id,
+        clienteId: osDoc.clienteId,
+        clienteNome: osDoc.clienteNome,
+        servicoNome: primeiroItemNome + (itensParaSalvar.length > 1 ? " e outros" : ""),
+        dataAgendamento: osDoc.dataEntrega, // FirestoreTimestampSchema espera Date
+        status: "Pendente" as OrdemProducaoStatus,
+        progresso: 0,
+        observacoesAgendamento: osDoc.observacoes,
+      };
+      await createOrdemProducao(uid, opDataToCreate);
+
+      toast({ title: "OS Criada", description: `OS #${osDoc.id.substring(0, 6)}... salva e OP criada.` });
       setLastSavedOsData({
         ...data,
-        numeroOS: osDocRefId,
+        numeroOS: osDoc.id,
         clienteNomeFinal: nomeClienteFinal,
         clienteTelefone: selectedClient?.telefone,
         clienteEmail: selectedClient?.email,
         itensSalvos: itensParaSalvar,
       });
       osForm.reset({ clienteId: "avulso", clienteNome: "Cliente Avulso", itens: [], valorTotalOS: 0, valorAdiantado: 0, observacoes: "", dataEntrega: undefined });
-
-    } catch (e: any) {
-      console.error("Erro ao salvar OS:", e);
-      toast({ title: "Erro ao Salvar OS", variant: "destructive", description: e.message });
+    } catch (error: any) {
+      toast({ title: "Erro ao Salvar OS", description: error.message, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
   }
 
-  // onSaveNewClient permanece igual, pois usa clientService
   async function onSaveNewClient(data: NewClientFormValues) {
     if (!user && !bypassAuth) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
@@ -433,8 +400,8 @@ export default function OrdemServicoPage() {
         update(index, {
             ...currentItem,
             produtoServicoId: undefined, 
-            nome: currentItem.nome || "", // Garante que nome não seja undefined
-            valorUnitario: currentItem.valorUnitario ?? 0, // Garante que valorUnitario não seja undefined
+            nome: currentItem.nome || "", 
+            valorUnitario: currentItem.valorUnitario ?? 0, 
             tipo: 'Manual',
         });
     } else {
@@ -459,6 +426,7 @@ export default function OrdemServicoPage() {
   }
 
   const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
+
 
   if (isAuthLoading || isLoadingClients || isLoadingCatalogo) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados...</p></div>;
