@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react"; // Added useState, useEffect
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
 import {
@@ -14,12 +14,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   LogOut, UserCircle, Edit3, ShieldCheck,
-  Bell, Building, Briefcase, Phone, Mail
-} from "lucide-react";
+  Bell, Building, Briefcase, Phone, Mail, Landmark
+} from "lucide-react"; // Added Landmark for CNPJ
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import type { User as FirebaseUser } from "firebase/auth";
 import { getFirebaseInstances, signOut as firebaseSignOutUtil } from "@/lib/firebase";
+import { getUserProfile, type UserProfileData } from "@/services/userProfileService"; // Import service
 
 interface ProfileInfoRowProps {
   icon: React.ElementType;
@@ -27,35 +28,70 @@ interface ProfileInfoRowProps {
   value?: string | null;
   action?: React.ReactNode;
   valueClassName?: string;
+  isLoading?: boolean;
 }
 
-const ProfileInfoRow: React.FC<ProfileInfoRowProps> = ({ icon: Icon, label, value, action, valueClassName }) => (
+const ProfileInfoRow: React.FC<ProfileInfoRowProps> = ({ icon: Icon, label, value, action, valueClassName, isLoading }) => (
   <div className="flex items-center justify-between py-3">
     <div className="flex items-center">
       <Icon className="mr-3 h-5 w-5 text-muted-foreground" />
       <span className="text-sm font-medium text-foreground">{label}</span>
     </div>
     <div className="flex items-center">
-      <span className={`text-sm text-muted-foreground mr-2 ${valueClassName || ""}`}>{value || "Não informado"}</span>
-      {action}
+      {isLoading ? (
+        <Skeleton className="h-5 w-32" />
+      ) : (
+        <span className={`text-sm text-muted-foreground mr-2 ${valueClassName || ""}`}>{value || "Não informado"}</span>
+      )}
+      {action && !isLoading && action}
     </div>
   </div>
 );
 
 export default function ProfilePage() {
-  const { user, isLoading: authLoading, isAuthenticating } = useAuth(); // isAuthenticating is true during initial auth check
+  const { user, isLoading: authLoading, isAuthenticating } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const { auth: firebaseAuthInstance } = getFirebaseInstances();
   
-  const firebaseUser = user as FirebaseUser | null; // User from useAuth is already FirebaseUser or null
+  const firebaseUser = user as FirebaseUser | null;
 
-  React.useEffect(() => {
-    // Use isAuthenticating to wait for the initial auth check to complete
+  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  useEffect(() => {
     if (!isAuthenticating && !firebaseUser) {
       router.push("/login?redirect=/profile");
     }
   }, [firebaseUser, isAuthenticating, router]);
+
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (firebaseUser?.uid) {
+        setProfileLoading(true);
+        try {
+          const profileData = await getUserProfile(firebaseUser.uid);
+          setUserProfile(profileData);
+        } catch (error) {
+          console.error("Erro ao buscar perfil do usuário Firestore:", error);
+          toast({
+            title: "Erro ao Carregar Perfil",
+            description: "Não foi possível carregar os dados adicionais do perfil.",
+            variant: "destructive",
+          });
+        } finally {
+          setProfileLoading(false);
+        }
+      } else if (!firebaseUser) {
+        setProfileLoading(false); // No user, so not loading profile
+      }
+    }
+
+    if (!isAuthenticating) { // Only fetch if auth state is resolved
+        fetchUserProfile();
+    }
+  }, [firebaseUser, isAuthenticating, toast]);
+
 
   const handleSignOut = async () => {
     if (!firebaseAuthInstance) {
@@ -72,7 +108,7 @@ export default function ProfilePage() {
         title: "Logout realizado",
         description: "Você foi desconectado com sucesso."
       });
-      // router.push('/login'); // Redirect after logout
+      // router.push('/login'); // Redirect after logout is handled by AuthProvider or page logic
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
       toast({
@@ -92,8 +128,7 @@ export default function ProfilePage() {
       : parts[0][0].toUpperCase();
   };
 
-  // Use isAuthenticating for the skeleton loader, as it indicates the initial auth check
-  if (isAuthenticating || !firebaseUser) {
+  if (isAuthenticating || !firebaseUser) { // Show skeleton if auth is loading or no user
     return (
       <div className="container mx-auto py-10 px-4 md:px-6 max-w-3xl">
         <Card className="shadow-lg">
@@ -150,15 +185,15 @@ export default function ProfilePage() {
             </div>
           </CardHeader>
           <CardContent className="divide-y divide-border">
-            <ProfileInfoRow icon={UserCircle} label="Nome Completo" value={firebaseUser.displayName} />
-            <ProfileInfoRow icon={Mail} label="Email" value={firebaseUser.email} valueClassName="lowercase" />
-            <ProfileInfoRow icon={Phone} label="Telefone" value={firebaseUser.phoneNumber} />
-            <ProfileInfoRow icon={ShieldCheck} label="Senha" value="••••••••" />
-            <ProfileInfoRow icon={Bell} label="Notificações" value="Ativadas" />
+            <ProfileInfoRow icon={UserCircle} label="Nome Completo" value={firebaseUser.displayName} isLoading={authLoading || profileLoading} />
+            <ProfileInfoRow icon={Mail} label="Email Principal (Login)" value={firebaseUser.email} valueClassName="lowercase" isLoading={authLoading || profileLoading} />
+            <ProfileInfoRow icon={Phone} label="Telefone Pessoal (Auth)" value={firebaseUser.phoneNumber} isLoading={authLoading || profileLoading} />
+            <ProfileInfoRow icon={ShieldCheck} label="Senha" value="••••••••" action={<Button variant="link" size="sm" className="p-0 h-auto text-xs" disabled>Alterar</Button>} isLoading={authLoading || profileLoading} />
+            <ProfileInfoRow icon={Bell} label="Notificações" value="Ativadas" isLoading={authLoading || profileLoading} />
           </CardContent>
           <CardFooter className="pt-6">
             <Button variant="outline" className="w-full" disabled>
-              <Edit3 className="mr-2 h-4 w-4" /> Editar Informações Pessoais
+              <Edit3 className="mr-2 h-4 w-4" /> Editar Informações Pessoais (Em Breve)
             </Button>
           </CardFooter>
         </Card>
@@ -176,15 +211,16 @@ export default function ProfilePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="divide-y divide-border">
-            <ProfileInfoRow icon={Briefcase} label="Nome da Empresa" value="Maestro Corp Ltda." />
-            <ProfileInfoRow icon={UserCircle} label="CNPJ" value="12.345.678/0001-99" />
-            <ProfileInfoRow icon={Building} label="Tipo de Negócio" value="Consultoria e Serviços" />
-            <ProfileInfoRow icon={Phone} label="Telefone Comercial" value="(11) 3344-5566" />
-            <ProfileInfoRow icon={Mail} label="Email Comercial" value="contato@maestrocorp.com.br" />
+            <ProfileInfoRow icon={Briefcase} label="Nome da Empresa" value={userProfile?.companyName} isLoading={profileLoading} />
+            <ProfileInfoRow icon={Landmark} label="CNPJ" value={userProfile?.companyCnpj} isLoading={profileLoading} />
+            <ProfileInfoRow icon={UserCircle} label="Tipo de Negócio" value={userProfile?.businessType} isLoading={profileLoading} />
+            <ProfileInfoRow icon={Phone} label="Telefone Comercial" value={userProfile?.companyPhone} isLoading={profileLoading} />
+            <ProfileInfoRow icon={Mail} label="Email Comercial" value={userProfile?.companyEmail} isLoading={profileLoading} />
+            <ProfileInfoRow icon={Phone} label="Telefone Pessoal (Perfil)" value={userProfile?.personalPhoneNumber} isLoading={profileLoading} />
           </CardContent>
           <CardFooter className="pt-6">
             <Button variant="outline" className="w-full" disabled>
-              <Edit3 className="mr-2 h-4 w-4" /> Gerenciar Dados da Empresa
+              <Edit3 className="mr-2 h-4 w-4" /> Gerenciar Dados da Empresa (Em Breve)
             </Button>
           </CardFooter>
         </Card>
