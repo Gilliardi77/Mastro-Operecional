@@ -31,15 +31,14 @@ import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircl
 // Schemas e Tipagens
 import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData } from "@/schemas/ordemServicoSchema";
 import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schemas/ordemProducaoSchema"; // Importando o tipo de status
-import { ClientFormSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema"; // CORRIGIDO: ClientFormSchema
+import { ClientFormSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema";
 import type { ProductService } from "@/schemas/productServiceSchema";
 
 // Services
 import { getAllClientsByUserId, createClient } from "@/services/clientService";
 import { getAllProductServicesByUserId } from "@/services/productServiceService";
 import { createOrdemServico } from "@/services/ordemServicoService";
-import { createOrdemProducao } from "@/services/ordemProducaoService"; // Importando o novo serviço
-// import { collection, addDoc, Timestamp } from "firebase/firestore"; // Timestamp ainda pode ser útil para dataAgendamento da OP, mas a conversão ocorre no firestoreService
+import { createOrdemProducao } from "@/services/ordemProducaoService";
 
 // Constantes
 const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
@@ -49,7 +48,7 @@ const formatPhoneNumberForWhatsApp = (phone?: string): string | null => {
   if (!phone) return null;
   let digits = phone.replace(/\D/g, "");
   if (!digits.startsWith("55") && digits.length >= 10) return `55${digits}`;
-  return digits.length >= 10 ? digits : null; // Ajuste para retornar digits se já tiver 55 e for válido
+  return digits.length >= 10 ? digits : null;
 };
 
 interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
@@ -98,7 +97,7 @@ export default function OrdemServicoPage() {
 
   // Formulário Cliente
   const newClientForm = useForm<NewClientFormValues>({
-    resolver: zodResolver(ClientFormSchema), // CORRIGIDO: ClientFormSchema
+    resolver: zodResolver(ClientFormSchema),
     defaultValues: { nome: "", email: "", telefone: "", endereco: "" },
   });
 
@@ -140,9 +139,16 @@ export default function OrdemServicoPage() {
 
   useEffect(() => { if (user || bypassAuth) fetchClientsAndCatalogo(); }, [fetchClientsAndCatalogo, user, bypassAuth]);
 
+  // Atualiza contexto da IA com nome da página e snapshot do formulário
+  const watchedOsFormValues = osForm.watch();
   useEffect(() => {
-    updateAICurrentPageContext({pageName: "Nova Ordem de Serviço"});
-  }, [updateAICurrentPageContext]);
+    const formSnapshotJSON = JSON.stringify(watchedOsFormValues);
+    updateAICurrentPageContext({
+      pageName: "Nova Ordem de Serviço",
+      formSnapshotJSON: formSnapshotJSON,
+    });
+  }, [watchedOsFormValues, updateAICurrentPageContext]);
+
 
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
@@ -295,16 +301,13 @@ export default function OrdemServicoPage() {
     }));
 
     const osDataToCreate: OrdemServicoCreateData = {
-      // numeroOS será gerado pelo serviço
       clienteId: data.clienteId && data.clienteId !== "avulso" ? data.clienteId : null,
       clienteNome: nomeClienteFinal,
       itens: itensParaSalvar,
       valorTotal: data.valorTotalOS || 0,
       valorAdiantado: data.valorAdiantado || 0,
-      // valorPagoTotal já é tratado pelo schema/serviço com default
-      dataEntrega: data.dataEntrega, // Aqui passamos Date, o serviço/firestoreService lida com a conversão para Timestamp
+      dataEntrega: data.dataEntrega, 
       observacoes: data.observacoes || "",
-      // status e statusPagamento já são tratados pelo schema/serviço com default
     };
 
     try {
@@ -312,12 +315,12 @@ export default function OrdemServicoPage() {
       
       const primeiroItemNome = itensParaSalvar[0]?.nome || "Serviço Detalhado na OS";
       const opDataToCreate: OrdemProducaoCreateData = {
-        agendamentoId: osDoc.id, // ID da OS criada
+        agendamentoId: osDoc.id, 
         clienteId: osDoc.clienteId,
         clienteNome: osDoc.clienteNome,
         servicoNome: primeiroItemNome + (itensParaSalvar.length > 1 ? " e outros" : ""),
-        dataAgendamento: osDoc.dataEntrega, // Passando Date, o serviço de OP converterá
-        status: "Pendente" as OrdemProducaoStatus, // Ajuste aqui, pois OrdemProducaoStatusEnum não é importado
+        dataAgendamento: osDoc.dataEntrega, 
+        status: "Pendente" as OrdemProducaoStatus, 
         progresso: 0,
         observacoesAgendamento: osDoc.observacoes,
       };
@@ -326,7 +329,7 @@ export default function OrdemServicoPage() {
       toast({ title: "OS Criada", description: `OS #${osDoc.numeroOS.substring(0, 6)}... salva e OP criada.` });
       setLastSavedOsData({
         ...data,
-        numeroOS: osDoc.numeroOS, // Usar o numeroOS retornado pelo serviço
+        numeroOS: osDoc.numeroOS, 
         clienteNomeFinal: nomeClienteFinal,
         clienteTelefone: selectedClient?.telefone,
         clienteEmail: selectedClient?.email,
