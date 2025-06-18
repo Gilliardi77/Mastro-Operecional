@@ -15,6 +15,10 @@ import {
   deleteDocument,
 } from './firestoreService';
 
+/**
+ * Nome da coleção no Firestore para ordens de serviço.
+ * Definido conforme DATA_SYNC_CONFIG.json.
+ */
 const COLLECTION_NAME = 'ordensServico';
 
 /**
@@ -38,7 +42,9 @@ export async function createOrdemServico(userId: string, data: OrdemServicoCreat
   // Por ora, assumimos que o schema e o firestoreService cuidam da estrutura.
   if (!createdDoc.numeroOS) {
      const osWithNumero = { ...createdDoc, numeroOS: createdDoc.id };
-     return updateOrdemServico(createdDoc.id, { numeroOS: createdDoc.id }); // Atualiza apenas o numeroOS
+     // Atualiza o documento recém-criado para incluir o numeroOS se ele não foi definido.
+     // Isso garante que numeroOS sempre tenha um valor (o ID do documento se não especificado).
+     return updateOrdemServico(createdDoc.id, { numeroOS: createdDoc.id });
   }
   return createdDoc;
 }
@@ -88,5 +94,3 @@ export async function updateOrdemServico(id: string, data: OrdemServicoUpdateDat
 export async function deleteOrdemServico(id: string): Promise<void> {
   return deleteDocument(COLLECTION_NAME, id);
 }
-
-    

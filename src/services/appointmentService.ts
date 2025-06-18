@@ -15,6 +15,10 @@ import {
   deleteDocument,
 } from './firestoreService';
 
+/**
+ * Nome da coleção no Firestore para agendamentos.
+ * Definido conforme DATA_SYNC_CONFIG.json.
+ */
 const COLLECTION_NAME = 'agendamentos';
 
 /**

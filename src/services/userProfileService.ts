@@ -8,6 +8,10 @@ import {
   type UserProfileUpsertData,
 } from '@/schemas/userProfileSchema';
 
+/**
+ * Nome da coleção no Firestore para perfis de usuário.
+ * Definido conforme DATA_SYNC_CONFIG.json.
+ */
 const COLLECTION_NAME = 'usuarios';
 
 function convertDocTimestampsToDates(docData: any): any {

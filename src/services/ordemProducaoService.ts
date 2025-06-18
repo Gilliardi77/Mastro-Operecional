@@ -16,6 +16,10 @@ import {
 } from './firestoreService';
 import type { QueryConstraint } from 'firebase/firestore';
 
+/**
+ * Nome da coleção no Firestore para ordens de produção.
+ * Definido conforme DATA_SYNC_CONFIG.json.
+ */
 const COLLECTION_NAME = 'ordensDeProducao';
 
 /**
@@ -81,7 +85,7 @@ export async function deleteOrdemProducao(id: string): Promise<void> {
  * @returns Uma lista de Ordens de Produção relacionadas.
  */
 export async function getOrdensProducaoByAgendamentoId(userId: string, agendamentoId: string): Promise<OrdemProducao[]> {
-    const { where } = await import('firebase/firestore');
+    const { where, orderBy } = await import('firebase/firestore'); // Corrigido para incluir orderBy
     const constraints: QueryConstraint[] = [
         where("userId", "==", userId),
         where("agendamentoId", "==", agendamentoId),

@@ -17,6 +17,10 @@ import {
 } from './firestoreService';
 import type { QueryConstraint } from 'firebase/firestore'; // Importação adicionada
 
+/**
+ * Nome da coleção no Firestore para produtos e serviços.
+ * Definido conforme DATA_SYNC_CONFIG.json.
+ */
 const COLLECTION_NAME = 'produtosServicos';
 
 /**
