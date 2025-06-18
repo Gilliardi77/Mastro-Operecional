@@ -8,6 +8,17 @@
 
 Este documento descreve a arquitetura de backend do Firebase/Firestore compartilhada pelos diversos aplicativos que compõem o ecossistema "Business Maestro". O objetivo é fornecer uma fonte única de verdade sobre a estrutura de dados, coleções, regras de segurança, relacionamentos e padrões de acesso, visando garantir segurança, escalabilidade, consistência e compatibilidade entre os aplicativos.
 
+**⚠️ Fonte Oficial da Verdade para Coleções e Regras do Firestore:**
+
+**Atenção:** Os arquivos `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md`, localizados na raiz deste projeto, são a **fonte oficial de verdade** para:
+
+*   A lista definitiva de coleções do Firestore.
+*   Nomes de coleções e campos principais (implícito pelo uso).
+*   Formatos de ID de documentos.
+*   Regras de segurança do Firebase Firestore.
+
+Embora este documento (`DETAILED_BACKEND_ARCHITECTURE.md`) forneça um detalhamento extensivo das coleções, seus campos e operações conforme entendidos durante sua criação, os arquivos `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` devem ser considerados a referência canônica. Utilize-os para validar ou atualizar os detalhes específicos das coleções, especialmente nomes de coleções, regras de segurança, e formatos de ID. O `docs/BACKEND_GUIDE.md` complementa com o raciocínio arquitetural e padrões de implementação.
+
 **Princípios Fundamentais do Backend:**
 
 1.  **Schemas são a Verdade:** Toda entidade tem seu schema Zod definido em `src/schemas/` (dentro de cada app relevante ou em uma biblioteca compartilhada). Nenhuma interação com o Firestore ocorre sem validação prévia por esses schemas.
@@ -20,7 +31,7 @@ Este documento descreve a arquitetura de backend do Firebase/Firestore compartil
 
 ## 1. Visão Geral das Coleções
 
-A seguir, uma lista das principais coleções de dados no Firestore utilizadas pelo ecossistema Business Maestro:
+A seguir, uma lista das principais coleções de dados no Firestore utilizadas pelo ecossistema Business Maestro (consulte `DATA_SYNC_CONFIG.json` para a lista canônica e regras):
 
 *   **`usuarios`**: Perfis de usuários e dados da empresa.
 *   **`consultationsMetadata`**: Metadados sobre o status da consulta de diagnóstico inicial do usuário.
@@ -35,15 +46,18 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **`lancamentosFinanceiros`**: Entradas e saídas financeiras, incluindo aquelas geradas por vendas e OS.
 *   **`faturas`**: Faturas emitidas para clientes (principalmente para o app Financeiro).
 *   **`metasFinanceiras`**: Metas financeiras específicas definidas pelo usuário (principalmente para o app Financeiro).
+*   *(Outras coleções podem estar definidas em `DATA_SYNC_CONFIG.json`)*
 
 ---
 
 ## 2. Detalhamento das Coleções
 
+*(Esta seção fornece detalhes sobre a estrutura e uso das coleções. Para a lista canônica de coleções e suas regras de segurança exatas, consulte `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md`.)*
+
 ### 2.1. Coleção: `usuarios`
 
 *   **Propósito:** Armazenar informações de perfil do usuário e dados da empresa associada à conta do usuário. É a fonte da verdade para dados adicionais ao Firebase Authentication.
-*   **ID do Documento:** `uid` do usuário do Firebase Authentication.
+*   **ID do Documento:** `uid` do usuário do Firebase Authentication (conforme `DATA_SYNC_CONFIG.json`).
 *   **Campos:**
     *   `companyName` (String): [Opcional] Nome da empresa. Ex: "Maestro Soluções LTDA".
     *   `companyCnpj` (String): [Opcional] CNPJ da empresa. Ex: "00.000.000/0001-00".
@@ -66,15 +80,18 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Geralmente não é permitido diretamente pelo usuário final. Exclusão de conta pode ser um processo de admin ou automação que limpa dados relacionados.
         *   **Apps que utilizam:** Módulo de Administração (se houver).
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `usuarios.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /usuarios/{docId} { // Onde docId é o userId
+    //   allow read, write: if request.auth.uid == docId;
+    //   allow delete: if false; // Ou conforme política de admin
+    // }
+
+    // Regras detalhadas do documento original:
     match /usuarios/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      // O 'upsertUserProfile' cria o documento se não existir, ou mescla (merge: true) se existir.
-      // O create implícito no setDoc com merge:true precisa de permissão de write.
-      // O update (que também é um setDoc com merge:true) precisa de permissão de write.
       allow write: if request.auth != null && request.auth.uid == userId;
-      // Delete deve ser restrito.
       allow delete: if false; // Ou: if isAdmin(request.auth.uid);
     }
     ```
@@ -87,7 +104,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 ### 2.2. Coleção: `consultationsMetadata`
 
 *   **Propósito:** Rastrear o status da consulta de diagnóstico inicial do usuário no "Diagnóstico Maestro".
-*   **ID do Documento:** `uid` do usuário do Firebase Authentication.
+*   **ID do Documento:** `uid` do usuário do Firebase Authentication (conforme `DATA_SYNC_CONFIG.json`).
 *   **Campos:**
     *   `completed` (Boolean): [Obrigatório] Indica se o diagnóstico foi concluído. Ex: `true`.
     *   `completedAt` (Timestamp): [Opcional] Data e hora da conclusão. Ex: `FieldValue.serverTimestamp()`.
@@ -105,12 +122,16 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Geralmente não aplicável.
         *   **Apps que utilizam:** N/A.
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `consultationsMetadata.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /consultationsMetadata/{docId} { // Onde docId é o userId
+    //   allow read, write: if request.auth.uid == docId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /consultationsMetadata/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      // A escrita é feita pelo backend do Diagnóstico Maestro, que pode usar Admin SDK
-      // ou um usuário de serviço. Se feita pelo cliente:
       allow write: if request.auth != null && request.auth.uid == userId;
     }
     ```
@@ -145,12 +166,16 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Usuário final (ex: para excluir um plano antigo).
         *   **Apps que utilizam:** "Diagnóstico Maestro".
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `userGoals.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /userGoals/{goalId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+    
+    // Regras detalhadas do documento original:
     match /userGoals/{goalId} {
-      // Usuário só pode criar metas para si mesmo
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // Usuário só pode ler, atualizar ou deletar suas próprias metas
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
     ```
@@ -195,8 +220,14 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Usuário final (se permitido) ou Admin.
         *   **Apps que utilizam:** "Diagnóstico Maestro" (se houver funcionalidade de exclusão).
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `consultations.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /consultations/{consultationId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /consultations/{consultationId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -247,8 +278,14 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Usuário final.
         *   **Apps que utilizam:** "Maestro Operacional".
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `clientes.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /clientes/{clienteId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /clientes/{clienteId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -280,8 +317,14 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **CREATE, READ, UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (via UI do "Maestro Operacional").
         *   **Apps que utilizam:** "Maestro Operacional" (cadastro, seleção em OS/Vendas, controle de estoque).
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `produtosServicos.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /produtosServicos/{itemId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+    
+    // Regras detalhadas do documento original:
     match /produtosServicos/{itemId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -313,8 +356,14 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **CREATE, READ, UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (via UI do "Maestro Operacional").
         *   **Apps que utilizam:** "Maestro Operacional" (principalmente módulo de Agenda).
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `agendamentos.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /agendamentos/{agendamentoId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /agendamentos/{agendamentoId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -354,8 +403,14 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **READ, UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (via UI "Maestro Operacional").
         *   **Apps que utilizam:** "Maestro Operacional".
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `ordensServico.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /ordensServico/{osId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /ordensServico/{osId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -395,11 +450,15 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Geralmente não aplicável, exceto por Admin ou se a OS original for cancelada.
         *   **Apps que utilizam:** "Maestro Operacional" (condicionalmente).
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `ordensDeProducao.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /ordensDeProducao/{opId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /ordensDeProducao/{opId} {
-      // A criação é mais complexa, pode ser por função de backend ou regra que verifica a OS vinculada.
-      // Exemplo simplificado para criação pelo usuário (se aplicável diretamente):
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update: if request.auth != null && resource.data.userId == request.auth.uid;
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid; // Ou mais restrito
@@ -440,12 +499,17 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **DELETE:**
         *   **Quem executa:** Geralmente restrito a Admin ou para correções.
         *   **Apps que utilizam:** Módulo de Administração (se houver).
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `vendas.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /vendas/{vendaId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /vendas/{vendaId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update: if request.auth != null && resource.data.userId == request.auth.uid;
-      // Delete deve ser mais restrito
       allow delete: if false; // Ou: if isAdmin(request.auth.uid) && resource.data.userId == request.auth.uid;
     }
     ```
@@ -481,8 +545,14 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   **UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (para corrigir ou excluir lançamentos manuais). Lançamentos automáticos geralmente não são editados diretamente.
         *   **Apps que utilizam:** "Visão Clara Financeira".
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `lancamentosFinanceiros.regras`)
     ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /lancamentosFinanceiros/{lancamentoId} {
+    //   allow read, write: if request.auth.uid == resource.data.userId;
+    // }
+
+    // Regras detalhadas do documento original:
     match /lancamentosFinanceiros/{lancamentoId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -495,73 +565,57 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 
 ---
 
-### 2.12. Coleção: `faturas` (Exemplo para App Financeiro)
+### 2.12. Coleção: `metasFinanceiras`
 
-*   **Propósito:** Gerenciar faturas emitidas para clientes, controle de vencimento e pagamento.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos (Sugestão):**
-    *   `userId` (String): [Obrigatório].
-    *   `clienteId` (String): [Obrigatório] ID da coleção `clientes`.
-    *   `clienteNome` (String): [Obrigatório].
-    *   `numeroFatura` (String): [Obrigatório] Número sequencial ou customizado.
-    *   `dataEmissao` (Timestamp): [Obrigatório].
-    *   `dataVencimento` (Timestamp): [Obrigatório].
-    *   `itens` (Array<Object>): [Obrigatório] `{ descricao, quantidade, valorUnitario, valorTotal }`.
-    *   `valorTotalFatura` (Number): [Obrigatório].
-    *   `status` (String): [Obrigatório] "Pendente", "Paga", "Vencida", "Cancelada".
-    *   `dataPagamento` (Timestamp): [Opcional].
-    *   `observacoes` (String): [Opcional].
-    *   `linkBoletoPdf` (String): [Opcional].
+*   **Propósito:** Permitir que o usuário defina e acompanhe metas financeiras. Poderia ser usado pelo app "Visão Clara Financeira".
+*   **ID do Documento:** Formato `userId_anoMes` (conforme `DATA_SYNC_CONFIG.json`).
+*   **Campos (Sugestão, pois não está totalmente definido no schema):**
+    *   `userId` (String): [Obrigatório, parte do ID].
+    *   `anoMes` (String): [Obrigatório, parte do ID] Ex: "2024_07".
+    *   `metaReceita` (Number): [Opcional] Meta de receita para o mês.
+    *   `metaLucro` (Number): [Opcional] Meta de lucro para o mês.
+    *   `metaDespesaMaxima` (Number): [Opcional] Limite de despesa para o mês.
+    *   `descricao` (String): [Opcional] Descrição da meta.
     *   `createdAt` (Timestamp): [Obrigatório].
     *   `updatedAt` (Timestamp): [Obrigatório].
 *   **Operações (CRUD):**
     *   **CREATE, READ, UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (via UI do "Visão Clara Financeira").
         *   **Apps que utilizam:** "Visão Clara Financeira".
-*   **Regras de Segurança (Firestore Rules):**
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `metasFinanceiras.regras`)
     ```firestore
-    match /faturas/{faturaId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /metasFinanceiras/{docId} { // Onde docId é userId_anoMes
+    //   allow read, write: if request.auth.uid == docId.split('_')[0];
+    // }
+
+    // Regras detalhadas do documento original (exemplo):
+    match /metasFinanceiras/{metaId} { // Supondo que metaId seja o formato userId_anoMes
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && metaId.split('_')[0] == request.auth.uid;
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid && metaId.split('_')[0] == request.auth.uid;
     }
     ```
 *   **Indexação e Performance:**
-    *   `userId` (ASC), `dataVencimento` (ASC) para faturas a vencer.
-    *   `userId` (ASC), `status` (ASC), `dataVencimento` (ASC).
+    *   Acesso primário pelo ID do documento (`userId_anoMes`). Se for buscar por `userId` apenas para listar todas as metas de um usuário, um índice em `userId` seria necessário se o ID do documento não for suficiente para a consulta.
 
 ---
 
-### 2.13. Coleção: `metasFinanceiras` (Exemplo para App Financeiro)
+### 2.13. Outras Coleções do `DATA_SYNC_CONFIG.json`
 
-*   **Propósito:** Permitir que o usuário defina e acompanhe metas financeiras.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos (Sugestão):**
-    *   `userId` (String): [Obrigatório].
-    *   `nomeMeta` (String): [Obrigatório] Ex: "Aumentar Receita Mensal", "Reduzir Despesas Operacionais".
-    *   `descricao` (String): [Opcional].
-    *   `valorAlvo` (Number): [Obrigatório].
-    *   `valorAtual` (Number): [Obrigatório] Calculado ou inserido. Default: `0`.
-    *   `dataInicio` (Timestamp): [Obrigatório].
-    *   `dataAlvo` (Timestamp): [Obrigatório].
-    *   `tipoMeta` (String): [Obrigatório] Ex: "Receita", "Lucro", "Despesa Max", "Investimento".
-    *   `categoriaRelacionada` (String): [Opcional] Se a meta for específica para uma categoria de `lancamentosFinanceiros`.
-    *   `status` (String): [Obrigatório] "Ativa", "Concluída", "Não Atingida", "Cancelada".
-    *   `createdAt` (Timestamp): [Obrigatório].
-    *   `updatedAt` (Timestamp): [Obrigatório].
-*   **Operações (CRUD):**
-    *   **CREATE, READ, UPDATE, DELETE:**
-        *   **Quem executa:** Usuário final (via UI do "Visão Clara Financeira"). Automação (para atualizar `valorAtual` com base em `lancamentosFinanceiros`).
-        *   **Apps que utilizam:** "Visão Clara Financeira".
-*   **Regras de Segurança (Firestore Rules):**
-    ```firestore
-    match /metasFinanceiras/{metaId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   `userId` (ASC), `dataAlvo` (ASC).
-    *   `userId` (ASC), `status` (ASC).
+O arquivo `DATA_SYNC_CONFIG.json` lista outras coleções como:
+*   `contasPagar`
+*   `contasReceber`
+*   `custos`
+*   `custosFixosConfigurados`
+
+Estas coleções provavelmente pertencem ao app "Visão Clara Financeira" ou são compartilhadas. Para cada uma delas, seguiríamos o mesmo padrão de detalhamento: propósito, campos, operações, quem executa, apps que utilizam, e regras de segurança conforme definido no `DATA_SYNC_CONFIG.json`.
+
+**Exemplo para `contasPagar`:**
+*   **Propósito:** Gerenciar contas a pagar da empresa.
+*   **ID do Documento:** Gerado automaticamente.
+*   **Campos (Suposição):** `userId`, `descricao`, `valor`, `dataVencimento`, `dataPagamento`, `fornecedorId`, `status ("pendente", "paga", "atrasada")`, `createdAt`, `updatedAt`.
+*   **Operações:** CRUD pelo usuário no app "Visão Clara Financeira".
+*   **Regras:** `request.auth.uid == resource.data.userId`.
 
 ---
 
@@ -582,8 +636,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **`lancamentosFinanceiros`**
     *   Pode referenciar `vendas` (via `vendaId`).
     *   Pode referenciar `ordensServico` (via `referenciaOSId`).
-*   **`faturas`** (Exemplo)
-    *   Referencia `clientes` (via `clienteId`).
+    *   Pode referenciar `contasPagar` ou `contasReceber` (via campos de referência, ex: `contaPagarId`).
 *   **`userGoals`**
     *   Pertence a um usuário (via `userId`), mas não referencia diretamente outras coleções de dados operacionais, pois é mais estratégico.
 *   **`consultationsMetadata`** e **`consultations`**
@@ -621,86 +674,61 @@ vendas --1:N-- lancamentosFinanceiros
 
 ## 4. Considerações de Performance e Indexação
 
-*   **Índices Padrão:** O Firestore cria automaticamente índices de campo único em ordem ascendente e descendente para todos os campos.
+*   **Índices Padrão:** O Firestore cria automaticamente índices de campo único.
 *   **Índices Compostos:**
-    *   São **essenciais** para consultas que filtram por múltiplos campos ou que ordenam por um campo e filtram por outro.
-    *   O Firebase Console geralmente sugere a criação de índices compostos quando uma consulta falha devido à sua ausência.
-    *   Exemplos de índices compostos necessários já foram listados nas seções de cada coleção (ex: `userGoals` por `userId` e `createdAt`).
-    *   **Regra geral:** Se você tem `query(collectionRef, where("campoA", "==", valorA), orderBy("campoB"))`, você precisará de um índice em `campoA` (ASC) e `campoB` (ASC/DESC).
+    *   Essenciais para consultas que filtram por múltiplos campos ou ordenam por um campo e filtram por outro.
+    *   O Firebase Console sugere índices. Planeje-os com base nas consultas mais frequentes de cada app.
+    *   Exemplos já listados nas seções de cada coleção (ex: `userGoals`, `consultations`).
 *   **Limitar Dados Lidos:**
-    *   Use `limit()` em consultas para paginar resultados e evitar carregar grandes volumes de dados desnecessariamente.
-    *   Busque apenas os campos necessários se os documentos forem muito grandes (projeção), embora isso seja mais comum em APIs REST do que diretamente no Firestore SDK cliente, onde geralmente se busca o documento inteiro.
+    *   Use `limit()` para paginar resultados.
 *   **Denormalização:**
-    *   Para leituras frequentes de dados relacionados, considere a denormalização (duplicação controlada de dados). Por exemplo, armazenar `clienteNome` em `ordensServico` evita um join na leitura, mas requer lógica para manter a consistência se o nome do cliente mudar. Já estamos fazendo isso em várias coleções.
+    *   Considere para leituras frequentes de dados relacionados (ex: `clienteNome` em `ordensServico`). Já utilizado.
 *   **Estrutura de Dados:**
-    *   Evite documentos excessivamente grandes ou arrays muito longos dentro de documentos, pois há limites de tamanho de documento (1MB). Para listas potencialmente ilimitadas, use subcoleções.
-*   **Subcoleções vs. Coleções Raiz:**
-    *   Subcoleções são úteis para dados fortemente ligados a um documento pai (ex: `itens` de uma `ordemServico` poderiam ser uma subcoleção se fossem muito numerosos ou complexos). Atualmente, estamos usando arrays, o que é bom para listas menores/moderadas.
+    *   Evite documentos > 1MB ou arrays muito longos. Use subcoleções se necessário.
 
 ---
 
 ## 5. Padrões de Acesso aos Dados (Consulta e Escrita)
 
 *   **Camada de Serviço:**
-    *   Conforme os "Princípios Fundamentais", toda interação com o Firestore deve passar pela camada de serviço.
-    *   **`firestoreService.ts`**: Contém funções genéricas (`createDocument`, `getDocumentById`, `getAllDocumentsByUserId`, `updateDocument`, `deleteDocument`, `queryDocuments`).
-        *   Responsável por:
-            *   Adicionar/atualizar automaticamente `userId`, `createdAt`, `updatedAt`.
-            *   Converter `Date` JavaScript para `Timestamp` Firestore na escrita.
-            *   Converter `Timestamp` Firestore para `Date` JavaScript na leitura.
-            *   Validação de schemas Zod (o `createSchema` na criação e o `fullSchema` para o retorno).
+    *   **`firestoreService.ts`**: Funções genéricas (`createDocument`, `getDocumentById`, etc.).
+        *   Responsável por: Adicionar/atualizar `userId`, `createdAt`, `updatedAt`; Converter `Date` <> `Timestamp`; Validação de schemas Zod.
     *   **`[entidade]Service.ts`** (ex: `clientService.ts`):
-        *   Define funções específicas para a entidade (ex: `createClient`, `findClientsWithDebits`).
-        *   Invoca as funções do `firestoreService.ts`, passando os schemas Zod corretos e os dados.
-        *   Encapsula qualquer lógica de negócios específica antes ou depois da interação com o `firestoreService`.
-*   **Consultas no Frontend (quando aplicável):**
-    *   Para listagens dinâmicas e com filtros complexos na UI, o frontend pode construir consultas usando o SDK do Firebase e chamar funções dos serviços de entidade que, por sua vez, usam `queryDocuments` do `firestoreService`.
-    *   O hook `useRealtimeCollection` é um exemplo de como o frontend pode escutar mudanças em tempo real, mas para operações de escrita, sempre deve passar pelo serviço.
+        *   Funções específicas da entidade. Invoca `firestoreService.ts`. Encapsula lógica de negócios.
+*   **Consultas no Frontend:**
+    *   Para listagens dinâmicas, o frontend pode construir consultas Firebase SDK e usar funções dos serviços de entidade.
+    *   Hook `useRealtimeCollection` para escutar mudanças em tempo real.
 *   **Operações de Escrita:**
-    *   Sempre validadas por schemas Zod na camada de serviço (`[entidade]Service.ts` antes de chamar `firestoreService.ts`, ou dentro do `firestoreService.ts` como está atualmente).
-    *   Dados de entrada para criação/atualização devem usar `Date` para campos de data/hora; a conversão para `Timestamp` é feita pelo `firestoreService`.
+    *   Sempre validadas por schemas Zod na camada de serviço.
+    *   Dados de entrada usam `Date`; conversão para `Timestamp` no `firestoreService`.
 
 ---
 
 ## 6. Possíveis Conflitos, Duplicidades ou Inconsistências (e Como Mitigar)
 
 *   **Perfil de Usuário (`usuarios`) vs. Firebase Auth:**
-    *   **Problema:** Dados como nome de exibição e email podem existir em ambos.
-    *   **Mitigação:** Definido no Guia: Firebase Auth é a fonte da verdade para dados básicos de autenticação. `usuarios` armazena dados adicionais. Sincronização pode ser necessária se o usuário atualizar dados no Firebase Auth.
+    *   **Mitigação:** Firebase Auth é fonte para dados básicos de auth. `usuarios` para adicionais. Sincronização pode ser necessária.
 *   **Denormalização de Nomes (ex: `clienteNome` em `ordensServico`):**
-    *   **Problema:** Se o nome do cliente mudar na coleção `clientes`, as OS antigas terão o nome desatualizado.
-    *   **Mitigação:**
-        *   **Aceitar:** Para registros históricos, o nome no momento da criação da OS pode ser o desejado.
-        *   **Atualização em Cascata (Complexo):** Implementar gatilhos (Cloud Functions) para atualizar `clienteNome` em todas as OS relacionadas quando um cliente é atualizado. Geralmente excessivo para este campo.
-        *   **Preferível:** Na UI, ao exibir uma OS, sempre mostrar o `clienteNome` armazenado na OS, mas fornecer um link para o perfil atual do cliente na coleção `clientes` para ver os dados mais recentes.
+    *   **Mitigação:** Aceitar para histórico ou atualizar em cascata (complexo). Preferível: mostrar nome da OS, link para perfil atual.
 *   **Duplicação de Produtos/Serviços em Itens de OS/Venda:**
-    *   **Problema:** `itens` em `ordensServico` e `vendas` armazenam `nome` e `valorUnitario` do produto/serviço no momento da transação. Se o preço mudar no catálogo `produtosServicos`, as transações antigas mantêm o preço original.
-    *   **Mitigação:** Este é o comportamento **desejado e correto**. Preços de transações passadas não devem mudar. A referência `produtoServicoId` permite buscar os detalhes atuais do item no catálogo, se necessário.
+    *   **Mitigação:** Comportamento desejado. Preços de transações passadas não mudam.
 *   **Consistência de Estoque (`produtosServicos`.`quantidadeEstoque`):**
-    *   **Problema:** Múltiplas operações (vendas, entradas, saídas, ajustes) podem modificar o estoque. Sem transações atômicas, pode haver inconsistência.
-    *   **Mitigação:** Usar **transações do Firestore** para operações que leem e depois escrevem o estoque (ex: ao registrar uma venda ou uma saída manual). O `firestoreService` atual não implementa transações em suas funções genéricas CRUD, mas os serviços de entidade específicos (ou as páginas, como visto em `BalcaoPage` e `EstoquePage`) devem usar `runTransaction` para essas operações críticas. O Guia deve reforçar isso.
+    *   **Mitigação:** Usar **transações do Firestore** para operações que leem e escrevem estoque (vendas, saídas manuais).
 *   **Geração de `lancamentosFinanceiros`:**
-    *   **Problema:** Garantir que para cada venda ou pagamento de OS, um `lancamentoFinanceiro` correspondente seja criado atomicamente.
-    *   **Mitigação:**
-        *   **Transações:** Idealmente, a criação da Venda/atualização da OS e a criação do `lancamentoFinanceiro` deveriam ocorrer dentro da mesma transação do Firestore.
-        *   **Cloud Functions (Alternativa):** Um gatilho do Firestore na criação/atualização de `vendas` ou `ordensServico` (para pagamentos) pode criar o `lancamentoFinanceiro`. Isso desacopla a lógica, mas introduz latência e complexidade de tratamento de erros.
-        *   **No Código do Serviço/Página:** Como está sendo feito atualmente, criar o lançamento financeiro logo após a operação principal. É crucial ter bom tratamento de erros para o caso de a segunda escrita falhar.
+    *   **Mitigação:** Idealmente, criação da Venda/OS e do `lancamentoFinanceiro` em transação. Alternativa: Cloud Functions ou no código do serviço com tratamento de erros.
 *   **`userGoals` (Diagnóstico) vs. `metasFinanceiras` (Financeiro):**
-    *   **Problema:** Potencial sobreposição de propósito.
-    *   **Mitigação:** Clarificar no Guia:
-        *   `userGoals`: Nível estratégico, gerado por IA no Diagnóstico, focado em direcionamento amplo do negócio.
-        *   `metasFinanceiras`: Nível operacional/tático, criadas e acompanhadas pelo usuário no app Financeiro, podem ser inspiradas pelo `actionPlan` do `userGoals`, mas são mais granulares e mensuráveis (ex: meta de faturamento mensal, redução de custo X). Os apps podem ler `userGoals` para sugerir a criação de `metasFinanceiras`.
+    *   **Mitigação:** `userGoals`: estratégico, gerado por IA. `metasFinanceiras`: operacional/tático, granular, criado pelo usuário no app Financeiro, pode ser inspirado por `userGoals`.
 
 ---
 
 ## 7. Notas Adicionais
 
-*   **Firebase Emulators:** Recomendar fortemente o uso do Firebase Local Emulator Suite durante o desenvolvimento para testar regras de segurança, Cloud Functions e interações com o Firestore sem afetar dados de produção ou incorrer em custos.
-*   **Backup e Restore:** Definir uma estratégia de backup e restore para os dados do Firestore.
-*   **Monitoramento e Alertas:** Configurar monitoramento no Firebase para uso do Firestore, execução de funções e erros, com alertas para problemas críticos.
-*   **Evolução do Schema:** Este documento deve ser vivo. À medida que novas funcionalidades são adicionadas ou schemas mudam, este guia precisa ser atualizado. Considerar versionamento do guia.
-*   **Validação de `userId`:** Todas as funções de serviço que recebem um `userId` devem validar se ele não é nulo ou indefinido antes de prosseguir, especialmente se o `bypassAuth` não estiver sendo usado.
+*   **Firebase Emulators:** Usar durante desenvolvimento.
+*   **Backup e Restore:** Definir estratégia.
+*   **Monitoramento e Alertas:** Configurar no Firebase.
+*   **Evolução do Schema:** Manter este documento atualizado.
+*   **Validação de `userId`:** Serviços devem validar `userId` não nulo.
 
 ---
 
-Este documento serve como um ponto de partida e deve ser continuamente refinado à medida que o ecossistema Business Maestro cresce e evolui.
+Este documento serve como um guia técnico detalhado e deve ser mantido atualizado à medida que o ecossistema Business Maestro evolui. Sempre consulte `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` para as especificações canônicas de coleções e regras.

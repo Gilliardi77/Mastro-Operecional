@@ -4,6 +4,19 @@ Este documento é a **fonte única de verdade** para todas as IAs, desenvolvedor
 
 ---
 
+## ⚠️ Fonte Oficial da Verdade para Coleções e Regras do Firestore
+
+**Atenção:** Os arquivos `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md`, localizados na raiz deste projeto, são a **fonte oficial de verdade** para:
+
+*   A lista definitiva de coleções do Firestore.
+*   Nomes de coleções e campos principais (implícito pelo uso).
+*   Formatos de ID de documentos.
+*   Regras de segurança do Firebase Firestore.
+
+Este guia (`BACKEND_GUIDE.md`) e o `DETAILED_BACKEND_ARCHITECTURE.md` fornecem o *raciocínio arquitetural, padrões de implementação, exemplos de schemas e discussões detalhadas sobre as entidades*. No entanto, para as especificações exatas mencionadas acima, os arquivos `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` devem ser consultados e priorizados. Eles devem ser usados para validar e sincronizar dados e estruturas entre os módulos dos apps.
+
+---
+
 ## ✨ Princípios Inquebráveis
 
 1. **Schemas são a Verdade:** Toda entidade tem seu schema definido em `src/schemas/`, usando Zod. Nenhum dado é enviado ou recebido sem validação.

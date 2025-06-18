@@ -1,0 +1,88 @@
+{
+  "app": "Visao Clara Financeira",
+  "colecoes": {
+    "usuarios": {
+      "read": true,
+      "write": true,
+      "idBaseadoEm": "auth.uid",
+      "regras": "request.auth.uid == docId"
+    },
+    "consultationsMetadata": {
+      "read": true,
+      "write": true,
+      "idBaseadoEm": "auth.uid",
+      "regras": "request.auth.uid == docId"
+    },
+    "consultations": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "userGoals": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "lancamentosFinanceiros": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "metasFinanceiras": {
+      "read": true,
+      "write": true,
+      "idFormato": "userId_anoMes",
+      "regras": "request.auth.uid == docId.split('_')[0]"
+    },
+    "vendas": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "ordensServico": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "agendamentos": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "clientes": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "ordensDeProducao": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "produtosServicos": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "contasPagar": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "contasReceber": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "custos": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "custosFixosConfigurados": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    }
+  }
+}
