@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Printer, Calculator, CheckCircle } from "lucide-react";
+import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Printer, Calculator, CheckCircle, History } from "lucide-react";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -33,14 +33,14 @@ import { getLancamentosByUserIdAndDateRange } from '@/services/lancamentoFinance
 import { getVendasByUserIdAndDateRange } from '@/services/vendaService';
 import { createFechamentoCaixa, getAllFechamentosCaixaByUserId } from '@/services/fechamentoCaixaService';
 import { getFirebaseInstances } from '@/lib/firebase';
-import { collection, query, where, Timestamp, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, Timestamp, limit, getDocs, orderBy } from 'firebase/firestore';
 import { startOfDay, endOfDay, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface CaixaDiarioCalculado {
   totalEntradasLancamentos: number;
   totalSaidasLancamentos: number;
-  entradasPorMetodoVendas: EntradasPorMetodo;
+  entradasPorMetodoCalculadas: EntradasPorMetodo;
 }
 
 export default function FechamentoCaixaPage() {
@@ -49,15 +49,14 @@ export default function FechamentoCaixaPage() {
   const router = useRouter();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [alreadyClosedToday, setAlreadyClosedToday] = useState(false);
+  const [fechamentosDoDia, setFechamentosDoDia] = useState<number>(0);
   const [caixaDiario, setCaixaDiario] = useState<CaixaDiarioCalculado>({
     totalEntradasLancamentos: 0,
     totalSaidasLancamentos: 0,
-    entradasPorMetodoVendas: { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, outros: 0 },
+    entradasPorMetodoCalculadas: { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, boleto: 0, transferenciaBancaria: 0, outros: 0 },
   });
 
   const [confirmationData, setConfirmationData] = useState<FechamentoCaixaFormValues & CaixaDiarioCalculado & { saldoFinal: number } | null>(null);
-
 
   const form = useForm<FechamentoCaixaFormValues>({
     resolver: zodResolver(FechamentoCaixaFormSchema),
@@ -87,13 +86,14 @@ export default function FechamentoCaixaPage() {
 
   const fetchLastClosingAndSuggestTroco = useCallback(async (userId: string) => {
     try {
-      const historicoFechamentos = await getAllFechamentosCaixaByUserId(userId, 'dataFechamento', 'desc');
-      if (historicoFechamentos.length > 0) {
-        const ultimoFechamento = historicoFechamentos[0];
-        setValue("trocoInicial", ultimoFechamento.saldoFinalCalculado, { shouldValidate: true });
+      // Buscar o último fechamento geral para sugerir o troco inicial
+      const todosFechamentos = await getAllFechamentosCaixaByUserId(userId, 'dataFechamento', 'desc');
+      if (todosFechamentos.length > 0) {
+        const ultimoFechamentoGeral = todosFechamentos[0];
+        setValue("trocoInicial", ultimoFechamentoGeral.saldoFinalCalculado, { shouldValidate: true });
         toast({
             title: "Troco Inicial Sugerido",
-            description: `Baseado no saldo final de R$ ${ultimoFechamento.saldoFinalCalculado.toFixed(2)} do último fechamento.`,
+            description: `Baseado no saldo final de R$ ${ultimoFechamentoGeral.saldoFinalCalculado.toFixed(2)} do último fechamento registrado.`,
             duration: 7000
         });
       }
@@ -106,8 +106,7 @@ export default function FechamentoCaixaPage() {
     }
   }, [setValue, toast]);
 
-
-  const fetchDataDiaria = useCallback(async () => { // Renomeado e simplificado
+  const fetchDataDiaria = useCallback(async () => {
     if (!user?.uid) {
       return;
     }
@@ -122,39 +121,58 @@ export default function FechamentoCaixaPage() {
 
       let totalEntradasLancamentos = 0;
       let totalSaidasLancamentos = 0;
-      const entradasPorMetodoVendas: EntradasPorMetodo = { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, outros: 0 };
+      const entradasPorMetodoCalculadas: EntradasPorMetodo = { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, boleto: 0, transferenciaBancaria: 0, outros: 0 };
 
+      // Processar Lançamentos Financeiros (incluindo pagamentos de OS)
       lancamentosDoDia.forEach(l => {
         if (l.tipo === 'receita' && (l.status === 'recebido' || l.status === 'pago')) {
           totalEntradasLancamentos += l.valor;
+          const formaPagamento = l.formaPagamento?.toLowerCase() || 'outros';
+          if (formaPagamento.includes('dinheiro')) entradasPorMetodoCalculadas.dinheiro += l.valor;
+          else if (formaPagamento.includes('pix')) entradasPorMetodoCalculadas.pix += l.valor;
+          else if (formaPagamento.includes('crédito') || formaPagamento.includes('credito')) {
+            entradasPorMetodoCalculadas.cartaoCredito += l.valor;
+            entradasPorMetodoCalculadas.cartao += l.valor;
+          } else if (formaPagamento.includes('débito') || formaPagamento.includes('debito')) {
+            entradasPorMetodoCalculadas.cartaoDebito += l.valor;
+            entradasPorMetodoCalculadas.cartao += l.valor;
+          } else if (formaPagamento.includes('boleto')) entradasPorMetodoCalculadas.boleto += l.valor;
+          else if (formaPagamento.includes('transferência') || formaPagamento.includes('transferencia')) entradasPorMetodoCalculadas.transferenciaBancaria += l.valor;
+          else entradasPorMetodoCalculadas.outros += l.valor;
         } else if (l.tipo === 'despesa' && l.status === 'pago') {
           totalSaidasLancamentos += l.valor;
         }
       });
       
+      // Processar Vendas do PDV (Balcão)
+      // ATENÇÃO: Esta seção pode causar dupla contagem se as vendas do PDV também gerarem `LancamentoFinanceiro`
+      // que já foram processados acima. O ideal é que `entradasPorMetodoCalculadas` seja populado *apenas*
+      // por `lancamentosDoDia`, e que todas as vendas PDV gerem um `LancamentoFinanceiro` com `formaPagamento`.
+      // Por ora, somamos as vendas PDV aqui, assumindo que elas podem não ter gerado um lançamento financeiro detalhado
+      // ou para garantir que não sejam perdidas se a lógica de geração de lançamentos não for completa.
       vendasDoDia.forEach(venda => {
         if (venda.status === 'Concluída') {
-          switch (venda.formaPagamento) {
-            case 'dinheiro':
-              entradasPorMetodoVendas.dinheiro += venda.totalVenda;
-              break;
-            case 'pix':
-              entradasPorMetodoVendas.pix += venda.totalVenda;
-              break;
-            case 'cartao_credito':
-              entradasPorMetodoVendas.cartaoCredito += venda.totalVenda;
-              entradasPorMetodoVendas.cartao += venda.totalVenda;
-              break;
-            case 'cartao_debito':
-              entradasPorMetodoVendas.cartaoDebito += venda.totalVenda;
-              entradasPorMetodoVendas.cartao += venda.totalVenda;
-              break;
-            default: 
-              entradasPorMetodoVendas.outros += venda.totalVenda;
-          }
+            // Para evitar dupla contagem, só somaremos a venda se não encontrarmos um lançamento correspondente já contabilizado.
+            const lancamentoDaVendaExistente = lancamentosDoDia.find(l => l.vendaId === venda.id && l.tipo === 'receita');
+            if (!lancamentoDaVendaExistente) {
+                // Se não há lançamento para esta venda (ou se a lógica de lançamento não inclui forma de pagamento),
+                // então adicionamos aqui.
+                // No futuro, o ideal é que a venda gere um lançamento que já seja pego pela lógica anterior.
+                switch (venda.formaPagamento) {
+                case 'dinheiro': entradasPorMetodoCalculadas.dinheiro += venda.totalVenda; break;
+                case 'pix': entradasPorMetodoCalculadas.pix += venda.totalVenda; break;
+                case 'cartao_credito': entradasPorMetodoCalculadas.cartaoCredito += venda.totalVenda; entradasPorMetodoCalculadas.cartao += venda.totalVenda; break;
+                case 'cartao_debito': entradasPorMetodoCalculadas.cartaoDebito += venda.totalVenda; entradasPorMetodoCalculadas.cartao += venda.totalVenda; break;
+                case 'boleto': entradasPorMetodoCalculadas.boleto += venda.totalVenda; break;
+                default: entradasPorMetodoCalculadas.outros += venda.totalVenda;
+                }
+                // Se a venda não gerou lançamento, ela também contribui para o total de entradas.
+                totalEntradasLancamentos += venda.totalVenda;
+            }
         }
       });
-      setCaixaDiario({ totalEntradasLancamentos, totalSaidasLancamentos, entradasPorMetodoVendas });
+
+      setCaixaDiario({ totalEntradasLancamentos, totalSaidasLancamentos, entradasPorMetodoCalculadas });
 
     } catch (error: any) {
       toast({ title: "Erro ao buscar dados do dia", description: error.message, variant: "destructive" });
@@ -168,25 +186,19 @@ export default function FechamentoCaixaPage() {
         setIsLoadingData(true);
         try {
           const { db: dbInstance } = getFirebaseInstances();
-          let closedToday = false;
           if (dbInstance && user.uid) {
             const todayStart = startOfDay(new Date());
             const todayEnd = endOfDay(new Date());
-            const q = query(
+            const qFechamentosHoje = query(
               collection(dbInstance, "fechamentosCaixa"),
               where("userId", "==", user.uid),
               where("dataFechamento", ">=", Timestamp.fromDate(todayStart)),
-              where("dataFechamento", "<=", Timestamp.fromDate(todayEnd)),
-              limit(1)
+              where("dataFechamento", "<=", Timestamp.fromDate(todayEnd))
             );
-            const snapshot = await getDocs(q);
-            closedToday = !snapshot.empty;
-            setAlreadyClosedToday(closedToday);
+            const snapshotFechamentosHoje = await getDocs(qFechamentosHoje);
+            setFechamentosDoDia(snapshotFechamentosHoje.size);
           }
-
-          if (!closedToday) {
-            await fetchLastClosingAndSuggestTroco(user.uid);
-          }
+          await fetchLastClosingAndSuggestTroco(user.uid);
           await fetchDataDiaria();
 
         } catch (e: any) {
@@ -204,10 +216,6 @@ export default function FechamentoCaixaPage() {
 
 
   const handleOpenConfirmation = (values: FechamentoCaixaFormValues) => {
-    if (alreadyClosedToday) {
-      toast({ title: "Caixa Já Fechado", description: "O caixa para hoje já foi fechado e não pode ser finalizado novamente.", variant: "destructive" });
-      return;
-    }
      setConfirmationData({
       ...values,
       ...caixaDiario,
@@ -229,7 +237,7 @@ export default function FechamentoCaixaPage() {
         trocoInicial: confirmationData.trocoInicial || 0,
         sangrias: confirmationData.sangrias || 0,
         saldoFinalCalculado: confirmationData.saldoFinal,
-        entradasPorMetodo: confirmationData.entradasPorMetodoVendas,
+        entradasPorMetodo: confirmationData.entradasPorMetodoCalculadas,
         responsavelNome: responsavelPeloFechamento,
         responsavelId: user.uid,
         observacoes: confirmationData.observacoes || "",
@@ -237,9 +245,9 @@ export default function FechamentoCaixaPage() {
       await createFechamentoCaixa(user.uid, fechamentoData);
       toast({ title: "Fechamento de Caixa Salvo!", description: "O fechamento do caixa foi registrado com sucesso." });
       form.reset({trocoInicial: 0, sangrias: 0, observacoes: ""}); 
-      setAlreadyClosedToday(true); // Marcar como fechado para hoje
-      // fetchDataDiaria(); // Opcional: re-buscar dados do dia, mas pode não ser necessário se já fechou.
-      setConfirmationData(null); // Fechar o dialog
+      setFechamentosDoDia(prev => prev + 1);
+      fetchDataDiaria(); 
+      setConfirmationData(null); 
     } catch (error: any) {
       toast({ title: "Erro ao Salvar Fechamento", description: error.message, variant: "destructive" });
     } finally {
@@ -280,29 +288,31 @@ export default function FechamentoCaixaPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900/30 rounded-md">
-                  <span className="font-medium text-green-700 dark:text-green-400 flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Total de Entradas (Lançamentos):</span>
+                  <span className="font-medium text-green-700 dark:text-green-400 flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Total de Entradas (Receitas do Dia):</span>
                   <span className="font-bold text-lg text-green-700 dark:text-green-400">R$ {caixaDiario.totalEntradasLancamentos.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/30 rounded-md">
-                  <span className="font-medium text-red-700 dark:text-red-400 flex items-center"><TrendingDown className="mr-2 h-5 w-5" />Total de Saídas (Lançamentos):</span>
+                  <span className="font-medium text-red-700 dark:text-red-400 flex items-center"><TrendingDown className="mr-2 h-5 w-5" />Total de Saídas (Despesas do Dia):</span>
                   <span className="font-bold text-lg text-red-700 dark:text-red-400">R$ {caixaDiario.totalSaidasLancamentos.toFixed(2)}</span>
                 </div>
                 
                 <Separator />
-                <h4 className="font-semibold">Entradas por Método (das Vendas):</h4>
+                <h4 className="font-semibold">Entradas por Método (Vendas e Recebimentos de OS):</h4>
                 <div className="text-sm space-y-1 pl-2">
-                  <p>Dinheiro: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoVendas.dinheiro.toFixed(2)}</span></p>
-                  <p>PIX: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoVendas.pix.toFixed(2)}</span></p>
-                  <p>Cartão de Crédito: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoVendas.cartaoCredito.toFixed(2)}</span></p>
-                  <p>Cartão de Débito: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoVendas.cartaoDebito.toFixed(2)}</span></p>
-                  <p className="text-muted-foreground">Total Cartões (Vendas): <span className="font-medium">R$ {caixaDiario.entradasPorMetodoVendas.cartao.toFixed(2)}</span></p>
-                  <p>Outros Métodos (Vendas): <span className="font-medium">R$ {caixaDiario.entradasPorMetodoVendas.outros.toFixed(2)}</span></p>
+                  <p>Dinheiro: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.dinheiro.toFixed(2)}</span></p>
+                  <p>PIX: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.pix.toFixed(2)}</span></p>
+                  <p>Cartão de Crédito: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.cartaoCredito.toFixed(2)}</span></p>
+                  <p>Cartão de Débito: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.cartaoDebito.toFixed(2)}</span></p>
+                  <p>Boleto: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.boleto.toFixed(2)}</span></p>
+                  <p>Transferência: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.transferenciaBancaria.toFixed(2)}</span></p>
+                  <p className="text-muted-foreground">Total Cartões (Consolidado): <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.cartao.toFixed(2)}</span></p>
+                  <p>Outros Métodos: <span className="font-medium">R$ {caixaDiario.entradasPorMetodoCalculadas.outros.toFixed(2)}</span></p>
                 </div>
                 <Alert variant="default">
                   <Info className="h-4 w-4" />
-                  <AlertTitle>Atenção</AlertTitle>
+                  <AlertTitle>Atenção sobre Entradas por Método</AlertTitle>
                   <AlertDescription>
-                    O "Total de Entradas" refere-se a todos os lançamentos de receita efetivados. O detalhamento "Entradas por Método" é baseado apenas nas vendas concluídas no sistema hoje.
+                    O "Total de Entradas" acima refere-se a todos os lançamentos de receita efetivados. O detalhamento "Entradas por Método" agora inclui receitas de Ordens de Serviço e Vendas, agrupadas pela forma de pagamento registrada no sistema. Para um resumo preciso, certifique-se de que as formas de pagamento estejam corretamente registradas nos lançamentos e vendas.
                   </AlertDescription>
                 </Alert>
               </CardContent>
@@ -313,6 +323,15 @@ export default function FechamentoCaixaPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Registrar Fechamento</CardTitle>
+                {fechamentosDoDia > 0 && (
+                    <Alert variant="default" className="border-orange-500 bg-orange-50 dark:bg-orange-900/30 mt-2">
+                        <History className="h-4 w-4 text-orange-700 dark:text-orange-400" />
+                        <AlertTitle className="text-orange-700 dark:text-orange-400">Caixa Já Fechado Hoje</AlertTitle>
+                        <AlertDescription className="text-orange-600 dark:text-orange-300">
+                            Já existe(m) {fechamentosDoDia} fechamento(s) registrado(s) hoje. Um novo fechamento pode ser adicionado se necessário (ex: correção ou fechamento complementar). O último fechamento geral é usado para sugerir o troco inicial.
+                        </AlertDescription>
+                    </Alert>
+                )}
               </CardHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleOpenConfirmation)} id="fechamentoCaixaForm">
@@ -323,7 +342,7 @@ export default function FechamentoCaixaPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Troco Inicial (R$)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" disabled={alreadyClosedToday} /></FormControl>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -334,7 +353,7 @@ export default function FechamentoCaixaPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Sangrias / Retiradas (R$)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" disabled={alreadyClosedToday} /></FormControl>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -350,26 +369,17 @@ export default function FechamentoCaixaPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Observações (Opcional)</FormLabel>
-                          <FormControl><Textarea placeholder="Ex: Diferença no caixa, sangria para cofre, etc." {...field} rows={3} disabled={alreadyClosedToday} /></FormControl>
+                          <FormControl><Textarea placeholder="Ex: Diferença no caixa, sangria para cofre, etc." {...field} rows={3} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                     <p className="text-xs text-muted-foreground">Responsável: {responsavelPeloFechamento}</p>
-                    {alreadyClosedToday && (
-                        <Alert variant="default" className="border-green-500 bg-green-50 dark:bg-green-900/30">
-                            <CheckCircle className="h-4 w-4 text-green-700 dark:text-green-400" />
-                            <AlertTitle className="text-green-700 dark:text-green-400">Caixa Fechado!</AlertTitle>
-                            <AlertDescription className="text-green-600 dark:text-green-300">
-                                O caixa para hoje já foi fechado com sucesso.
-                            </AlertDescription>
-                        </Alert>
-                    )}
                   </CardContent>
                   <CardFooter className="flex flex-col gap-2">
                      <AlertDialog open={!!confirmationData} onOpenChange={(open) => !open && setConfirmationData(null)}>
                        <AlertDialogTrigger asChild>
-                         <Button type="submit" form="fechamentoCaixaForm" className="w-full" disabled={isSubmitting || isLoadingData || alreadyClosedToday}>
+                         <Button type="submit" form="fechamentoCaixaForm" className="w-full" disabled={isSubmitting || isLoadingData}>
                             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Finalizar Fechamento do Caixa
                           </Button>
@@ -380,13 +390,13 @@ export default function FechamentoCaixaPage() {
                            <AlertDialogDescription>
                              Revise os valores antes de confirmar:
                              <ul className="list-disc pl-5 my-2 text-sm text-foreground">
-                               <li>Total Entradas: <span className="font-semibold">R$ {confirmationData?.totalEntradasLancamentos.toFixed(2)}</span></li>
-                               <li>Total Saídas: <span className="font-semibold">R$ {confirmationData?.totalSaidasLancamentos.toFixed(2)}</span></li>
+                               <li>Total Entradas (Dia): <span className="font-semibold">R$ {confirmationData?.totalEntradasLancamentos.toFixed(2)}</span></li>
+                               <li>Total Saídas (Dia): <span className="font-semibold">R$ {confirmationData?.totalSaidasLancamentos.toFixed(2)}</span></li>
                                <li>Troco Inicial: <span className="font-semibold">R$ {(confirmationData?.trocoInicial || 0).toFixed(2)}</span></li>
                                <li>Sangrias: <span className="font-semibold">R$ {(confirmationData?.sangrias || 0).toFixed(2)}</span></li>
-                               <li className="mt-1">Saldo Final Esperado: <strong className="text-lg">R$ {confirmationData?.saldoFinal.toFixed(2)}</strong></li>
+                               <li className="mt-1">Saldo Final Esperado no Caixa: <strong className="text-lg">R$ {confirmationData?.saldoFinal.toFixed(2)}</strong></li>
                              </ul>
-                             Esta ação não poderá ser desfeita facilmente. Deseja continuar?
+                             Esta ação registrará um novo fechamento de caixa. Deseja continuar?
                            </AlertDialogDescription>
                          </AlertDialogHeader>
                          <AlertDialogFooter>
