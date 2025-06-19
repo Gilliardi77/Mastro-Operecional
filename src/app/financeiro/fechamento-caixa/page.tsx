@@ -11,7 +11,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Printer, Calculator } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Printer, Calculator, CheckCircle } from "lucide-react";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -21,6 +32,8 @@ import type { Venda } from '@/schemas/vendaSchema';
 import { getLancamentosByUserIdAndDateRange } from '@/services/lancamentoFinanceiroService';
 import { getVendasByUserIdAndDateRange } from '@/services/vendaService';
 import { createFechamentoCaixa, getAllFechamentosCaixaByUserId } from '@/services/fechamentoCaixaService';
+import { getFirebaseInstances } from '@/lib/firebase';
+import { collection, query, where, Timestamp, limit, getDocs } from 'firebase/firestore';
 import { startOfDay, endOfDay, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -36,11 +49,15 @@ export default function FechamentoCaixaPage() {
   const router = useRouter();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [alreadyClosedToday, setAlreadyClosedToday] = useState(false);
   const [caixaDiario, setCaixaDiario] = useState<CaixaDiarioCalculado>({
     totalEntradasLancamentos: 0,
     totalSaidasLancamentos: 0,
     entradasPorMetodoVendas: { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, outros: 0 },
   });
+
+  const [confirmationData, setConfirmationData] = useState<FechamentoCaixaFormValues & CaixaDiarioCalculado & { saldoFinal: number } | null>(null);
+
 
   const form = useForm<FechamentoCaixaFormValues>({
     resolver: zodResolver(FechamentoCaixaFormSchema),
@@ -82,7 +99,7 @@ export default function FechamentoCaixaPage() {
       }
     } catch (error: any) {
       if (error.message && error.message.includes("Missing or insufficient permissions")) {
-        console.warn(`[FechamentoCaixaPage] Permissão negada ao buscar último fechamento de caixa para usuário ${userId}. Isso pode ocorrer devido à configuração do Firebase ou estado de autenticação. Continuando sem sugerir troco inicial.`);
+        console.warn(`[FechamentoCaixaPage] Permissão negada ao buscar último fechamento de caixa para usuário ${userId}. Verifique as regras do Firestore ou a configuração do Firebase. Continuando sem sugerir troco inicial.`);
       } else {
         console.error("Erro ao buscar último fechamento de caixa:", error);
       }
@@ -90,13 +107,10 @@ export default function FechamentoCaixaPage() {
   }, [setValue, toast]);
 
 
-  const fetchDataDiaria = useCallback(async () => {
+  const fetchDataDiaria = useCallback(async () => { // Renomeado e simplificado
     if (!user?.uid) {
-      setIsLoadingData(false);
       return;
     }
-    setIsLoadingData(true);
-    await fetchLastClosingAndSuggestTroco(user.uid);
     try {
       const hojeInicio = startOfDay(new Date());
       const hojeFim = endOfDay(new Date());
@@ -140,48 +154,92 @@ export default function FechamentoCaixaPage() {
           }
         }
       });
-
       setCaixaDiario({ totalEntradasLancamentos, totalSaidasLancamentos, entradasPorMetodoVendas });
 
     } catch (error: any) {
       toast({ title: "Erro ao buscar dados do dia", description: error.message, variant: "destructive" });
       console.error("Erro ao buscar dados para fechamento de caixa:", error);
-    } finally {
-      setIsLoadingData(false);
     }
-  }, [user?.uid, toast, fetchLastClosingAndSuggestTroco]);
+  }, [user?.uid, toast]);
 
   useEffect(() => {
     if (user && !isAuthLoading) {
-      fetchDataDiaria();
+      const loadPageData = async () => {
+        setIsLoadingData(true);
+        try {
+          const { db: dbInstance } = getFirebaseInstances();
+          let closedToday = false;
+          if (dbInstance && user.uid) {
+            const todayStart = startOfDay(new Date());
+            const todayEnd = endOfDay(new Date());
+            const q = query(
+              collection(dbInstance, "fechamentosCaixa"),
+              where("userId", "==", user.uid),
+              where("dataFechamento", ">=", Timestamp.fromDate(todayStart)),
+              where("dataFechamento", "<=", Timestamp.fromDate(todayEnd)),
+              limit(1)
+            );
+            const snapshot = await getDocs(q);
+            closedToday = !snapshot.empty;
+            setAlreadyClosedToday(closedToday);
+          }
+
+          if (!closedToday) {
+            await fetchLastClosingAndSuggestTroco(user.uid);
+          }
+          await fetchDataDiaria();
+
+        } catch (e: any) {
+          console.error("Erro no carregamento inicial da página de fechamento:", e);
+          toast({ title: "Erro ao Carregar Página", description: e.message, variant: "destructive" });
+        } finally {
+          setIsLoadingData(false);
+        }
+      };
+      loadPageData();
     } else if (!user && !isAuthLoading && typeof window !== 'undefined') { 
         router.push('/login?redirect=/financeiro/fechamento-caixa');
     }
-  }, [user, isAuthLoading, fetchDataDiaria, router]);
+  }, [user, isAuthLoading, fetchDataDiaria, fetchLastClosingAndSuggestTroco, router, toast]);
 
-  const onSubmit = async (values: FechamentoCaixaFormValues) => {
-    if (!user?.uid) {
-      toast({ title: "Erro de Autenticação", description: "Usuário não identificado.", variant: "destructive" });
+
+  const handleOpenConfirmation = (values: FechamentoCaixaFormValues) => {
+    if (alreadyClosedToday) {
+      toast({ title: "Caixa Já Fechado", description: "O caixa para hoje já foi fechado e não pode ser finalizado novamente.", variant: "destructive" });
+      return;
+    }
+     setConfirmationData({
+      ...values,
+      ...caixaDiario,
+      saldoFinal: saldoFinalCaixa,
+    });
+  };
+
+  const finalSubmitFechamento = async () => {
+    if (!user?.uid || !confirmationData) {
+      toast({ title: "Erro de Dados", description: "Usuário ou dados de confirmação ausentes.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
     try {
       const fechamentoData = {
         dataFechamento: new Date(),
-        totalEntradasCalculado: caixaDiario.totalEntradasLancamentos,
-        totalSaidasCalculado: caixaDiario.totalSaidasLancamentos,
-        trocoInicial: values.trocoInicial || 0,
-        sangrias: values.sangrias || 0,
-        saldoFinalCalculado: saldoFinalCaixa,
-        entradasPorMetodo: caixaDiario.entradasPorMetodoVendas,
+        totalEntradasCalculado: confirmationData.totalEntradasLancamentos,
+        totalSaidasCalculado: confirmationData.totalSaidasLancamentos,
+        trocoInicial: confirmationData.trocoInicial || 0,
+        sangrias: confirmationData.sangrias || 0,
+        saldoFinalCalculado: confirmationData.saldoFinal,
+        entradasPorMetodo: confirmationData.entradasPorMetodoVendas,
         responsavelNome: responsavelPeloFechamento,
         responsavelId: user.uid,
-        observacoes: values.observacoes || "",
+        observacoes: confirmationData.observacoes || "",
       };
       await createFechamentoCaixa(user.uid, fechamentoData);
       toast({ title: "Fechamento de Caixa Salvo!", description: "O fechamento do caixa foi registrado com sucesso." });
       form.reset({trocoInicial: 0, sangrias: 0, observacoes: ""}); 
-      fetchDataDiaria(); 
+      setAlreadyClosedToday(true); // Marcar como fechado para hoje
+      // fetchDataDiaria(); // Opcional: re-buscar dados do dia, mas pode não ser necessário se já fechou.
+      setConfirmationData(null); // Fechar o dialog
     } catch (error: any) {
       toast({ title: "Erro ao Salvar Fechamento", description: error.message, variant: "destructive" });
     } finally {
@@ -257,7 +315,7 @@ export default function FechamentoCaixaPage() {
                 <CardTitle>Registrar Fechamento</CardTitle>
               </CardHeader>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)}>
+                <form onSubmit={form.handleSubmit(handleOpenConfirmation)} id="fechamentoCaixaForm">
                   <CardContent className="space-y-4">
                     <FormField
                       control={form.control}
@@ -265,7 +323,7 @@ export default function FechamentoCaixaPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Troco Inicial (R$)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" /></FormControl>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" disabled={alreadyClosedToday} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -276,7 +334,7 @@ export default function FechamentoCaixaPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Sangrias / Retiradas (R$)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" /></FormControl>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" disabled={alreadyClosedToday} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -292,18 +350,55 @@ export default function FechamentoCaixaPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Observações (Opcional)</FormLabel>
-                          <FormControl><Textarea placeholder="Ex: Diferença no caixa, sangria para cofre, etc." {...field} rows={3} /></FormControl>
+                          <FormControl><Textarea placeholder="Ex: Diferença no caixa, sangria para cofre, etc." {...field} rows={3} disabled={alreadyClosedToday} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                     <p className="text-xs text-muted-foreground">Responsável: {responsavelPeloFechamento}</p>
+                    {alreadyClosedToday && (
+                        <Alert variant="default" className="border-green-500 bg-green-50 dark:bg-green-900/30">
+                            <CheckCircle className="h-4 w-4 text-green-700 dark:text-green-400" />
+                            <AlertTitle className="text-green-700 dark:text-green-400">Caixa Fechado!</AlertTitle>
+                            <AlertDescription className="text-green-600 dark:text-green-300">
+                                O caixa para hoje já foi fechado com sucesso.
+                            </AlertDescription>
+                        </Alert>
+                    )}
                   </CardContent>
                   <CardFooter className="flex flex-col gap-2">
-                    <Button type="submit" className="w-full" disabled={isSubmitting || isLoadingData}>
-                      {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Finalizar Fechamento do Caixa
-                    </Button>
+                     <AlertDialog open={!!confirmationData} onOpenChange={(open) => !open && setConfirmationData(null)}>
+                       <AlertDialogTrigger asChild>
+                         <Button type="submit" form="fechamentoCaixaForm" className="w-full" disabled={isSubmitting || isLoadingData || alreadyClosedToday}>
+                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Finalizar Fechamento do Caixa
+                          </Button>
+                       </AlertDialogTrigger>
+                       <AlertDialogContent>
+                         <AlertDialogHeader>
+                           <AlertDialogTitle>Confirmar Fechamento de Caixa</AlertDialogTitle>
+                           <AlertDialogDescription>
+                             Revise os valores antes de confirmar:
+                             <ul className="list-disc pl-5 my-2 text-sm text-foreground">
+                               <li>Total Entradas: <span className="font-semibold">R$ {confirmationData?.totalEntradasLancamentos.toFixed(2)}</span></li>
+                               <li>Total Saídas: <span className="font-semibold">R$ {confirmationData?.totalSaidasLancamentos.toFixed(2)}</span></li>
+                               <li>Troco Inicial: <span className="font-semibold">R$ {(confirmationData?.trocoInicial || 0).toFixed(2)}</span></li>
+                               <li>Sangrias: <span className="font-semibold">R$ {(confirmationData?.sangrias || 0).toFixed(2)}</span></li>
+                               <li className="mt-1">Saldo Final Esperado: <strong className="text-lg">R$ {confirmationData?.saldoFinal.toFixed(2)}</strong></li>
+                             </ul>
+                             Esta ação não poderá ser desfeita facilmente. Deseja continuar?
+                           </AlertDialogDescription>
+                         </AlertDialogHeader>
+                         <AlertDialogFooter>
+                           <AlertDialogCancel onClick={() => setConfirmationData(null)} disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                           <AlertDialogAction onClick={finalSubmitFechamento} disabled={isSubmitting}>
+                             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                             Confirmar e Salvar
+                           </AlertDialogAction>
+                         </AlertDialogFooter>
+                       </AlertDialogContent>
+                     </AlertDialog>
+
                     <Button type="button" variant="outline" className="w-full" disabled>
                        <Printer className="mr-2 h-4 w-4" /> Imprimir Comprovante (Em breve)
                     </Button>
@@ -327,3 +422,4 @@ export default function FechamentoCaixaPage() {
     </div>
   );
 }
+
