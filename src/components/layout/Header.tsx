@@ -7,7 +7,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
-  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase
+  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase, Calculator // Adicionado Calculator
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -69,8 +69,8 @@ export default function Header() {
           <Image
             src="/images/192.png" // Usando 192.png temporariamente como logo
             alt="Maestro Operacional Logo"
-            width={36} 
-            height={36}  
+            width={36}
+            height={36}
             priority
             data-ai-hint="company logo"
           />
@@ -84,6 +84,11 @@ export default function Header() {
           </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <Link href="/financeiro/fechamento-caixa"> {/* Link para Fechamento de Caixa */}
+            <Calculator className="mr-1 h-4 w-4" /> Financeiro
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
           <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app">
             <Link2Icon className="mr-1 h-4 w-4" /> Visão Fin.
           </Link>
@@ -93,7 +98,7 @@ export default function Header() {
                 <Link2Icon className="mr-1 h-4 w-4" /> Gestor M.
             </Link>
         </Button>
-        
+
         {(isLoading || isAuthenticating) ? (
           <Button variant="ghost" size="icon" disabled>
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -126,6 +131,11 @@ export default function Header() {
                 <Link href="/produtos-servicos">
                     <Briefcase className="mr-2 h-4 w-4" /> Operacional
                 </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="sm:hidden">
+                  <Link href="/financeiro/fechamento-caixa"> {/* Link mobile para Fechamento de Caixa */}
+                    <Calculator className="mr-2 h-4 w-4" /> Financeiro
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
                 <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app">

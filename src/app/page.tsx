@@ -1,9 +1,10 @@
+
 'use client'; // Necessário para hooks como useState e useEffect
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid } from 'lucide-react';
+import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator } from 'lucide-react'; // Adicionado Calculator
 // import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide'; // Removido
 import React, { useState, useEffect } from 'react'; // Importar useState e useEffect
 
@@ -87,11 +88,11 @@ export default function Home() {
       cta: 'Ver Produtos/Serviços',
     },
     {
-      title: 'Dashboard Produtos/Serviços',
-      description: 'Visão geral do módulo de Produtos e Serviços.',
-      href: '/produtos-servicos',
-      icon: LayoutGrid,
-      cta: 'Acessar Módulo',
+      title: 'Fechamento de Caixa',
+      description: 'Registre e confira o movimento financeiro diário.',
+      href: '/financeiro/fechamento-caixa',
+      icon: Calculator,
+      cta: 'Fechar Caixa',
     },
   ];
 
