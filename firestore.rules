@@ -4,113 +4,132 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ========== FUNÇÕES UTILITÁRIAS ==========
+    // ======================= FUNÇÕES REUTILIZÁVEIS =======================
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Verifica se o UID do usuário autenticado é o mesmo que o campo 'userId' no documento existente.
     function isResourceOwner() {
       return isSignedIn() && request.auth.uid == resource.data.userId;
     }
 
-    // Verifica se o UID do usuário autenticado é o mesmo que o campo 'userId' nos dados da requisição (para criação).
     function isRequestDataOwner() {
       return isSignedIn() && request.auth.uid == request.resource.data.userId;
     }
 
-    // Verifica se o ID do documento é o mesmo que o UID do usuário autenticado.
     function docIdIsSelf(docId) {
       return isSignedIn() && request.auth.uid == docId;
     }
 
-    // Garante que o campo userId não está sendo alterado durante uma atualização.
     function userIdUnchanged() {
       return request.resource.data.userId == resource.data.userId;
     }
 
-    // ========== REGRAS POR COLEÇÃO ==========
-
-    // Perfil do usuário (ID = UID)
-    match /usuarios/{userId} {
-      // Usuário só pode criar seu próprio perfil se o ID do doc for o seu UID.
-      // Não se pode definir 'userId' no corpo aqui, pois o ID do doc é o UID.
-      allow create: if docIdIsSelf(userId) && request.resource.data.userId == null; // Ou remova userId do corpo do doc
-      allow read, update: if docIdIsSelf(userId);
-      // Delete geralmente não é permitido ou é uma operação de soft delete controlada.
+    function isUserPrefixOfId(docId) {
+      return isSignedIn() && request.auth.uid == docId.split('_')[0];
     }
 
-    // Metadados da consulta (ID = UID) - Mantido conforme fornecido
-    match /consultationsMetadata/{userId} {
-      allow read, write: if docIdIsSelf(userId);
+    // ======================= REGRAS POR COLEÇÃO =======================
+
+    match /usuarios/{userIdDoc} {
+      allow create: if docIdIsSelf(userIdDoc) &&
+                       (request.resource.data.userId == null || request.resource.data.userId == userIdDoc);
+      allow read, update: if docIdIsSelf(userIdDoc);
     }
 
-    // Dados completos da consulta - Mantido conforme fornecido
+    match /consultationsMetadata/{userIdDoc} {
+      allow read, write: if docIdIsSelf(userIdDoc);
+    }
+
     match /consultations/{consultationId} {
       allow create: if isRequestDataOwner();
-      allow read, update, delete: if isResourceOwner();
+      allow read: if isResourceOwner();
     }
 
-    // Metas do usuário (geradas pela IA de metas) - Mantido conforme fornecido
     match /userGoals/{goalId} {
       allow create: if isRequestDataOwner();
       allow read, update, delete: if isResourceOwner();
     }
 
-    // ======== Coleções padrão do Maestro Operacional =========
-
-    match /lancamentosFinanceiros/{id} {
+    match /lancamentosFinanceiros/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /metasFinanceiras/{id} {
+    match /clientes/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /vendas/{id} {
+    match /produtosServicos/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /ordensServico/{id} {
+    match /vendas/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /agendamentos/{id} {
+    match /ordensServico/{docId} {
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner();
+    }
+
+    match /agendamentos/{docId} {
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner();
+    }
+
+    match /ordensDeProducao/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /clientes/{id} {
+    match /contasPagar/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /ordensDeProducao/{id} {
+    match /contasReceber/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    match /produtosServicos/{id} {
+    match /custos/{docId} {
       allow create: if isRequestDataOwner();
       allow read, delete: if isResourceOwner();
       allow update: if isResourceOwner() && userIdUnchanged();
     }
 
-    // (Opcional) futuras coleções públicas ou regras especiais
-    // match /itensPublicos/{id} {
-    //   allow read: if true;
-    //   allow write: if false; // Exemplo: escrita controlada por Cloud Functions ou admin
-    // }
+    match /custosFixosConfigurados/{docId} {
+      allow create: if isRequestDataOwner();
+      allow read: if isResourceOwner();
+      allow update: if isResourceOwner() && userIdUnchanged();
+      allow delete: if isResourceOwner();
+    }
+
+    match /metasFinanceiras/{metaId} {
+      allow create: if isUserPrefixOfId(metaId) && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isUserPrefixOfId(metaId);
+    }
+
+    // Nova regra para fechamentosCaixa
+    match /fechamentosCaixa/{docId} {
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner();
+    }
+
+    // ======================= BLOQUEIO PADRÃO =======================
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
