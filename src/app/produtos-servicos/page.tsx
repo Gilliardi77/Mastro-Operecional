@@ -1,12 +1,13 @@
-// Otimizado e corrigido: ProdutosServicosPage
+
+// Otimizado e corrigido: ProdutosServicosPage como Dashboard Operacional Diário
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfDay, endOfDay, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  collection, query, where, getDocs, Timestamp, orderBy, limit, type Firestore
+  collection, query, where, getDocs, Timestamp, orderBy, limit, type Firestore, type DocumentData
 } from 'firebase/firestore';
 import { useAuth } from '@/components/auth/auth-provider';
 import { getFirebaseInstances } from '@/lib/firebase';
@@ -16,9 +17,11 @@ import { Badge } from '@/components/ui/badge';
 import {
   CalendarDays, PlusCircle, BarChart3, Users,
   Package, Settings, ActivitySquare, ListOrdered,
-  CheckCircle, AlertTriangle, Loader2, FilePlus2
+  CheckCircle, AlertTriangle, Loader2, FilePlus2, ShoppingCart, ServerIcon
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import type { OrdemServico, ItemOS } from '@/schemas/ordemServicoSchema';
+import type { Venda, ItemVenda } from '@/schemas/vendaSchema';
 
 interface AgendamentoResumo {
   id: string;
@@ -28,26 +31,30 @@ interface AgendamentoResumo {
   status: string;
 }
 
-interface ResumoOperacional {
+interface ResumoDiarioOperacional {
+  novasOsHoje: number;
+  numeroVendasHoje: number;
+  clientesAtendidosHoje: number;
   osConcluidasHoje: number;
-  vendasHojeValor: number;
-  osAtrasadas: number;
-  novasOsHoje: number; // Novo campo
+  produtosVendidosHoje: number;
+  osAtrasadas: number; // Mantido do resumo anterior
 }
 
 export default function ProdutosServicosPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [agendaHoje, setAgendaHoje] = useState<AgendamentoResumo[]>([]);
-  const [resumoOperacional, setResumoOperacional] = useState<ResumoOperacional>({
+  const [resumoDiario, setResumoDiario] = useState<ResumoDiarioOperacional>({
+    novasOsHoje: 0,
+    numeroVendasHoje: 0,
+    clientesAtendidosHoje: 0,
     osConcluidasHoje: 0,
-    vendasHojeValor: 0,
+    produtosVendidosHoje: 0,
     osAtrasadas: 0,
-    novasOsHoje: 0, // Inicializa o novo campo
   });
   const [loading, setLoading] = useState({ agenda: true, resumo: true });
 
-  const userId = user?.uid || 'bypass_user_placeholder';
+  const userId = user?.uid || 'bypass_user_placeholder'; // Use um placeholder se o bypass estiver ativo e não houver usuário
 
   const getStatusClass = (status: string): string => {
     const map: Record<string, string> = {
@@ -62,8 +69,7 @@ export default function ProdutosServicosPage() {
   const fetchAgendaHoje = useCallback(async () => {
     setLoading(prev => ({ ...prev, agenda: true }));
     const { db: dbInstance } = getFirebaseInstances();
-    if (!dbInstance) {
-      toast({ title: "Erro de Firebase", description: "DB não disponível para buscar agenda.", variant: "destructive" });
+    if (!dbInstance || !userId) {
       setLoading(prev => ({ ...prev, agenda: false }));
       return;
     }
@@ -77,7 +83,7 @@ export default function ProdutosServicosPage() {
         where('dataHora', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataHora', '<=', Timestamp.fromDate(hojeFim)),
         orderBy('dataHora', 'asc'),
-        limit(5) // Aumentado para 5
+        limit(5)
       );
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({
@@ -94,11 +100,10 @@ export default function ProdutosServicosPage() {
     }
   }, [userId, toast]);
 
-  const fetchResumo = useCallback(async () => {
+  const fetchResumoDiario = useCallback(async () => {
     setLoading(prev => ({ ...prev, resumo: true }));
     const { db: dbInstance } = getFirebaseInstances();
-    if (!dbInstance) {
-      toast({ title: "Erro de Firebase", description: "DB não disponível para buscar resumo.", variant: "destructive" });
+    if (!dbInstance || !userId) {
       setLoading(prev => ({ ...prev, resumo: false }));
       return;
     }
@@ -106,45 +111,9 @@ export default function ProdutosServicosPage() {
     try {
       const hojeInicio = startOfDay(new Date());
       const hojeFim = endOfDay(new Date());
-      let osConcluidasHoje = 0, vendasHojeValor = 0, osAtrasadas = 0, novasOsHoje = 0;
+      let novasOsHoje = 0, numeroVendasHoje = 0, osConcluidasHoje = 0, produtosVendidosHoje = 0, osAtrasadas = 0;
+      const clientesAtendidosIds = new Set<string>();
 
-      // OS Concluídas Hoje
-      const osConcluidasSnap = await getDocs(query(
-        collection(dbInstance, 'ordensServico'),
-        where('userId', '==', userId),
-        where('status', '==', 'Concluído'),
-        where('updatedAt', '>=', Timestamp.fromDate(hojeInicio)), // updatedAt pode não ser ideal, mas é o que temos
-        where('updatedAt', '<=', Timestamp.fromDate(hojeFim))
-      ));
-      osConcluidasHoje = osConcluidasSnap.size;
-
-      // Vendas de Hoje
-      const vendasSnap = await getDocs(query(
-        collection(dbInstance, 'vendas'),
-        where('userId', '==', userId),
-        where('dataVenda', '>=', Timestamp.fromDate(hojeInicio)),
-        where('dataVenda', '<=', Timestamp.fromDate(hojeFim))
-      ));
-      vendasSnap.forEach(doc => {
-        if (typeof doc.data().totalVenda === 'number') {
-            vendasHojeValor += doc.data().totalVenda;
-        }
-      });
-
-      // OS em Atraso
-      const atrasadasSnap = await getDocs(query(
-        collection(dbInstance, 'ordensServico'),
-        where('userId', '==', userId),
-        where('dataEntrega', '<', Timestamp.fromDate(hojeInicio))
-        // Adicionar filtro para status !== 'Concluído' e !== 'Cancelado'
-      ));
-      atrasadasSnap.forEach(doc => {
-        const status = doc.data().status;
-        if (status === 'Pendente' || status === 'Em Andamento') {
-            osAtrasadas++;
-        }
-      });
-      
       // Novas OS Criadas Hoje
       const novasOsSnap = await getDocs(query(
         collection(dbInstance, 'ordensServico'),
@@ -153,11 +122,81 @@ export default function ProdutosServicosPage() {
         where('createdAt', '<=', Timestamp.fromDate(hojeFim))
       ));
       novasOsHoje = novasOsSnap.size;
+      novasOsSnap.forEach(doc => {
+        const os = doc.data() as OrdemServico;
+        if (os.clienteId) clientesAtendidosIds.add(os.clienteId);
+        else clientesAtendidosIds.add(`avulso_${os.clienteNome.toLowerCase()}`); // Para clientes avulsos
+      });
 
-      setResumoOperacional({ osConcluidasHoje, vendasHojeValor, osAtrasadas, novasOsHoje });
+      // Número de Vendas Hoje
+      const vendasSnap = await getDocs(query(
+        collection(dbInstance, 'vendas'),
+        where('userId', '==', userId),
+        where('dataVenda', '>=', Timestamp.fromDate(hojeInicio)),
+        where('dataVenda', '<=', Timestamp.fromDate(hojeFim))
+      ));
+      numeroVendasHoje = vendasSnap.size;
+      vendasSnap.forEach(doc => {
+        const venda = doc.data() as Venda;
+        if (venda.clienteId) clientesAtendidosIds.add(venda.clienteId);
+        else clientesAtendidosIds.add(`avulso_${venda.clienteNome.toLowerCase()}`);
+        if (venda.itens) {
+          venda.itens.forEach((item: ItemVenda) => {
+            if (item.productType === 'Produto' || (item.manual && !item.productType)) { // Assumir manual como produto se não especificado
+              produtosVendidosHoje += item.quantidade;
+            }
+          });
+        }
+      });
+
+      // OS Concluídas Hoje & Produtos Vendidos em OS
+      const osConcluidasSnap = await getDocs(query(
+        collection(dbInstance, 'ordensServico'),
+        where('userId', '==', userId),
+        where('status', '==', 'Concluído')
+      ));
+      osConcluidasSnap.forEach(doc => {
+        const os = doc.data() as OrdemServico;
+        if (os.updatedAt instanceof Timestamp && isToday(os.updatedAt.toDate())) {
+            osConcluidasHoje++;
+        }
+        // Somar produtos de OS concluídas (independente de quando foi concluída, se o status é concluído)
+        // Ou pode-se filtrar para OS concluídas *hoje* para produtos vendidos *hoje* via OS
+        // Para simplificar, vamos considerar produtos de todas as OS com status "Concluído" se a OS foi atualizada hoje
+        if (os.updatedAt instanceof Timestamp && isToday(os.updatedAt.toDate()) && os.itens) {
+           os.itens.forEach((item: ItemOS) => {
+            if (item.tipo === 'Produto') {
+              produtosVendidosHoje += item.quantidade;
+            }
+          });
+        }
+      });
+      
+      // OS em Atraso (mantido do resumo anterior)
+      const atrasadasSnap = await getDocs(query(
+        collection(dbInstance, 'ordensServico'),
+        where('userId', '==', userId),
+        where('dataEntrega', '<', Timestamp.fromDate(hojeInicio))
+      ));
+      atrasadasSnap.forEach(doc => {
+        const status = doc.data().status;
+        if (status === 'Pendente' || status === 'Em Andamento') {
+            osAtrasadas++;
+        }
+      });
+
+      setResumoDiario({ 
+        novasOsHoje, 
+        numeroVendasHoje, 
+        clientesAtendidosHoje: clientesAtendidosIds.size, 
+        osConcluidasHoje, 
+        produtosVendidosHoje,
+        osAtrasadas 
+      });
+
     } catch (e:any) {
-      console.error('Erro resumo operacional:', e);
-      toast({ title: "Erro ao buscar resumo", description: e.message, variant: "destructive" });
+      console.error('Erro ao buscar resumo diário:', e);
+      toast({ title: "Erro ao buscar resumo diário", description: e.message, variant: "destructive" });
     } finally {
       setLoading(prev => ({ ...prev, resumo: false }));
     }
@@ -166,9 +205,18 @@ export default function ProdutosServicosPage() {
   useEffect(() => {
     if (userId) { 
         fetchAgendaHoje();
-        fetchResumo();
+        fetchResumoDiario();
     }
-  }, [fetchAgendaHoje, fetchResumo, userId]);
+  }, [fetchAgendaHoje, fetchResumoDiario, userId]);
+
+  const metricCards = [
+    { title: "Novas OS Hoje", value: resumoDiario.novasOsHoje, icon: FilePlus2, color: "text-blue-500" },
+    { title: "Nº de Vendas Hoje", value: resumoDiario.numeroVendasHoje, icon: ShoppingCart, color: "text-purple-500" },
+    { title: "Clientes Atendidos Hoje", value: resumoDiario.clientesAtendidosHoje, icon: Users, color: "text-teal-500" },
+    { title: "OS Concluídas Hoje", value: resumoDiario.osConcluidasHoje, icon: CheckCircle, color: "text-green-500" },
+    { title: "Produtos Vendidos Hoje", value: resumoDiario.produtosVendidosHoje, icon: Package, color: "text-orange-500" },
+    { title: "OS em Atraso", value: resumoDiario.osAtrasadas, icon: AlertTriangle, color: "text-red-500" },
+  ];
 
   return (
     <div className="space-y-8">
@@ -177,43 +225,18 @@ export default function ProdutosServicosPage() {
         <p className="mt-4 text-lg text-muted-foreground">Visão geral da sua operação hoje.</p>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">OS Concluídas Hoje</CardTitle>
-            <CheckCircle className="h-5 w-5 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.osConcluidasHoje}</div>}
-          </CardContent>
-        </Card>
-         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Novas OS Hoje</CardTitle>
-            <FilePlus2 className="h-5 w-5 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.novasOsHoje}</div>}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Vendas de Hoje (R$)</CardTitle>
-            <BarChart3 className="h-5 w-5 text-indigo-500" />
-          </CardHeader>
-          <CardContent>
-          {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">R$ {resumoOperacional.vendasHojeValor.toFixed(2)}</div>}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">OS em Atraso</CardTitle>
-            <AlertTriangle className="h-5 w-5 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.osAtrasadas}</div>}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {metricCards.map(metric => (
+          <Card key={metric.title}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">{metric.title}</CardTitle>
+              <metric.icon className={`h-5 w-5 ${metric.color || 'text-muted-foreground'}`} />
+            </CardHeader>
+            <CardContent>
+              {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{metric.value}</div>}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -230,8 +253,8 @@ export default function ProdutosServicosPage() {
                 {agendaHoje.map(ag => (
                   <li key={ag.id} className="flex items-center justify-between p-3 rounded-md border bg-muted/30 hover:bg-muted/50 transition-colors">
                     <div>
-                      <p className="font-medium">{ag.servicoNome}</p>
-                      <p className="text-sm text-muted-foreground">{ag.clienteNome} - {format(ag.dataHora, 'HH:mm', { locale: ptBR })}</p>
+                      <p className="font-medium truncate max-w-[200px] sm:max-w-xs" title={ag.servicoNome}>{ag.servicoNome}</p>
+                      <p className="text-sm text-muted-foreground truncate max-w-[200px] sm:max-w-xs" title={ag.clienteNome}>{ag.clienteNome} - {format(ag.dataHora, 'HH:mm', { locale: ptBR })}</p>
                     </div>
                     <Badge variant="outline" className={getStatusClass(ag.status)}>{ag.status}</Badge>
                   </li>
@@ -250,39 +273,40 @@ export default function ProdutosServicosPage() {
             <CardDescription>Principais funcionalidades do módulo.</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
-            <Button asChild size="lg" className="h-auto py-4 flex-col">
-              <Link href="/produtos-servicos/atendimentos/novo">
-                <PlusCircle className="mb-1 h-6 w-6" /> Nova OS
-              </Link>
-            </Button>
-            <Button asChild size="lg" className="h-auto py-4 flex-col">
-              <Link href="/produtos-servicos/balcao">
-                <Package className="mb-1 h-6 w-6" /> Balcão PDV
-              </Link>
-            </Button>
-            <Button asChild size="lg" className="h-auto py-4 flex-col" variant="secondary">
-              <Link href="/produtos-servicos/clientes">
-                <Users className="mb-1 h-6 w-6" /> Clientes
-              </Link>
-            </Button>
-            <Button asChild size="lg" className="h-auto py-4 flex-col" variant="secondary">
-              <Link href="/produtos-servicos/produtos">
-                <ListOrdered className="mb-1 h-6 w-6" /> Produtos/Serviços
-              </Link>
-            </Button>
-             <Button asChild size="lg" className="h-auto py-4 flex-col" variant="outline">
-              <Link href="/produtos-servicos/producao">
-                <Settings className="mb-1 h-6 w-6" /> Controle de Produção
-              </Link>
-            </Button>
-             <Button asChild size="lg" className="h-auto py-4 flex-col" variant="outline">
-              <Link href="/produtos-servicos/estoque">
-                <BarChart3 className="mb-1 h-6 w-6" /> Controle de Estoque
-              </Link>
-            </Button>
+            {[
+              { href: "/produtos-servicos/atendimentos/novo", label: "Nova OS", icon: PlusCircle },
+              { href: "/produtos-servicos/balcao", label: "Balcão PDV", icon: Package },
+              { href: "/produtos-servicos/clientes", label: "Clientes", icon: Users, variant: "secondary" as const },
+              { href: "/produtos-servicos/produtos", label: "Produtos/Serviços", icon: ListOrdered, variant: "secondary" as const },
+              { href: "/produtos-servicos/producao", label: "Controle de Produção", icon: Settings, variant: "outline" as const },
+              { href: "/produtos-servicos/estoque", label: "Controle de Estoque", icon: BarChart3, variant: "outline" as const },
+            ].map(action => (
+              <Button key={action.href} asChild size="lg" className="h-auto py-3 flex-col text-center" variant={action.variant || "default"}>
+                <Link href={action.href}>
+                  <action.icon className="mb-1 h-5 w-5 sm:h-6 sm:w-6" /> 
+                  <span className="text-xs sm:text-sm">{action.label}</span>
+                </Link>
+              </Button>
+            ))}
           </CardContent>
         </Card>
       </div>
+       <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ServerIcon className="h-5 w-5 text-primary"/> Histórico de Dados Recentes</CardTitle>
+            <CardDescription>Visualização de tabelas com dados recentes das principais coleções. (Em desenvolvimento)</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <p className="text-muted-foreground">Esta seção exibirá tabelas dinâmicas com as últimas OS, Vendas, etc.</p>
+            {/* 
+            Aqui você poderia adicionar instâncias do componente TabelaDinamica:
+            <TabelaDinamica nomeColecao="ordensServico" userId={userId} titulo="Últimas Ordens de Serviço" orderByField="createdAt" orderByDirection="desc" />
+            <TabelaDinamica nomeColecao="vendas" userId={userId} titulo="Últimas Vendas" orderByField="dataVenda" orderByDirection="desc" />
+            */}
+        </CardContent>
+      </Card>
     </div>
   );
 }
+
+    
