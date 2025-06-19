@@ -117,3 +117,33 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Estilos para destacar dias com agendamento no calendário */
+.day-with-appointment {
+  position: relative;
+}
+.day-with-appointment::after {
+  content: '';
+  position: absolute;
+  bottom: 4px; /* Ajuste a posição vertical do ponto */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px; /* Tamanho do ponto */
+  height: 6px; /* Tamanho do ponto */
+  border-radius: 50%;
+  background-color: hsl(var(--primary)); /* Cor do ponto para dias normais */
+}
+
+/* Ajuste para o ponto no dia selecionado */
+.rdp-day_selected.day-with-appointment::after {
+  background-color: hsl(var(--primary-foreground)); /* Cor do ponto em dias selecionados */
+}
+/* Ajuste para o ponto no dia de hoje, se não estiver selecionado */
+.rdp-day_today:not(.rdp-day_selected).day-with-appointment::after {
+  background-color: hsl(var(--accent-foreground)); /* Cor do ponto no dia de hoje (se não selecionado) */
+}
+/* Ajuste para o ponto no dia de hoje E selecionado (sobrepõe os anteriores se necessário) */
+.rdp-day_today.rdp-day_selected.day-with-appointment::after {
+  background-color: hsl(var(--primary-foreground)); /* Ponto no "hoje selecionado" - igual ao "selecionado" */
+}
+

@@ -34,10 +34,10 @@ import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod"; 
-import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
+import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
+import { getFirebaseInstances } from '@/lib/firebase'; 
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
 import { collection, addDoc, Timestamp, type Firestore } from "firebase/firestore";
@@ -88,6 +88,7 @@ export default function AgendaPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fetchedClients, setFetchedClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [datesWithAppointments, setDatesWithAppointments] = useState<Date[]>([]);
 
   const bypassAuth = true; 
 
@@ -141,6 +142,7 @@ export default function AgendaPage() {
     const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
     if (!userIdToQuery) {
       setAppointments([]);
+      setDatesWithAppointments([]);
       setIsLoading(false);
       return;
     }
@@ -148,6 +150,14 @@ export default function AgendaPage() {
     try {
       const fetchedAppointments = await getAllAppointmentsByUserId(userIdToQuery, 'dataHora', 'asc');
       setAppointments(fetchedAppointments);
+      if (fetchedAppointments.length > 0) {
+        const uniqueDates = Array.from(
+          new Set(fetchedAppointments.map(app => startOfDay(app.dataHora).toISOString()))
+        ).map(dateStr => new Date(dateStr));
+        setDatesWithAppointments(uniqueDates);
+      } else {
+        setDatesWithAppointments([]);
+      }
     } catch (error: any) {
       console.error("[AgendaPage] Erro ao buscar agendamentos via service:", error);
       toast({ 
@@ -445,6 +455,10 @@ export default function AgendaPage() {
               className="rounded-md border"
               initialFocus
               locale={ptBR}
+              modifiers={{ hasAppointment: datesWithAppointments }}
+              modifiersClassNames={{
+                hasAppointment: 'day-with-appointment',
+              }}
             />
           </CardContent>
         </Card>
@@ -742,3 +756,4 @@ export default function AgendaPage() {
     </div>
   );
 }
+
