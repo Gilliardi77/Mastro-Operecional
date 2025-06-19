@@ -26,7 +26,7 @@ import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Print
 import { useAuth } from '@/components/auth/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { FechamentoCaixaFormSchema, type FechamentoCaixaFormValues, type EntradasPorMetodo } from '@/schemas/fechamentoCaixaSchema';
+import { FechamentoCaixaFormSchema, type FechamentoCaixaFormValues, type EntradasPorMetodo, EntradasPorMetodoSchema } from '@/schemas/fechamentoCaixaSchema';
 import type { LancamentoFinanceiro } from '@/schemas/lancamentoFinanceiroSchema';
 import type { Venda } from '@/schemas/vendaSchema';
 import { getLancamentosByUserIdAndDateRange } from '@/services/lancamentoFinanceiroService';
@@ -49,7 +49,7 @@ export default function FechamentoCaixaPage() {
   const router = useRouter();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fechamentosDoDia, setFechamentosDoDia] = useState<number>(0);
+  const [fechamentosAnterioresHoje, setFechamentosAnterioresHoje] = useState<number>(0);
   const [caixaDiario, setCaixaDiario] = useState<CaixaDiarioCalculado>({
     totalEntradasLancamentos: 0,
     totalSaidasLancamentos: 0,
@@ -86,7 +86,6 @@ export default function FechamentoCaixaPage() {
 
   const fetchLastClosingAndSuggestTroco = useCallback(async (userId: string) => {
     try {
-      // Buscar o último fechamento geral para sugerir o troco inicial
       const todosFechamentos = await getAllFechamentosCaixaByUserId(userId, 'dataFechamento', 'desc');
       if (todosFechamentos.length > 0) {
         const ultimoFechamentoGeral = todosFechamentos[0];
@@ -98,10 +97,12 @@ export default function FechamentoCaixaPage() {
         });
       }
     } catch (error: any) {
-      if (error.message && error.message.includes("Missing or insufficient permissions")) {
-        console.warn(`[FechamentoCaixaPage] Permissão negada ao buscar último fechamento de caixa para usuário ${userId}. Verifique as regras do Firestore ou a configuração do Firebase. Continuando sem sugerir troco inicial.`);
+      // Silenciar erro de permissão se ocorrer, pois é esperado em alguns cenários de teste/config
+      if (error.message && (error.message.includes("Missing or insufficient permissions") || error.message.includes(" Firestore DB não disponível"))) {
+        console.warn(`[FechamentoCaixaPage] Permissão negada ou DB indisponível ao buscar último fechamento de caixa para usuário ${userId}. Continuando sem sugerir troco inicial.`);
       } else {
         console.error("Erro ao buscar último fechamento de caixa:", error);
+        toast({ title: "Erro ao Buscar Dados Anteriores", description: "Não foi possível obter dados do último fechamento para sugerir o troco.", variant: "destructive" });
       }
     }
   }, [setValue, toast]);
@@ -119,60 +120,56 @@ export default function FechamentoCaixaPage() {
         getVendasByUserIdAndDateRange(user.uid, hojeInicio, hojeFim)
       ]);
 
-      let totalEntradasLancamentos = 0;
-      let totalSaidasLancamentos = 0;
-      const entradasPorMetodoCalculadas: EntradasPorMetodo = { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, boleto: 0, transferenciaBancaria: 0, outros: 0 };
+      let totalEntradasCalculado = 0;
+      let totalSaidasCalculado = 0;
+      const entradasPorMetodoTemp: Record<keyof EntradasPorMetodo, number> = { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, boleto: 0, transferenciaBancaria: 0, outros: 0 };
 
-      // Processar Lançamentos Financeiros (incluindo pagamentos de OS)
       lancamentosDoDia.forEach(l => {
         if (l.tipo === 'receita' && (l.status === 'recebido' || l.status === 'pago')) {
-          totalEntradasLancamentos += l.valor;
+          totalEntradasCalculado += l.valor;
           const formaPagamento = l.formaPagamento?.toLowerCase() || 'outros';
-          if (formaPagamento.includes('dinheiro')) entradasPorMetodoCalculadas.dinheiro += l.valor;
-          else if (formaPagamento.includes('pix')) entradasPorMetodoCalculadas.pix += l.valor;
+          if (formaPagamento.includes('dinheiro')) entradasPorMetodoTemp.dinheiro += l.valor;
+          else if (formaPagamento.includes('pix')) entradasPorMetodoTemp.pix += l.valor;
           else if (formaPagamento.includes('crédito') || formaPagamento.includes('credito')) {
-            entradasPorMetodoCalculadas.cartaoCredito += l.valor;
-            entradasPorMetodoCalculadas.cartao += l.valor;
+            entradasPorMetodoTemp.cartaoCredito += l.valor;
+            entradasPorMetodoTemp.cartao += l.valor;
           } else if (formaPagamento.includes('débito') || formaPagamento.includes('debito')) {
-            entradasPorMetodoCalculadas.cartaoDebito += l.valor;
-            entradasPorMetodoCalculadas.cartao += l.valor;
-          } else if (formaPagamento.includes('boleto')) entradasPorMetodoCalculadas.boleto += l.valor;
-          else if (formaPagamento.includes('transferência') || formaPagamento.includes('transferencia')) entradasPorMetodoCalculadas.transferenciaBancaria += l.valor;
-          else entradasPorMetodoCalculadas.outros += l.valor;
+            entradasPorMetodoTemp.cartaoDebito += l.valor;
+            entradasPorMetodoTemp.cartao += l.valor;
+          } else if (formaPagamento.includes('boleto')) entradasPorMetodoTemp.boleto += l.valor;
+          else if (formaPagamento.includes('transferência') || formaPagamento.includes('transferencia')) entradasPorMetodoTemp.transferenciaBancaria += l.valor;
+          else entradasPorMetodoTemp.outros += l.valor;
+
         } else if (l.tipo === 'despesa' && l.status === 'pago') {
-          totalSaidasLancamentos += l.valor;
+          totalSaidasCalculado += l.valor;
         }
       });
       
-      // Processar Vendas do PDV (Balcão)
-      // ATENÇÃO: Esta seção pode causar dupla contagem se as vendas do PDV também gerarem `LancamentoFinanceiro`
-      // que já foram processados acima. O ideal é que `entradasPorMetodoCalculadas` seja populado *apenas*
-      // por `lancamentosDoDia`, e que todas as vendas PDV gerem um `LancamentoFinanceiro` com `formaPagamento`.
-      // Por ora, somamos as vendas PDV aqui, assumindo que elas podem não ter gerado um lançamento financeiro detalhado
-      // ou para garantir que não sejam perdidas se a lógica de geração de lançamentos não for completa.
+      // Processar Vendas do PDV, mas apenas se elas NÃO gerarem lançamentos financeiros automaticamente
+      // Se as vendas PDV JÁ geram lançamentos, esta seção pode causar dupla contagem.
+      // A heurística aqui é verificar se existe um LancamentoFinanceiro com o vendaId.
       vendasDoDia.forEach(venda => {
         if (venda.status === 'Concluída') {
-            // Para evitar dupla contagem, só somaremos a venda se não encontrarmos um lançamento correspondente já contabilizado.
             const lancamentoDaVendaExistente = lancamentosDoDia.find(l => l.vendaId === venda.id && l.tipo === 'receita');
             if (!lancamentoDaVendaExistente) {
-                // Se não há lançamento para esta venda (ou se a lógica de lançamento não inclui forma de pagamento),
-                // então adicionamos aqui.
-                // No futuro, o ideal é que a venda gere um lançamento que já seja pego pela lógica anterior.
-                switch (venda.formaPagamento) {
-                case 'dinheiro': entradasPorMetodoCalculadas.dinheiro += venda.totalVenda; break;
-                case 'pix': entradasPorMetodoCalculadas.pix += venda.totalVenda; break;
-                case 'cartao_credito': entradasPorMetodoCalculadas.cartaoCredito += venda.totalVenda; entradasPorMetodoCalculadas.cartao += venda.totalVenda; break;
-                case 'cartao_debito': entradasPorMetodoCalculadas.cartaoDebito += venda.totalVenda; entradasPorMetodoCalculadas.cartao += venda.totalVenda; break;
-                case 'boleto': entradasPorMetodoCalculadas.boleto += venda.totalVenda; break;
-                default: entradasPorMetodoCalculadas.outros += venda.totalVenda;
+                // Só contabiliza a venda para o total e para as formas de pagamento se não houver um lançamento correspondente
+                totalEntradasCalculado += venda.totalVenda;
+                switch (venda.formaPagamento.toLowerCase()) {
+                  case 'dinheiro': entradasPorMetodoTemp.dinheiro += venda.totalVenda; break;
+                  case 'pix': entradasPorMetodoTemp.pix += venda.totalVenda; break;
+                  case 'cartao_credito': entradasPorMetodoTemp.cartaoCredito += venda.totalVenda; entradasPorMetodoTemp.cartao += venda.totalVenda; break;
+                  case 'cartao_debito': entradasPorMetodoTemp.cartaoDebito += venda.totalVenda; entradasPorMetodoTemp.cartao += venda.totalVenda; break;
+                  case 'boleto': entradasPorMetodoTemp.boleto += venda.totalVenda; break;
+                  case 'transferencia': entradasPorMetodoTemp.transferenciaBancaria += venda.totalVenda; break;
+                  default: entradasPorMetodoTemp.outros += venda.totalVenda;
                 }
-                // Se a venda não gerou lançamento, ela também contribui para o total de entradas.
-                totalEntradasLancamentos += venda.totalVenda;
             }
         }
       });
+      
+      const parsedEntradasPorMetodo = EntradasPorMetodoSchema.parse(entradasPorMetodoTemp);
 
-      setCaixaDiario({ totalEntradasLancamentos, totalSaidasLancamentos, entradasPorMetodoCalculadas });
+      setCaixaDiario({ totalEntradasLancamentos: totalEntradasCalculado, totalSaidasLancamentos: totalSaidasCalculado, entradasPorMetodoCalculadas: parsedEntradasPorMetodo });
 
     } catch (error: any) {
       toast({ title: "Erro ao buscar dados do dia", description: error.message, variant: "destructive" });
@@ -196,9 +193,17 @@ export default function FechamentoCaixaPage() {
               where("dataFechamento", "<=", Timestamp.fromDate(todayEnd))
             );
             const snapshotFechamentosHoje = await getDocs(qFechamentosHoje);
-            setFechamentosDoDia(snapshotFechamentosHoje.size);
+            setFechamentosAnterioresHoje(snapshotFechamentosHoje.size);
+
+            // Só sugere troco se NENHUM fechamento foi feito hoje
+            if (snapshotFechamentosHoje.empty) {
+              await fetchLastClosingAndSuggestTroco(user.uid);
+            }
+          } else {
+            // Se dbInstance ou user.uid não estiverem disponíveis, ainda tentar sugerir troco
+            // Isso pode falhar se o db não estiver pronto, mas fetchLastClosingAndSuggestTroco tem seu próprio try/catch
+             await fetchLastClosingAndSuggestTroco(user.uid);
           }
-          await fetchLastClosingAndSuggestTroco(user.uid);
           await fetchDataDiaria();
 
         } catch (e: any) {
@@ -245,8 +250,9 @@ export default function FechamentoCaixaPage() {
       await createFechamentoCaixa(user.uid, fechamentoData);
       toast({ title: "Fechamento de Caixa Salvo!", description: "O fechamento do caixa foi registrado com sucesso." });
       form.reset({trocoInicial: 0, sangrias: 0, observacoes: ""}); 
-      setFechamentosDoDia(prev => prev + 1);
-      fetchDataDiaria(); 
+      setFechamentosAnterioresHoje(prev => prev + 1); // Incrementa o contador de fechamentos do dia
+      fetchDataDiaria(); // Recarrega os dados do dia, pois podem ter mudado (ex: um novo lançamento enquanto o modal estava aberto)
+      // fetchLastClosingAndSuggestTroco(user.uid); // Recarrega a sugestão de troco para o PRÓXIMO dia, se necessário.
       setConfirmationData(null); 
     } catch (error: any) {
       toast({ title: "Erro ao Salvar Fechamento", description: error.message, variant: "destructive" });
@@ -312,7 +318,7 @@ export default function FechamentoCaixaPage() {
                   <Info className="h-4 w-4" />
                   <AlertTitle>Atenção sobre Entradas por Método</AlertTitle>
                   <AlertDescription>
-                    O "Total de Entradas" acima refere-se a todos os lançamentos de receita efetivados. O detalhamento "Entradas por Método" agora inclui receitas de Ordens de Serviço e Vendas, agrupadas pela forma de pagamento registrada no sistema. Para um resumo preciso, certifique-se de que as formas de pagamento estejam corretamente registradas nos lançamentos e vendas.
+                    O "Total de Entradas" refere-se a todos os lançamentos de receita efetivados e vendas PDV que não geraram lançamento. O detalhamento "Entradas por Método" agrupa essas receitas pela forma de pagamento registrada. Para um resumo preciso, certifique-se de que as formas de pagamento estejam corretamente registradas nas vendas e lançamentos.
                   </AlertDescription>
                 </Alert>
               </CardContent>
@@ -323,12 +329,12 @@ export default function FechamentoCaixaPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Registrar Fechamento</CardTitle>
-                {fechamentosDoDia > 0 && (
+                {fechamentosAnterioresHoje > 0 && (
                     <Alert variant="default" className="border-orange-500 bg-orange-50 dark:bg-orange-900/30 mt-2">
                         <History className="h-4 w-4 text-orange-700 dark:text-orange-400" />
-                        <AlertTitle className="text-orange-700 dark:text-orange-400">Caixa Já Fechado Hoje</AlertTitle>
+                        <AlertTitle className="text-orange-700 dark:text-orange-400">Fechamento(s) já Realizado(s) Hoje</AlertTitle>
                         <AlertDescription className="text-orange-600 dark:text-orange-300">
-                            Já existe(m) {fechamentosDoDia} fechamento(s) registrado(s) hoje. Um novo fechamento pode ser adicionado se necessário (ex: correção ou fechamento complementar). O último fechamento geral é usado para sugerir o troco inicial.
+                            Já existe(m) {fechamentosAnterioresHoje} fechamento(s) registrado(s) para hoje. Você pode realizar um novo fechamento se necessário (ex: complementar ou corretivo). O troco inicial foi sugerido com base no último fechamento geral.
                         </AlertDescription>
                     </Alert>
                 )}
@@ -387,16 +393,18 @@ export default function FechamentoCaixaPage() {
                        <AlertDialogContent>
                          <AlertDialogHeader>
                            <AlertDialogTitle>Confirmar Fechamento de Caixa</AlertDialogTitle>
-                           <AlertDialogDescription>
-                             Revise os valores antes de confirmar:
-                             <ul className="list-disc pl-5 my-2 text-sm text-foreground">
-                               <li>Total Entradas (Dia): <span className="font-semibold">R$ {confirmationData?.totalEntradasLancamentos.toFixed(2)}</span></li>
-                               <li>Total Saídas (Dia): <span className="font-semibold">R$ {confirmationData?.totalSaidasLancamentos.toFixed(2)}</span></li>
-                               <li>Troco Inicial: <span className="font-semibold">R$ {(confirmationData?.trocoInicial || 0).toFixed(2)}</span></li>
-                               <li>Sangrias: <span className="font-semibold">R$ {(confirmationData?.sangrias || 0).toFixed(2)}</span></li>
-                               <li className="mt-1">Saldo Final Esperado no Caixa: <strong className="text-lg">R$ {confirmationData?.saldoFinal.toFixed(2)}</strong></li>
-                             </ul>
-                             Esta ação registrará um novo fechamento de caixa. Deseja continuar?
+                           <AlertDialogDescription asChild>
+                             <div>
+                               <p>Revise os valores antes de confirmar:</p>
+                               <ul className="list-disc pl-5 my-2 text-sm text-foreground">
+                                 <li>Total Entradas (Dia): <span className="font-semibold">R$ {confirmationData?.totalEntradasLancamentos.toFixed(2)}</span></li>
+                                 <li>Total Saídas (Dia): <span className="font-semibold">R$ {confirmationData?.totalSaidasLancamentos.toFixed(2)}</span></li>
+                                 <li>Troco Inicial: <span className="font-semibold">R$ {(confirmationData?.trocoInicial || 0).toFixed(2)}</span></li>
+                                 <li>Sangrias: <span className="font-semibold">R$ {(confirmationData?.sangrias || 0).toFixed(2)}</span></li>
+                                 <li className="mt-1">Saldo Final Esperado no Caixa: <strong className="text-lg">R$ {confirmationData?.saldoFinal.toFixed(2)}</strong></li>
+                               </ul>
+                               <p>Esta ação registrará um novo fechamento de caixa. Deseja continuar?</p>
+                             </div>
                            </AlertDialogDescription>
                          </AlertDialogHeader>
                          <AlertDialogFooter>
