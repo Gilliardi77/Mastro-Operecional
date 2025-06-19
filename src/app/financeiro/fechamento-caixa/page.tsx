@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { FechamentoCaixaFormSchema, type FechamentoCaixaFormValues, type EntradasPorMetodo } from '@/schemas/fechamentoCaixaSchema';
 import type { LancamentoFinanceiro } from '@/schemas/lancamentoFinanceiroSchema';
-import type { Venda } from '@/schemas/vendaSchema'; // Removido FormaPagamento pois não é usado diretamente aqui
+import type { Venda } from '@/schemas/vendaSchema';
 import { getLancamentosByUserIdAndDateRange } from '@/services/lancamentoFinanceiroService';
 import { getVendasByUserIdAndDateRange } from '@/services/vendaService';
 import { createFechamentoCaixa, getAllFechamentosCaixaByUserId } from '@/services/fechamentoCaixaService';
@@ -25,9 +25,9 @@ import { startOfDay, endOfDay, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface CaixaDiarioCalculado {
-  totalEntradasLancamentos: number; // Renomeado para clareza
-  totalSaidasLancamentos: number;   // Renomeado para clareza
-  entradasPorMetodoVendas: EntradasPorMetodo; // Renomeado para clareza
+  totalEntradasLancamentos: number;
+  totalSaidasLancamentos: number;
+  entradasPorMetodoVendas: EntradasPorMetodo;
 }
 
 export default function FechamentoCaixaPage() {
@@ -51,7 +51,7 @@ export default function FechamentoCaixaPage() {
     },
   });
 
-  const { watch, setValue } = form; // Adicionado setValue
+  const { watch, setValue } = form;
   const trocoInicial = watch("trocoInicial", 0);
   const sangrias = watch("sangrias", 0);
 
@@ -63,7 +63,6 @@ export default function FechamentoCaixaPage() {
     return (entradas + troco) - saidas - sang;
   }, [caixaDiario.totalEntradasLancamentos, caixaDiario.totalSaidasLancamentos, trocoInicial, sangrias]);
 
-  // Função para buscar o último fechamento e sugerir troco inicial
   const fetchLastClosingAndSuggestTroco = useCallback(async (userId: string) => {
     try {
       const historicoFechamentos = await getAllFechamentosCaixaByUserId(userId, 'dataFechamento', 'desc');
@@ -77,8 +76,12 @@ export default function FechamentoCaixaPage() {
         });
       }
     } catch (error: any) {
-      console.error("Erro ao buscar último fechamento de caixa:", error);
-      // Não mostra toast para erro aqui, para não poluir se for um usuário novo sem histórico
+      if (error.message && error.message.includes("Missing or insufficient permissions")) {
+        console.warn(`[FechamentoCaixaPage] Permissão negada ao buscar último fechamento de caixa para usuário ${userId}. Isso pode ocorrer devido à configuração do Firebase ou estado de autenticação. Continuando sem sugerir troco inicial.`);
+      } else {
+        console.error("Erro ao buscar último fechamento de caixa:", error);
+        // Não mostra toast para outros erros aqui, para não poluir se for um usuário novo sem histórico ou outro erro genérico
+      }
     }
   }, [setValue, toast]);
 
@@ -89,7 +92,7 @@ export default function FechamentoCaixaPage() {
       return;
     }
     setIsLoadingData(true);
-    await fetchLastClosingAndSuggestTroco(user.uid); // Busca troco antes dos dados do dia
+    await fetchLastClosingAndSuggestTroco(user.uid);
     try {
       const hojeInicio = startOfDay(new Date());
       const hojeFim = endOfDay(new Date());
@@ -128,7 +131,7 @@ export default function FechamentoCaixaPage() {
               entradasPorMetodoVendas.cartaoDebito += venda.totalVenda;
               entradasPorMetodoVendas.cartao += venda.totalVenda;
               break;
-            default: // Inclui 'boleto', 'transferencia', 'outro'
+            default: 
               entradasPorMetodoVendas.outros += venda.totalVenda;
           }
         }
@@ -147,7 +150,7 @@ export default function FechamentoCaixaPage() {
   useEffect(() => {
     if (user && !isAuthLoading) {
       fetchDataDiaria();
-    } else if (!user && !isAuthLoading) {
+    } else if (!user && !isAuthLoading && typeof window !== 'undefined') { // Add typeof window check
         router.push('/login?redirect=/financeiro/fechamento-caixa');
     }
   }, [user, isAuthLoading, fetchDataDiaria, router]);
@@ -173,7 +176,6 @@ export default function FechamentoCaixaPage() {
       };
       await createFechamentoCaixa(user.uid, fechamentoData);
       toast({ title: "Fechamento de Caixa Salvo!", description: "O fechamento do caixa foi registrado com sucesso." });
-      // Resetar o formulário e recarregar dados para um possível próximo fechamento no mesmo dia (raro) ou para limpar
       form.reset({trocoInicial: 0, sangrias: 0, observacoes: ""}); 
       fetchDataDiaria(); 
     } catch (error: any) {
@@ -183,7 +185,7 @@ export default function FechamentoCaixaPage() {
     }
   };
   
-  if (isAuthLoading || (!user && !isLoadingData && typeof window !== 'undefined')) { // Adicionado check para typeof window
+  if (isAuthLoading || (!user && !isLoadingData && typeof window !== 'undefined')) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
@@ -308,7 +310,7 @@ export default function FechamentoCaixaPage() {
           </div>
         </div>
       )}
-       { !isLoadingData && !user && typeof window !== 'undefined' && ( // Adicionado check para typeof window
+       { !isLoadingData && !user && typeof window !== 'undefined' && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Usuário Não Autenticado</AlertTitle>
