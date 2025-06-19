@@ -48,7 +48,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-import { type OrdemServico, OrdemServicoStatusEnum, updateOrdemServico } from '@/services/ordemServicoService'; 
+import { type OrdemServico as OrdemServicoOriginal, OrdemServicoStatusEnum, updateOrdemServico } from '@/services/ordemServicoService'; 
 import type { ItemOS } from '@/schemas/ordemServicoSchema'; 
 
 type ProductionOrderStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
@@ -169,9 +169,9 @@ export default function ProducaoPage() {
           ...data,
           progresso: data.progresso ?? 0,
           observacoesProducao: data.observacoesProducao ?? '',
-          dataAgendamento: safeToDate(data.dataAgendamento, 'dataAgendamento', new Date(0)), // Epoch for problematic main date
-          criadoEm: safeToDate(data.criadoEm, 'criadoEm', new Date()), // Current date as fallback
-          atualizadoEm: safeToDate(data.atualizadoEm, 'atualizadoEm', new Date()), // Current date as fallback
+          dataAgendamento: safeToDate(data.dataAgendamento, 'dataAgendamento', new Date(0)), 
+          criadoEm: safeToDate(data.criadoEm, 'criadoEm', new Date()), 
+          atualizadoEm: safeToDate(data.atualizadoEm, 'atualizadoEm', new Date()), 
         } as ProductionOrder;
       });
       setProductionOrders(fetchedOrders);
@@ -214,12 +214,23 @@ export default function ProducaoPage() {
       await updateOrdemServico(osId, { status: newStatus as OrdemServicoStatusEnum }); 
       console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`);
     } catch (error: any) {
-      console.error(`Erro ao atualizar status da OS ${osId} via serviço:`, error);
-      toast({
-        title: `Erro ao Sincronizar Status da OS Original`,
-        description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para ${newStatus}. Detalhe: ${error.message}`,
-        variant: "destructive",
-      });
+      const errorMessage = (error as Error).message || 'Erro desconhecido';
+      if (errorMessage.includes("Missing or insufficient permissions")) {
+        console.warn(`[Permissão Negada] Falha ao atualizar status da OS Original ${osId} para ${newStatus}. Usuário atual: ${user?.uid}. Verifique a propriedade 'userId' na OS.`, error);
+        toast({
+          title: `Permissão Negada (OS Original)`,
+          description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para "${newStatus}". Verifique se você é o proprietário desta OS.`,
+          variant: "destructive",
+          duration: 7000,
+        });
+      } else {
+        console.error(`Erro ao atualizar status da OS ${osId} via serviço:`, error);
+        toast({
+          title: `Erro ao Sincronizar Status da OS Original`,
+          description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para ${newStatus}. Detalhe: ${errorMessage}`,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -264,6 +275,7 @@ export default function ProducaoPage() {
                     }
                     const produtoData = produtoDoc.data() as any; 
                     const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
+                    
                     const novoEstoque = estoqueAtual - itemOS.quantidade;
                     transaction.update(produtoCatalogoRef, { 
                       quantidadeEstoque: novoEstoque,
