@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, CreditCard, CalendarIcon as CalendarIconLucide } from "lucide-react"; 
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, CreditCard, CalendarIcon as CalendarIconLucide } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,7 +45,7 @@ import {
   orderBy,
   getDocs,
   doc,
-  updateDoc, 
+  updateDoc,
   Timestamp,
   runTransaction,
   getDoc,
@@ -55,16 +55,16 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from '@/lib/utils';
 
-import { 
-  type OrdemServico as OrdemServicoOriginal, 
-  OrdemServicoStatusEnum, // Importado aqui
+import {
+  type OrdemServico as OrdemServicoOriginal,
   updateOrdemServico,
   getOrdemServicoById,
   PagamentoOsSchema,
   type PagamentoOsFormValues,
-  PaymentStatusEnum
-} from '@/services/ordemServicoService'; 
-import type { ItemOS } from '@/schemas/ordemServicoSchema'; 
+  PaymentStatusEnum,
+  OrdemServicoStatusEnum // Importando o objeto Zod enum
+} from '@/services/ordemServicoService';
+import type { ItemOS, OrdemServicoStatus } from '@/schemas/ordemServicoSchema'; // Importando o tipo OrdemServicoStatus
 import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroService';
 
 
@@ -77,13 +77,13 @@ interface OrdemServicoComItensEId extends OrdemServicoOriginal {
 
 interface ProductionOrderFirestore {
   id: string;
-  agendamentoId: string; 
+  agendamentoId: string;
   clienteId?: string;
   clienteNome: string;
-  servicoNome: string; 
+  servicoNome: string;
   dataAgendamento: Timestamp;
   status: ProductionOrderStatus;
-  progresso?: number; 
+  progresso?: number;
   observacoesAgendamento?: string;
   observacoesProducao?: string;
   userId: string;
@@ -126,7 +126,7 @@ const getStatusFromProgress = (progress: number): ProductionOrderStatus => {
   if (progress === 0) return "Pendente";
   if (progress === 100) return "Concluído";
   if (progress > 0 && progress < 100) return "Em Andamento";
-  return "Pendente"; 
+  return "Pendente";
 };
 
 
@@ -170,7 +170,8 @@ export default function ProducaoPage() {
       if (timestampField && typeof timestampField.toDate === 'function') {
         return timestampField.toDate();
       }
-      console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido na OP ID ${viewingOrder?.id || 'desconhecido'}. Usando data padrão: ${defaultDateVal.toISOString()}`);
+      // Removido console.warn para não poluir o console em produção, mas útil em dev
+      // console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido na OP ID ${viewingOrder?.id || 'desconhecido'}. Usando data padrão: ${defaultDateVal.toISOString()}`);
       return defaultDateVal;
   };
 
@@ -205,9 +206,9 @@ export default function ProducaoPage() {
           ...data,
           progresso: data.progresso ?? 0,
           observacoesProducao: data.observacoesProducao ?? '',
-          dataAgendamento: safeToDate(data.dataAgendamento, `dataAgendamento - OP ID ${docSnap.id}`, new Date(0)), 
-          criadoEm: safeToDate(data.criadoEm, `criadoEm - OP ID ${docSnap.id}`, new Date()), 
-          atualizadoEm: safeToDate(data.atualizadoEm, `atualizadoEm - OP ID ${docSnap.id}`, new Date()), 
+          dataAgendamento: safeToDate(data.dataAgendamento, `dataAgendamento - OP ID ${docSnap.id}`, new Date(0)),
+          criadoEm: safeToDate(data.criadoEm, `criadoEm - OP ID ${docSnap.id}`, new Date()),
+          atualizadoEm: safeToDate(data.atualizadoEm, `atualizadoEm - OP ID ${docSnap.id}`, new Date()),
         } as ProductionOrder;
       });
       setProductionOrders(fetchedOrders);
@@ -217,7 +218,7 @@ export default function ProducaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth, viewingOrder?.id]); // Adicionado viewingOrder?.id para contexto no safeToDate
+  }, [user, toast, bypassAuth]); // Removido viewingOrder?.id de dependências, safeToDate não precisa dele
 
   useEffect(() => {
     if (user || bypassAuth) {
@@ -226,9 +227,9 @@ export default function ProducaoPage() {
   }, [fetchProductionOrders, user, bypassAuth]);
 
   useEffect(() => {
-    const agendamentoIdFromParams = searchParams.get('agendamentoId'); 
+    const agendamentoIdFromParams = searchParams.get('agendamentoId');
     if (agendamentoIdFromParams) {
-      setSearchTerm(agendamentoIdFromParams); 
+      setSearchTerm(agendamentoIdFromParams);
     }
   }, [searchParams]);
 
@@ -245,14 +246,14 @@ export default function ProducaoPage() {
     setIsViewModalOpen(true);
   }
 
-  const updateOriginalOSStatusViaService = async (osId: string, newStatus: OrdemServicoStatusEnum) => {
+  const updateOriginalOSStatusViaService = async (osId: string, newStatus: OrdemServicoStatus) => {
     try {
-      await updateOrdemServico(osId, { status: newStatus }); 
-      console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`);
+      await updateOrdemServico(osId, { status: newStatus });
+      // console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`); // Log para debug
     } catch (error: any) {
       const errorMessage = (error as Error).message || 'Erro desconhecido';
       if (errorMessage.includes("Missing or insufficient permissions")) {
-        console.warn(`[Permissão Negada] Falha ao atualizar status da OS Original ${osId} para ${newStatus}. Usuário atual: ${user?.uid}. Verifique a propriedade 'userId' na OS ou se a OS existe.`, error);
+        console.warn(`[Permissão Negada] Falha ao atualizar status da OS Original ${osId} para ${newStatus}. Usuário atual: ${user?.uid}. Verifique se você é o proprietário desta OS ou se ela existe.`, error);
         toast({
           title: `Permissão Negada (OS Original)`,
           description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para "${newStatus}". Verifique se você é o proprietário desta OS ou se ela existe.`,
@@ -269,7 +270,7 @@ export default function ProducaoPage() {
       }
     }
   };
-  
+
   const performStockDeduction = async (osId: string) => {
     const { db: dbInstance } = getFirebaseInstances();
     if (!dbInstance) return;
@@ -330,7 +331,7 @@ export default function ProducaoPage() {
     });
     await updateOriginalOSStatusViaService(productionOrder.agendamentoId, OrdemServicoStatusEnum.Enum.Concluído);
     await performStockDeduction(productionOrder.agendamentoId);
-    toast({ title: "Produção Concluída!", description: `Ordem de produção e OS #${productionOrder.id.substring(0,6)}... concluídas.` });
+    toast({ title: "Produção Concluída!", description: `Ordem de produção e OS #${productionOrder.agendamentoId.substring(0,6)}... concluídas.` });
     await fetchProductionOrders();
 };
 
@@ -349,7 +350,7 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
         setOrderForFinalPayment(order);
 
         const valorPendente = osData.valorTotal - (osData.valorPagoTotal || 0);
-        if (valorPendente <= 0) { 
+        if (valorPendente <= 0) {
             await completeProductionAndOS(order);
         } else {
             finalPaymentForm.reset({
@@ -394,12 +395,12 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
         const valorTotalPagoAtualizado = (osForFinalPayment.valorPagoTotal || 0) + paymentData.valorPago;
         await updateOrdemServico(osForFinalPayment.id, {
             valorPagoTotal: valorTotalPagoAtualizado,
-            statusPagamento: PaymentStatusEnum.Enum['Pago Total'], 
+            statusPagamento: PaymentStatusEnum.Enum['Pago Total'],
             dataUltimoPagamento: paymentData.dataPagamento,
             formaUltimoPagamento: paymentData.formaPagamento,
             observacoesPagamento: paymentData.observacoesPagamento,
         });
-        
+
         await completeProductionAndOS(orderForFinalPayment);
 
         setIsFinalPaymentModalOpen(false);
@@ -432,7 +433,7 @@ const processCompletion = async (order: ProductionOrder, newProgress?: number) =
             progresso: progressToUse,
             atualizadoEm: Timestamp.now()
         });
-        await updateOriginalOSStatusViaService(order.agendamentoId, newStatus as OrdemServicoStatusEnum);
+        await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
         toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
         await fetchProductionOrders();
     }
@@ -457,7 +458,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                 progresso: newProgress,
                 atualizadoEm: Timestamp.now()
             });
-            await updateOriginalOSStatusViaService(order.agendamentoId, newStatus as OrdemServicoStatusEnum);
+            await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
             toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
             await fetchProductionOrders();
         } catch (error: any) {
@@ -482,10 +483,10 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
 
     try {
         const newStatus = getStatusFromProgress(editingOrderDetails.progresso);
-        
+
         if (newStatus === "Concluído" && viewingOrder.status !== "Concluído") {
-            setIsViewModalOpen(false); 
-            await handleOpenFinalPaymentModal(viewingOrder); 
+            setIsViewModalOpen(false);
+            await handleOpenFinalPaymentModal(viewingOrder);
         } else {
             const docRef = doc(dbInstance, "ordensDeProducao", viewingOrder.id);
             await updateDoc(docRef, {
@@ -494,7 +495,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                 observacoesProducao: editingOrderDetails.observacoesProducao,
                 atualizadoEm: Timestamp.now(),
             });
-            await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus as OrdemServicoStatusEnum);
+            await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus);
             toast({ title: "Detalhes da Produção Salvos!", description: "As alterações foram salvas." });
             await fetchProductionOrders();
             setIsViewModalOpen(false);
@@ -507,13 +508,13 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     }
   };
 
-  const handleSendWhatsAppStatus = () => { 
+  const handleSendWhatsAppStatus = () => {
     if (!viewingOrder) return;
-    toast({ title: "WhatsApp", description: `Simulando envio de status da OS #${viewingOrder.id.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
+    toast({ title: "WhatsApp", description: `Simulando envio de status da OS #${viewingOrder.agendamentoId.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
   };
-  const handleSendEmailStatus = () => { 
+  const handleSendEmailStatus = () => {
     if (!viewingOrder) return;
-    toast({ title: "E-mail", description: `Simulando envio de e-mail de status da OS #${viewingOrder.id.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
+    toast({ title: "E-mail", description: `Simulando envio de e-mail de status da OS #${viewingOrder.agendamentoId.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
   };
 
   const filteredOrders = useMemo(() => {
@@ -526,7 +527,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
         (order.observacoesAgendamento && order.observacoesAgendamento.toLowerCase().includes(searchTermLower)) ||
         (order.observacoesProducao && order.observacoesProducao.toLowerCase().includes(searchTermLower)) ||
         order.id.toLowerCase().includes(searchTermLower) ||
-        (order.agendamentoId && order.agendamentoId.toLowerCase().includes(searchTermLower)); 
+        (order.agendamentoId && order.agendamentoId.toLowerCase().includes(searchTermLower));
       return statusMatch && searchTermMatch;
     });
   }, [productionOrders, statusFilters, searchTerm]);
@@ -546,7 +547,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
       </Card>
     );
   }
-  
+
   if (isLoading && (user || bypassAuth)) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando ordens de produção...</p></div>;
   }
@@ -642,8 +643,8 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
         </CardContent>
       </Card>
 
-      <Dialog open={isViewModalOpen} onOpenChange={(isOpen) => { 
-          setIsViewModalOpen(isOpen); 
+      <Dialog open={isViewModalOpen} onOpenChange={(isOpen) => {
+          setIsViewModalOpen(isOpen);
           if (!isOpen) { setViewingOrder(null); setEditingOrderDetails(null); }
       }}>
         <DialogContent className="sm:max-w-lg">
@@ -782,3 +783,4 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     </div>
   );
 }
+
