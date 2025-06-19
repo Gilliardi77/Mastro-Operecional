@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail } from "lucide-react"; 
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, CreditCard, CalendarIcon as CalendarIconLucide } from "lucide-react"; 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +28,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { getFirebaseInstances } from '@/lib/firebase';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -47,19 +53,27 @@ import {
 } from "firebase/firestore";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from '@/lib/utils';
 
-import { type OrdemServico as OrdemServicoOriginal, OrdemServicoStatusEnum, updateOrdemServico } from '@/services/ordemServicoService'; 
+import { 
+  type OrdemServico as OrdemServicoOriginal, 
+  OrdemServicoStatusEnum, 
+  updateOrdemServico,
+  getOrdemServicoById,
+  PagamentoOsSchema,
+  type PagamentoOsFormValues,
+  PaymentStatusEnum
+} from '@/services/ordemServicoService'; 
 import type { ItemOS } from '@/schemas/ordemServicoSchema'; 
+import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroService';
+
 
 type ProductionOrderStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
 
-
-interface OrdemServicoOriginalComItens {
+interface OrdemServicoComItensEId extends OrdemServicoOriginal {
   id: string;
   itens: ItemOS[];
-  status: ProductionOrderStatus; 
 }
-
 
 interface ProductionOrderFirestore {
   id: string;
@@ -87,6 +101,16 @@ interface EditingOrderState {
   progresso: number;
   observacoesProducao: string;
 }
+
+const paymentMethods = [
+  { value: "dinheiro", label: "Dinheiro" },
+  { value: "pix", label: "PIX" },
+  { value: "cartao_credito", label: "Cartão de Crédito" },
+  { value: "cartao_debito", label: "Cartão de Débito" },
+  { value: "boleto", label: "Boleto Bancário" },
+  { value: "transferencia", label: "Transferência Bancária" },
+  { value: "outro", label: "Outro" },
+];
 
 const getStatusVariant = (status: ProductionOrderStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
@@ -118,6 +142,9 @@ export default function ProducaoPage() {
   const [editingOrderDetails, setEditingOrderDetails] = useState<EditingOrderState | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+  const [isFinalPaymentModalOpen, setIsFinalPaymentModalOpen] = useState(false);
+  const [orderForFinalPayment, setOrderForFinalPayment] = useState<ProductionOrder | null>(null);
+  const [osForFinalPayment, setOsForFinalPayment] = useState<OrdemServicoOriginal | null>(null);
 
   const bypassAuth = true;
 
@@ -128,6 +155,24 @@ export default function ProducaoPage() {
     "Cancelado": true,
   });
   const [searchTerm, setSearchTerm] = useState("");
+
+  const finalPaymentForm = useForm<PagamentoOsFormValues>({
+    resolver: zodResolver(PagamentoOsSchema),
+    defaultValues: {
+      valorPago: 0,
+      formaPagamento: paymentMethods[0].value,
+      dataPagamento: new Date(),
+      observacoesPagamento: "",
+    },
+  });
+
+  const safeToDate = (timestampField: any, fieldName: string, defaultDateVal: Date): Date => {
+      if (timestampField && typeof timestampField.toDate === 'function') {
+        return timestampField.toDate();
+      }
+      console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido. Usando data padrão: ${defaultDateVal.toISOString()}`);
+      return defaultDateVal;
+  };
 
   const fetchProductionOrders = useCallback(async () => {
     const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
@@ -155,23 +200,14 @@ export default function ProducaoPage() {
       const querySnapshot = await getDocs(q);
       const fetchedOrders = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<ProductionOrderFirestore, 'id'>;
-
-        const safeToDate = (timestampField: any, fieldName: string, defaultDateVal: Date): Date => {
-          if (timestampField && typeof timestampField.toDate === 'function') {
-            return timestampField.toDate();
-          }
-          console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido no documento ${docSnap.id}. Usando data padrão: ${defaultDateVal.toISOString()}`);
-          return defaultDateVal;
-        };
-
         return {
           id: docSnap.id,
           ...data,
           progresso: data.progresso ?? 0,
           observacoesProducao: data.observacoesProducao ?? '',
-          dataAgendamento: safeToDate(data.dataAgendamento, 'dataAgendamento', new Date(0)), 
-          criadoEm: safeToDate(data.criadoEm, 'criadoEm', new Date()), 
-          atualizadoEm: safeToDate(data.atualizadoEm, 'atualizadoEm', new Date()), 
+          dataAgendamento: safeToDate(data.dataAgendamento, `dataAgendamento - OP ID ${docSnap.id}`, new Date(0)), 
+          criadoEm: safeToDate(data.criadoEm, `criadoEm - OP ID ${docSnap.id}`, new Date()), 
+          atualizadoEm: safeToDate(data.atualizadoEm, `atualizadoEm - OP ID ${docSnap.id}`, new Date()), 
         } as ProductionOrder;
       });
       setProductionOrders(fetchedOrders);
@@ -209,9 +245,9 @@ export default function ProducaoPage() {
     setIsViewModalOpen(true);
   }
 
-  const updateOriginalOSStatusViaService = async (osId: string, newStatus: ProductionOrderStatus) => {
+  const updateOriginalOSStatusViaService = async (osId: string, newStatus: OrdemServicoStatusEnum) => {
     try {
-      await updateOrdemServico(osId, { status: newStatus as OrdemServicoStatusEnum }); 
+      await updateOrdemServico(osId, { status: newStatus }); 
       console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`);
     } catch (error: any) {
       const errorMessage = (error as Error).message || 'Erro desconhecido';
@@ -233,81 +269,208 @@ export default function ProducaoPage() {
       }
     }
   };
+  
+  const performStockDeduction = async (osId: string) => {
+    const { db: dbInstance } = getFirebaseInstances();
+    if (!dbInstance) return;
+
+    const osOriginalRef = doc(dbInstance, "ordensServico", osId);
+    const osOriginalSnap = await getDoc(osOriginalRef);
+
+    if (osOriginalSnap.exists()) {
+        const osData = { id: osOriginalSnap.id, ...osOriginalSnap.data() } as OrdemServicoComItensEId;
+        if (osData.itens && osData.itens.length > 0) {
+            for (const itemOS of osData.itens) {
+                if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
+                    const produtoCatalogoRef = doc(dbInstance, "produtosServicos", itemOS.produtoServicoId);
+                    try {
+                        await runTransaction(dbInstance, async (transaction) => {
+                            const produtoDoc = await transaction.get(produtoCatalogoRef);
+                            if (!produtoDoc.exists()) {
+                                console.warn(`Produto ${itemOS.nome} (ID: ${itemOS.produtoServicoId}) da OS ${osId} não encontrado no catálogo para baixa de estoque.`);
+                                return;
+                            }
+                            const produtoData = produtoDoc.data() as any;
+                            const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
+                            const novoEstoque = estoqueAtual - itemOS.quantidade;
+                            transaction.update(produtoCatalogoRef, {
+                                quantidadeEstoque: novoEstoque,
+                                atualizadoEm: Timestamp.now()
+                            });
+                        });
+                        toast({ title: `Estoque Baixado: ${itemOS.nome}`, description: `${itemOS.quantidade} unidade(s) deduzida(s).` });
+                    } catch (stockError: any) {
+                        console.error(`Erro ao baixar estoque para ${itemOS.nome} (OS: ${osId}):`, stockError);
+                        toast({
+                            title: `Erro de Estoque: ${itemOS.nome}`,
+                            description: `Não foi possível atualizar o estoque: ${stockError.message}. Verifique manualmente.`,
+                            variant: "destructive",
+                        });
+                    }
+                }
+            }
+        }
+    } else {
+        console.warn(`Ordem de Serviço original (ID: ${osId}) não encontrada para baixa de estoque.`);
+    }
+};
 
 
-  const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: ProductionOrderStatus, newProgress: number) => {
-    if (!user && !bypassAuth) return;
-    setIsSubmitting(true);
-
+  const completeProductionAndOS = async (productionOrder: ProductionOrder) => {
     const { db: dbInstance } = getFirebaseInstances();
     if (!dbInstance) {
-      toast({ title: "Erro de Firebase", description: "DB não disponível para atualizar OP.", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
+        toast({ title: "Erro de Firebase", description: "DB não disponível.", variant: "destructive" });
+        return;
+    }
+    const prodOrderRef = doc(dbInstance, "ordensDeProducao", productionOrder.id);
+    await updateDoc(prodOrderRef, {
+        status: "Concluído",
+        progresso: 100,
+        atualizadoEm: Timestamp.now()
+    });
+    await updateOriginalOSStatusViaService(productionOrder.agendamentoId, OrdemServicoStatusEnum.Enum.Concluído);
+    await performStockDeduction(productionOrder.agendamentoId);
+    toast({ title: "Produção Concluída!", description: `Ordem de produção e OS #${productionOrder.id.substring(0,6)}... concluídas.` });
+    await fetchProductionOrders();
+};
+
+
+const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
+    if (!user && !bypassAuth) return;
+    setIsSubmitting(true);
+    try {
+        const osData = await getOrdemServicoById(order.agendamentoId);
+        if (!osData) {
+            toast({ title: "Erro", description: "Ordem de Serviço original não encontrada.", variant: "destructive" });
+            return;
+        }
+        setOsForFinalPayment(osData);
+        setOrderForFinalPayment(order);
+
+        const valorPendente = osData.valorTotal - (osData.valorPagoTotal || 0);
+        if (valorPendente <= 0) { // Já está pago ou com crédito
+            await completeProductionAndOS(order);
+        } else {
+            finalPaymentForm.reset({
+                valorPago: parseFloat(valorPendente.toFixed(2)),
+                formaPagamento: paymentMethods[0].value,
+                dataPagamento: new Date(),
+                observacoesPagamento: `Pagamento final da OS #${osData.numeroOS.substring(0,6)}`,
+            });
+            setIsFinalPaymentModalOpen(true);
+        }
+    } catch (error: any) {
+        toast({ title: "Erro ao buscar OS", description: error.message, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
+};
+
+
+  const handleFinalPaymentSubmit = async (paymentData: PagamentoOsFormValues) => {
+    if (!orderForFinalPayment || !osForFinalPayment || (!user && !bypassAuth)) return;
+    setIsSubmitting(true);
+    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
+    if (!userIdToSave) {
+        toast({ title: "Erro de Autenticação", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
     }
 
     try {
-      const prodOrderRef = doc(dbInstance, "ordensDeProducao", order.id);
-      await updateDoc(prodOrderRef, {
-        status: newStatus,
-        progresso: newProgress,
-        atualizadoEm: Timestamp.now()
-      });
+        // 1. Criar lançamento financeiro
+        await createLancamentoFinanceiro(userIdToSave, {
+            titulo: `Pagamento Final OS #${osForFinalPayment.numeroOS.substring(0,6)}`,
+            valor: paymentData.valorPago,
+            tipo: 'receita',
+            data: paymentData.dataPagamento,
+            categoria: "Receita de OS (Final)",
+            status: 'recebido',
+            referenciaOSId: osForFinalPayment.id,
+            formaPagamento: paymentData.formaPagamento,
+            descricao: paymentData.observacoesPagamento || "",
+        });
 
-      await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
+        // 2. Atualizar OS
+        const valorTotalPagoAtualizado = (osForFinalPayment.valorPagoTotal || 0) + paymentData.valorPago;
+        await updateOrdemServico(osForFinalPayment.id, {
+            valorPagoTotal: valorTotalPagoAtualizado,
+            statusPagamento: PaymentStatusEnum.Enum['Pago Total'], // Assumindo que este pagamento quita
+            dataUltimoPagamento: paymentData.dataPagamento,
+            formaUltimoPagamento: paymentData.formaPagamento,
+            observacoesPagamento: paymentData.observacoesPagamento,
+        });
+        
+        // 3. Concluir Produção e OS, e baixar estoque
+        await completeProductionAndOS(orderForFinalPayment);
 
-      if (newStatus === "Concluído") {
-        const osOriginalRef = doc(dbInstance, "ordensServico", order.agendamentoId); 
-        const osOriginalSnap = await getDoc(osOriginalRef);
+        setIsFinalPaymentModalOpen(false);
+        setOrderForFinalPayment(null);
+        setOsForFinalPayment(null);
 
-        if (osOriginalSnap.exists()) {
-          const osData = osOriginalSnap.data() as OrdemServicoOriginalComItens; 
-          if (osData.itens && osData.itens.length > 0) {
-            for (const itemOS of osData.itens) {
-              if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
-                const produtoCatalogoRef = doc(dbInstance, "produtosServicos", itemOS.produtoServicoId);
-                try {
-                  await runTransaction(dbInstance, async (transaction) => {
-                    const produtoDoc = await transaction.get(produtoCatalogoRef);
-                    if (!produtoDoc.exists()) {
-                      console.warn(`Produto ${itemOS.nome} (ID: ${itemOS.produtoServicoId}) da OS ${order.agendamentoId} não encontrado no catálogo para baixa de estoque.`);
-                      return; 
-                    }
-                    const produtoData = produtoDoc.data() as any; 
-                    const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
-                    
-                    const novoEstoque = estoqueAtual - itemOS.quantidade;
-                    transaction.update(produtoCatalogoRef, { 
-                      quantidadeEstoque: novoEstoque,
-                      atualizadoEm: Timestamp.now()
-                    });
-                  });
-                  toast({ title: `Estoque Baixado: ${itemOS.nome}`, description: `${itemOS.quantidade} unidade(s) deduzida(s).` });
-                } catch (stockError: any) {
-                  console.error(`Erro ao baixar estoque para ${itemOS.nome} (OS: ${order.agendamentoId}):`, stockError);
-                  toast({
-                    title: `Erro de Estoque: ${itemOS.nome}`,
-                    description: `Não foi possível atualizar o estoque: ${stockError.message}. Verifique manualmente.`,
-                    variant: "destructive",
-                  });
-                }
-              }
-            }
-          }
-        } else {
-          console.warn(`Ordem de Serviço original (ID: ${order.agendamentoId}) não encontrada para baixa de estoque.`);
-        }
-      }
-
-      toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
-      await fetchProductionOrders();
     } catch (error: any) {
-      console.error("Erro ao atualizar status:", error);
-      toast({ title: "Erro ao Atualizar Status", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}` });
+        toast({ title: "Erro ao Processar Pagamento Final", description: error.message, variant: "destructive" });
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
-  }
+  };
+
+
+  const processCompletion = async (order: ProductionOrder, newProgress?: number) => {
+    const progressToUse = newProgress !== undefined ? newProgress : (order.progresso ?? 0);
+    if (progressToUse === 100 || getStatusFromProgress(progressToUse) === "Concluído") {
+        await handleOpenFinalPaymentModal(order);
+    } else {
+        // Se não for 100%, apenas atualiza o status da OP e OS (sem pagamento)
+        const { db: dbInstance } = getFirebaseInstances();
+        if (!dbInstance) {
+            toast({ title: "Erro de Firebase", description: "DB não disponível.", variant: "destructive" });
+            setIsSubmitting(false);
+            return;
+        }
+        const newStatus = getStatusFromProgress(progressToUse);
+        const prodOrderRef = doc(dbInstance, "ordensDeProducao", order.id);
+        await updateDoc(prodOrderRef, {
+            status: newStatus,
+            progresso: progressToUse,
+            atualizadoEm: Timestamp.now()
+        });
+        await updateOriginalOSStatusViaService(order.agendamentoId, newStatus as OrdemServicoStatusEnum);
+        toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
+        await fetchProductionOrders();
+    }
+};
+
+const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: ProductionOrderStatus, newProgress: number) => {
+    if (!user && !bypassAuth) return;
+    setIsSubmitting(true);
+    if (newStatus === "Concluído") {
+        await handleOpenFinalPaymentModal(order);
+    } else {
+        const { db: dbInstance } = getFirebaseInstances();
+        if (!dbInstance) {
+          toast({ title: "Erro de Firebase", description: "DB não disponível para atualizar OP.", variant: "destructive" });
+          setIsSubmitting(false);
+          return;
+        }
+        try {
+            const prodOrderRef = doc(dbInstance, "ordensDeProducao", order.id);
+            await updateDoc(prodOrderRef, {
+                status: newStatus,
+                progresso: newProgress,
+                atualizadoEm: Timestamp.now()
+            });
+            await updateOriginalOSStatusViaService(order.agendamentoId, newStatus as OrdemServicoStatusEnum);
+            toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
+            await fetchProductionOrders();
+        } catch (error: any) {
+            console.error("Erro ao atualizar status (sem ser concluído):", error);
+            toast({ title: "Erro ao Atualizar Status", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}` });
+        }
+    }
+    setIsSubmitting(false);
+};
+
 
   const handleSaveProductionDetails = async () => {
     if (!viewingOrder || !editingOrderDetails || (!user && !bypassAuth)) return;
@@ -321,63 +484,27 @@ export default function ProducaoPage() {
     }
 
     try {
-        const docRef = doc(dbInstance, "ordensDeProducao", viewingOrder.id);
         const newStatus = getStatusFromProgress(editingOrderDetails.progresso);
         
-        await updateDoc(docRef, {
-            progresso: editingOrderDetails.progresso,
-            status: newStatus,
-            observacoesProducao: editingOrderDetails.observacoesProducao,
-            atualizadoEm: Timestamp.now(),
-        });
-
-        await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus);
-        
         if (newStatus === "Concluído" && viewingOrder.status !== "Concluído") {
-            const osOriginalRef = doc(dbInstance, "ordensServico", viewingOrder.agendamentoId);
-            const osOriginalSnap = await getDoc(osOriginalRef);
-
-            if (osOriginalSnap.exists()) {
-                const osData = osOriginalSnap.data() as OrdemServicoOriginalComItens;
-                if (osData.itens && osData.itens.length > 0) {
-                    for (const itemOS of osData.itens) {
-                        if (itemOS.tipo === 'Produto' && itemOS.produtoServicoId) {
-                            const produtoCatalogoRef = doc(dbInstance, "produtosServicos", itemOS.produtoServicoId);
-                             try {
-                                await runTransaction(dbInstance, async (transaction) => {
-                                    const produtoDoc = await transaction.get(produtoCatalogoRef);
-                                    if (!produtoDoc.exists()) {
-                                        console.warn(`Produto ${itemOS.nome} (ID: ${itemOS.produtoServicoId}) da OS ${viewingOrder.agendamentoId} não encontrado.`);
-                                        return; 
-                                    }
-                                    const produtoData = produtoDoc.data() as any; 
-                                    const estoqueAtual = produtoData.quantidadeEstoque ?? 0;
-                                    const novoEstoque = estoqueAtual - itemOS.quantidade;
-                                    transaction.update(produtoCatalogoRef, { 
-                                        quantidadeEstoque: novoEstoque, 
-                                        atualizadoEm: Timestamp.now() 
-                                    });
-                                });
-                                toast({ title: `Estoque Baixado: ${itemOS.nome}`, description: `${itemOS.quantidade} unidade(s) deduzida(s).` });
-                            } catch (stockError: any) {
-                                console.error(`Erro ao baixar estoque para ${itemOS.nome} (OS: ${viewingOrder.agendamentoId}):`, stockError);
-                                toast({
-                                    title: `Erro de Estoque: ${itemOS.nome}`,
-                                    description: `Não foi possível atualizar o estoque: ${stockError.message}. Verifique manualmente.`,
-                                    variant: "destructive",
-                                });
-                            }
-                        }
-                    }
-                }
-            } else {
-                console.warn(`Ordem de Serviço original (ID: ${viewingOrder.agendamentoId}) não encontrada para baixa de estoque ao salvar detalhes.`);
-            }
+            // Se está sendo marcado como concluído via modal de detalhes
+            setIsViewModalOpen(false); // Fecha o modal de detalhes
+            await handleOpenFinalPaymentModal(viewingOrder); // Abre o modal de pagamento
+            // O restante do fluxo (atualizar OP, OS, estoque) será tratado por handleFinalPaymentSubmit ou completeProductionAndOS
+        } else {
+            // Se não está concluindo ou já estava concluído, apenas salva os detalhes da OP
+            const docRef = doc(dbInstance, "ordensDeProducao", viewingOrder.id);
+            await updateDoc(docRef, {
+                progresso: editingOrderDetails.progresso,
+                status: newStatus,
+                observacoesProducao: editingOrderDetails.observacoesProducao,
+                atualizadoEm: Timestamp.now(),
+            });
+            await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus as OrdemServicoStatusEnum);
+            toast({ title: "Detalhes da Produção Salvos!", description: "As alterações foram salvas." });
+            await fetchProductionOrders();
+            setIsViewModalOpen(false);
         }
-        
-        toast({ title: "Detalhes da Produção Salvos!", description: "As alterações foram salvas." });
-        await fetchProductionOrders();
-        setIsViewModalOpen(false);
     } catch (error: any) {
         console.error("Erro ao salvar detalhes da produção:", error);
         toast({ title: "Erro ao Salvar Detalhes", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}`});
@@ -584,7 +711,83 @@ export default function ProducaoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal para Pagamento Final */}
+      <Dialog open={isFinalPaymentModalOpen} onOpenChange={(isOpen) => {
+          if (!isOpen) {
+              setIsFinalPaymentModalOpen(false);
+              setOrderForFinalPayment(null);
+              setOsForFinalPayment(null);
+              finalPaymentForm.reset();
+          }
+      }}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Registrar Pagamento Final da OS</DialogTitle>
+                {osForFinalPayment && <DialogPrimitiveDescription>
+                    OS: #{osForFinalPayment.numeroOS.substring(0,8)}... | Cliente: {osForFinalPayment.clienteNome} <br/>
+                    Valor Total: R$ {osForFinalPayment.valorTotal.toFixed(2)} | Já Pago: R$ {(osForFinalPayment.valorPagoTotal || 0).toFixed(2)}
+                </DialogPrimitiveDescription>}
+            </DialogHeader>
+            {osForFinalPayment && (
+                <Form {...finalPaymentForm}>
+                    <form onSubmit={finalPaymentForm.handleSubmit(handleFinalPaymentSubmit)} className="space-y-4 py-2">
+                        <FormField control={finalPaymentForm.control} name="valorPago" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Valor a Registrar (R$)</FormLabel>
+                                <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0.01" /></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                        <FormField control={finalPaymentForm.control} name="formaPagamento" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Forma de Pagamento</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione a forma" /></SelectTrigger></FormControl>
+                                    <SelectContent>{paymentMethods.map(method => (<SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>))}</SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                        <FormField control={finalPaymentForm.control} name="dataPagamento" render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                                <FormLabel>Data do Pagamento</FormLabel>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                {field.value ? format(field.value, "PPP", { locale: ptBR }) : <span>Escolha uma data</span>}
+                                                <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={ptBR} /></PopoverContent>
+                                </Popover>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                        <FormField control={finalPaymentForm.control} name="observacoesPagamento" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Observações (Opcional)</FormLabel>
+                                <FormControl><Textarea placeholder="Detalhes do pagamento..." {...field} rows={2} /></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsFinalPaymentModalOpen(false)} disabled={isSubmitting}>Cancelar</Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Confirmar Pagamento e Concluir
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
 
+
+    

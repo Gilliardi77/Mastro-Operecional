@@ -6,7 +6,9 @@ import {
   type OrdemServico,
   type OrdemServicoCreateData,
   type OrdemServicoUpdateData,
-  PaymentStatusEnum, // Importar PaymentStatusEnum
+  PaymentStatusEnum, 
+  PagamentoOsSchema, // Exportar PagamentoOsSchema
+  type PagamentoOsFormValues // Exportar PagamentoOsFormValues
 } from '@/schemas/ordemServicoSchema';
 import {
   createDocument,
@@ -84,5 +86,9 @@ export async function deleteOrdemServico(id: string): Promise<void> {
 }
 
 // Exportar OrdemServicoStatusEnum para uso na ProducaoPage (se necessário)
-export { OrdemServicoStatusEnum };
+// Exportar também PaymentStatusEnum, PagamentoOsSchema e PagamentoOsFormValues
+export { OrdemServicoStatusEnum, PaymentStatusEnum, PagamentoOsSchema, type PagamentoOsFormValues };
 
+    
+
+    
