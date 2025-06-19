@@ -28,25 +28,10 @@ const COLLECTION_NAME = 'ordensServico';
  * @returns A Ordem de Serviço criada.
  */
 export async function createOrdemServico(userId: string, data: OrdemServicoCreateData): Promise<OrdemServico> {
-  // A validação de 'data' contra OrdemServicoCreateSchema ocorre dentro de createDocument
-  // e também podemos adicionar uma camada aqui se necessário.
-  // O campo numeroOS será preenchido com o ID do documento gerado pelo Firestore.
-  const dataToCreate = { ...data };
-  if (!dataToCreate.numeroOS) { // Se numeroOS não veio, será o ID
-    // Deixamos o createDocument lidar com isso, ele usará o docRef.id
-  }
-  const createdDoc = await createDocument(COLLECTION_NAME, userId, OrdemServicoCreateSchema, OrdemServicoSchema, dataToCreate);
-  
-  // Se o numeroOS não foi fornecido e o ID do documento é usado como numeroOS,
-  // pode ser necessário um update adicional se numeroOS precisar ser explicitamente o ID.
-  // Por ora, assumimos que o schema e o firestoreService cuidam da estrutura.
-  if (!createdDoc.numeroOS) {
-     const osWithNumero = { ...createdDoc, numeroOS: createdDoc.id };
-     // Atualiza o documento recém-criado para incluir o numeroOS se ele não foi definido.
-     // Isso garante que numeroOS sempre tenha um valor (o ID do documento se não especificado).
-     return updateOrdemServico(createdDoc.id, { numeroOS: createdDoc.id });
-  }
-  return createdDoc;
+  // A validação de 'data' contra OrdemServicoCreateSchema ocorre dentro de createDocument.
+  // O createDocument agora garante que para 'ordensServico', o campo 'numeroOS' será
+  // definido como o ID do documento se não for fornecido nos dados de entrada, e o persistirá.
+  return createDocument(COLLECTION_NAME, userId, OrdemServicoCreateSchema, OrdemServicoSchema, data);
 }
 
 /**

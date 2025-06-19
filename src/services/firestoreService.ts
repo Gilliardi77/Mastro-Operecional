@@ -83,10 +83,22 @@ export async function createDocument<TCreate, TFull extends { id: string }>(
 
     const docRef = await addDoc(collection(firestoreDb, collectionName), docDataForFirestore);
     
-    const fullDocData = {
+    let fullDocData = {
       ...docDataWithUserAndTimestamps, // Usa os dados com Date para validação Zod
       id: docRef.id,
     };
+    
+    // Correção específica para 'ordensServico'
+    // Se numeroOS não foi fornecido e é esperado pelo fullSchema, define-o como o ID do documento
+    // e atualiza o documento no Firestore para garantir consistência.
+    if (collectionName === 'ordensServico' && (fullDocData as any).numeroOS === undefined) {
+      const numeroOsFromId = docRef.id;
+      (fullDocData as any).numeroOS = numeroOsFromId;
+      // Atualiza o documento no Firestore para incluir o numeroOS
+      await updateDoc(docRef, { numeroOS: numeroOsFromId, updatedAt: Timestamp.fromDate(now) });
+      // Atualiza updatedAt em fullDocData também, pois o updateDoc o modificaria
+      (fullDocData as any).updatedAt = now; 
+    }
     
     return fullSchema.parse(fullDocData);
   } catch (error: any) {
