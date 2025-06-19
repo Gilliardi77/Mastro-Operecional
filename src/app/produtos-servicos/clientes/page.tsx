@@ -81,10 +81,20 @@ export default function ClientesPage() {
 
   const fetchClientes = useCallback(async () => {
     const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
+
+    if (bypassAuth && !user) {
+      console.warn("[ClientesPage] bypassAuth é true e não há usuário logado. Pulando a busca de clientes para evitar erro de permissão com 'bypass_user_placeholder'. Defina dados de teste para este placeholder ou logue com um usuário para ver os clientes.");
+      setClientes([]);
+      setIsLoadingData(false);
+      // Opcional: mostrar um toast informativo, mas pode ser verboso para um modo de desenvolvimento.
+      // toast({ title: "Modo Bypass Ativo", description: "Busca de clientes pulada (sem usuário logado).", variant: "default" });
+      return; 
+    }
+
     if (!userIdToQuery) {
       setClientes([]);
       setIsLoadingData(false);
-      if (!isAuthLoading && !user && !bypassAuth) { // Apenas mostra o toast se não for bypass e o user não estiver autenticando
+      if (!isAuthLoading && !user && !bypassAuth) {
          toast({ title: "Acesso Negado", description: "Usuário não autenticado.", variant: "destructive" });
       }
       return;
@@ -148,13 +158,13 @@ export default function ClientesPage() {
     }
     setIsSubmitting(true);
 
-    const { id, ...clientData } = values; // Separa o ID dos outros dados do formulário
+    const { id, ...clientData } = values; 
 
     try {
-      if (id && editingClient) { // Se tem ID e editingClient, é uma atualização
+      if (id && editingClient) { 
         await updateClient(id, clientData);
         toast({ title: "Cliente Atualizado!", description: `Cliente ${values.nome} atualizado com sucesso.` });
-      } else { // Senão, é criação
+      } else { 
         await createClient(userIdToSave, clientData);
         toast({ title: "Cliente Adicionado!", description: `Cliente ${values.nome} adicionado com sucesso.` });
       }
@@ -398,3 +408,4 @@ export default function ClientesPage() {
     </div>
   );
 }
+
