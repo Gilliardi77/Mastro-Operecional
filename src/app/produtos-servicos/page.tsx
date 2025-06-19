@@ -37,7 +37,7 @@ interface ResumoDiarioOperacional {
   clientesAtendidosHoje: number;
   osConcluidasHoje: number;
   produtosVendidosHoje: number;
-  osAtrasadas: number; // Mantido do resumo anterior
+  osAtrasadas: number;
 }
 
 export default function ProdutosServicosPage() {
@@ -54,7 +54,7 @@ export default function ProdutosServicosPage() {
   });
   const [loading, setLoading] = useState({ agenda: true, resumo: true });
 
-  const userId = user?.uid || 'bypass_user_placeholder'; // Use um placeholder se o bypass estiver ativo e não houver usuário
+  const userId = user?.uid || 'bypass_user_placeholder';
 
   const getStatusClass = (status: string): string => {
     const map: Record<string, string> = {
@@ -125,7 +125,7 @@ export default function ProdutosServicosPage() {
       novasOsSnap.forEach(doc => {
         const os = doc.data() as OrdemServico;
         if (os.clienteId) clientesAtendidosIds.add(os.clienteId);
-        else clientesAtendidosIds.add(`avulso_${os.clienteNome.toLowerCase()}`); // Para clientes avulsos
+        else if (os.clienteNome) clientesAtendidosIds.add(`avulso_${os.clienteNome.toLowerCase().trim()}`);
       });
 
       // Número de Vendas Hoje
@@ -139,10 +139,10 @@ export default function ProdutosServicosPage() {
       vendasSnap.forEach(doc => {
         const venda = doc.data() as Venda;
         if (venda.clienteId) clientesAtendidosIds.add(venda.clienteId);
-        else clientesAtendidosIds.add(`avulso_${venda.clienteNome.toLowerCase()}`);
+        else if (venda.clienteNome) clientesAtendidosIds.add(`avulso_${venda.clienteNome.toLowerCase().trim()}`);
         if (venda.itens) {
           venda.itens.forEach((item: ItemVenda) => {
-            if (item.productType === 'Produto' || (item.manual && !item.productType)) { // Assumir manual como produto se não especificado
+            if (item.productType === 'Produto' || (item.manual && !item.productType)) {
               produtosVendidosHoje += item.quantidade;
             }
           });
@@ -159,31 +159,28 @@ export default function ProdutosServicosPage() {
         const os = doc.data() as OrdemServico;
         if (os.updatedAt instanceof Timestamp && isToday(os.updatedAt.toDate())) {
             osConcluidasHoje++;
-        }
-        // Somar produtos de OS concluídas (independente de quando foi concluída, se o status é concluído)
-        // Ou pode-se filtrar para OS concluídas *hoje* para produtos vendidos *hoje* via OS
-        // Para simplificar, vamos considerar produtos de todas as OS com status "Concluído" se a OS foi atualizada hoje
-        if (os.updatedAt instanceof Timestamp && isToday(os.updatedAt.toDate()) && os.itens) {
-           os.itens.forEach((item: ItemOS) => {
-            if (item.tipo === 'Produto') {
-              produtosVendidosHoje += item.quantidade;
+            // Somar produtos de OS concluídas *hoje*
+            if (os.itens) {
+               os.itens.forEach((item: ItemOS) => {
+                if (item.tipo === 'Produto') {
+                  produtosVendidosHoje += item.quantidade;
+                }
+              });
             }
-          });
         }
       });
       
-      // OS em Atraso (mantido do resumo anterior)
+      // OS em Atraso
+      const osQueryConstraintsAtrasadas = [
+        where('userId', '==', userId),
+        where('dataEntrega', '<', Timestamp.fromDate(hojeInicio)),
+        where('status', 'in', ['Pendente', 'Em Andamento'])
+      ];
       const atrasadasSnap = await getDocs(query(
         collection(dbInstance, 'ordensServico'),
-        where('userId', '==', userId),
-        where('dataEntrega', '<', Timestamp.fromDate(hojeInicio))
+        ...osQueryConstraintsAtrasadas
       ));
-      atrasadasSnap.forEach(doc => {
-        const status = doc.data().status;
-        if (status === 'Pendente' || status === 'Em Andamento') {
-            osAtrasadas++;
-        }
-      });
+      osAtrasadas = atrasadasSnap.size;
 
       setResumoDiario({ 
         novasOsHoje, 
@@ -308,5 +305,7 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
+
+    
 
     
