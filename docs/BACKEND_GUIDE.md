@@ -339,8 +339,11 @@ Os dados das coleções `usuarios`, `consultationsMetadata` e, especialmente, `u
 
 ### 2. Financeiro (Exemplo de Entidades)
 
-* Entidades: `faturas`, `lancamentosFinanceiros`, `pagamentos`, `recebimentos`, `transferencias`, `cartoes`, `metasFinanceiras`
-* **Integração:** Pode usar `userGoals.inputData.currentRevenue`, `userGoals.inputData.currentExpenses`, `userGoals.inputData.targetRevenueGoal` para popular dashboards iniciais e comparar com as metas definidas no app de diagnóstico. O `userGoals.actionPlan` pode inspirar a criação de metas financeiras específicas.
+* Entidades: `faturas`, `lancamentosFinanceiros`, `pagamentos`, `recebimentos`, `transferencias`, `cartoes`, `metasFinanceiras`, `fechamentosCaixa`.
+* **Integração:**
+    *   Pode usar `userGoals.inputData.currentRevenue`, `userGoals.inputData.currentExpenses`, `userGoals.inputData.targetRevenueGoal` para popular dashboards iniciais e comparar com as metas definidas no app de diagnóstico. O `userGoals.actionPlan` pode inspirar a criação de metas financeiras específicas.
+    *   A coleção `fechamentosCaixa` (gerada pelo Maestro Operacional) fornece um resumo diário do fluxo de caixa (entradas, saídas, saldo, métodos de pagamento) que é crucial para o "Visão Clara Financeira" realizar análises de DRE, fluxo de caixa projetado e comparar com metas.
+    *   Os dados de `lancamentosFinanceiros` e `vendas` (gerados pelo Maestro Operacional ou diretamente no Visão Clara Financeira) são a base para todas as análises financeiras.
 
 ### 3. Gestão (Exemplo de Entidades no App de Diagnóstico/Central)
 
@@ -358,6 +361,7 @@ Os dados das coleções `usuarios`, `consultationsMetadata` e, especialmente, `u
 | fatura          | FaturaSchema         | `faturaService.ts`            | `createFatura`              | `faturas`            |
 | perfil usuário  | UserProfileDataSchema | `userProfileService.ts` | `upsertUserProfile`         | `usuarios`           |
 | meta/planejamento | (tipos de `generate-goals-analysis-flow.ts`) | (Lógica na página `/goals`) | `addDoc` (direto no Firestore) | `userGoals` |
+| fechamento de caixa | FechamentoCaixaSchema | `fechamentoCaixaService.ts` | `createFechamentoCaixa` | `fechamentosCaixa` |
 | ...             | `[Entidade]Schema`   | `[entidade]Service.ts`        | `create[Entidade]`          | `[entidades]` (plural) |
 
 ---
@@ -371,6 +375,7 @@ src/
 │   ├── clientSchema.ts
 │   ├── productServiceSchema.ts
 │   ├── userProfileSchema.ts   # Schema para a coleção 'usuarios'
+│   ├── fechamentoCaixaSchema.ts # Schema para a coleção 'fechamentosCaixa'
 │   ├── faturaSchema.ts        # Exemplo de nova entidade
 │   └── ...
 ├── services/
@@ -378,6 +383,7 @@ src/
 │   ├── clientService.ts
 │   ├── productServiceService.ts
 │   ├── userProfileService.ts  # Serviço para a coleção 'usuarios'
+│   ├── fechamentoCaixaService.ts # Serviço para a coleção 'fechamentosCaixa'
 │   ├── faturaService.ts       # Exemplo de novo serviço
 │   └── ...
 ```

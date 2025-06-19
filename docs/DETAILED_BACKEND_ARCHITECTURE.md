@@ -44,6 +44,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **`ordensDeProducao`**: Ordens de produção internas, geralmente vinculadas a `ordensServico` ou `agendamentos`.
 *   **`vendas`**: Registros de vendas realizadas (ex: Balcão PDV).
 *   **`lancamentosFinanceiros`**: Entradas e saídas financeiras, incluindo aquelas geradas por vendas e OS.
+*   **`fechamentosCaixa`**: Registros diários de fechamento de caixa.
 *   **`faturas`**: Faturas emitidas para clientes (principalmente para o app Financeiro).
 *   **`metasFinanceiras`**: Metas financeiras específicas definidas pelo usuário (principalmente para o app Financeiro).
 *   *(Outras coleções podem estar definidas em `DATA_SYNC_CONFIG.json`)*
@@ -600,7 +601,73 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 
 ---
 
-### 2.13. Outras Coleções do `DATA_SYNC_CONFIG.json`
+### 2.13. Coleção: `fechamentosCaixa`
+
+*   **Propósito:** Armazenar os registros diários de fechamento de caixa, incluindo totais de entradas, saídas, saldo final, sangrias, troco inicial e detalhamento de entradas por método de pagamento.
+*   **ID do Documento:** Gerado automaticamente pelo Firestore.
+*   **Campos:** (Baseado em `fechamentoCaixaSchema.ts`)
+    *   `userId` (String): [Obrigatório] ID do usuário Business Maestro proprietário deste fechamento.
+    *   `dataFechamento` (Timestamp): [Obrigatório] Data e hora em que o fechamento foi realizado.
+    *   `totalEntradasCalculado` (Number): [Obrigatório] Somatório de todas as entradas (receitas efetivadas) do dia, calculado pelo sistema com base nos `lancamentosFinanceiros`.
+    *   `totalSaidasCalculado` (Number): [Obrigatório] Somatório de todas as saídas (despesas pagas) do dia, calculado pelo sistema com base nos `lancamentosFinanceiros`.
+    *   `trocoInicial` (Number): [Opcional, Default: 0] Valor do troco inicial no caixa, informado manualmente.
+    *   `sangrias` (Number): [Opcional, Default: 0] Total de retiradas manuais (sangrias) do caixa durante o dia, informado manualmente.
+    *   `saldoFinalCalculado` (Number): [Obrigatório] Saldo final do caixa calculado: `(totalEntradasCalculado + trocoInicial) - totalSaidasCalculado - sangrias`.
+    *   `entradasPorMetodo` (Object): [Obrigatório] Detalhamento das entradas por método de pagamento, baseado nas `vendas` do dia. Contém:
+        *   `dinheiro` (Number)
+        *   `pix` (Number)
+        *   `cartaoCredito` (Number)
+        *   `cartaoDebito` (Number)
+        *   `cartao` (Number) - Soma de `cartaoCredito` e `cartaoDebito`.
+        *   `outros` (Number)
+    *   `responsavelNome` (String): [Obrigatório] Nome do usuário responsável pelo fechamento.
+    *   `responsavelId` (String): [Obrigatório] ID do usuário responsável pelo fechamento.
+    *   `observacoes` (String): [Opcional] Observações adicionais sobre o fechamento.
+    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
+    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
+*   **Operações (CRUD):**
+    *   **CREATE:**
+        *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" na página de Fechamento de Caixa).
+        *   **Apps que utilizam:** "Maestro Operacional".
+    *   **READ:**
+        *   **Quem executa:** Usuário final (para histórico de fechamentos), "Visão Clara Financeira" (para análises e relatórios), "Diagnóstico Maestro" (IA pode usar para entender fluxo de caixa).
+        *   **Apps que utilizam:** "Maestro Operacional", "Visão Clara Financeira", "Diagnóstico Maestro".
+    *   **UPDATE:**
+        *   **Quem executa:** Geralmente não se atualiza um fechamento de caixa. Se necessário, um estorno ou ajuste seria um novo lançamento/registro. Pode ser permitido para Admin corrigir observações.
+        *   **Apps que utilizam:** Módulo de Administração (se houver).
+    *   **DELETE:**
+        *   **Quem executa:** Restrito a Admin para correções ou por política de retenção de dados.
+        *   **Apps que utilizam:** Módulo de Administração (se houver).
+*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `fechamentosCaixa.regras`)
+    ```firestore
+    // Exemplo baseado no DATA_SYNC_CONFIG.json:
+    // match /fechamentosCaixa/{docId} {
+    //   allow create: if request.auth.uid == request.resource.data.userId; // isRequestDataOwner()
+    //   allow read, update, delete: if request.auth.uid == resource.data.userId; // isResourceOwner()
+    // }
+    match /fechamentosCaixa/{docId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Update e Delete podem ser mais restritos (ex: permitir apenas para Admin ou não permitir)
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid; // Ou if false;
+    }
+    ```
+*   **Indexação e Performance:**
+    *   Índice em `userId` (ASC) e `dataFechamento` (DESC) para buscar o histórico de fechamentos do usuário, ordenado do mais recente para o mais antigo.
+      ```json
+      {
+        "collectionGroup": "fechamentosCaixa",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "userId", "order": "ASCENDING" },
+          { "fieldPath": "dataFechamento", "order": "DESCENDING" }
+        ]
+      }
+      ```
+
+---
+
+### 2.14. Outras Coleções do `DATA_SYNC_CONFIG.json`
 
 O arquivo `DATA_SYNC_CONFIG.json` lista outras coleções como:
 *   `contasPagar`
@@ -637,6 +704,9 @@ Estas coleções provavelmente pertencem ao app "Visão Clara Financeira" ou sã
     *   Pode referenciar `vendas` (via `vendaId`).
     *   Pode referenciar `ordensServico` (via `referenciaOSId`).
     *   Pode referenciar `contasPagar` ou `contasReceber` (via campos de referência, ex: `contaPagarId`).
+    *   Pode ser relacionado a `fechamentosCaixa` (embora `fechamentosCaixa` some `lancamentosFinanceiros` e `vendas`, não há um link direto de `lancamentosFinanceiros` para `fechamentosCaixa`).
+*   **`fechamentosCaixa`**
+    *   Agrega dados de `lancamentosFinanceiros` e `vendas` para um `userId` em uma `dataFechamento`.
 *   **`userGoals`**
     *   Pertence a um usuário (via `userId`), mas não referencia diretamente outras coleções de dados operacionais, pois é mais estratégico.
 *   **`consultationsMetadata`** e **`consultations`**
@@ -651,6 +721,7 @@ usuarios --1:N-- ordensServico
 usuarios --1:N-- ordensDeProducao
 usuarios --1:N-- vendas
 usuarios --1:N-- lancamentosFinanceiros
+usuarios --1:N-- fechamentosCaixa
 usuarios --1:N-- userGoals
 usuarios --1:1-- consultationsMetadata (ID do doc é o userId)
 usuarios --1:N-- consultations
@@ -678,7 +749,7 @@ vendas --1:N-- lancamentosFinanceiros
 *   **Índices Compostos:**
     *   Essenciais para consultas que filtram por múltiplos campos ou ordenam por um campo e filtram por outro.
     *   O Firebase Console sugere índices. Planeje-os com base nas consultas mais frequentes de cada app.
-    *   Exemplos já listados nas seções de cada coleção (ex: `userGoals`, `consultations`).
+    *   Exemplos já listados nas seções de cada coleção (ex: `userGoals`, `consultations`, `fechamentosCaixa`).
 *   **Limitar Dados Lidos:**
     *   Use `limit()` para paginar resultados.
 *   **Denormalização:**
@@ -718,6 +789,8 @@ vendas --1:N-- lancamentosFinanceiros
     *   **Mitigação:** Idealmente, criação da Venda/OS e do `lancamentoFinanceiro` em transação. Alternativa: Cloud Functions ou no código do serviço com tratamento de erros.
 *   **`userGoals` (Diagnóstico) vs. `metasFinanceiras` (Financeiro):**
     *   **Mitigação:** `userGoals`: estratégico, gerado por IA. `metasFinanceiras`: operacional/tático, granular, criado pelo usuário no app Financeiro, pode ser inspirado por `userGoals`.
+*   **Sincronia entre `fechamentosCaixa`, `lancamentosFinanceiros` e `vendas`:**
+    *   **Mitigação:** O `fechamentosCaixa` é um snapshot. Se um lançamento ou venda for alterado *após* o fechamento do dia correspondente, o `fechamentosCaixa` não será automaticamente atualizado. Isso é geralmente aceitável, pois o fechamento representa o estado *no momento do fechamento*. Relatórios financeiros mais abrangentes devem sempre consultar as fontes primárias (`lancamentosFinanceiros`, `vendas`).
 
 ---
 
