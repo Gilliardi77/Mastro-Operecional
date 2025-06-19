@@ -55,17 +55,23 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from '@/lib/utils';
 
+// Importações de Serviços
 import {
   type OrdemServico as OrdemServicoOriginal,
   updateOrdemServico,
   getOrdemServicoById,
-  PagamentoOsSchema,
-  type PagamentoOsFormValues,
-  PaymentStatusEnum,
-  OrdemServicoStatusEnum // Importando o objeto Zod enum
 } from '@/services/ordemServicoService';
-import type { ItemOS, OrdemServicoStatus } from '@/schemas/ordemServicoSchema'; // Importando o tipo OrdemServicoStatus
 import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroService';
+
+// Importações de Schemas e Tipos diretamente dos schemas
+import {
+  type ItemOS,
+  type OrdemServicoStatus,
+  OrdemServicoStatusEnum, // Importação direta
+  PaymentStatusEnum,      // Importação direta
+  PagamentoOsSchema,      // Importação direta
+  type PagamentoOsFormValues // Importação direta (tipo)
+} from '@/schemas/ordemServicoSchema';
 
 
 type ProductionOrderStatus = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
@@ -170,8 +176,7 @@ export default function ProducaoPage() {
       if (timestampField && typeof timestampField.toDate === 'function') {
         return timestampField.toDate();
       }
-      // Removido console.warn para não poluir o console em produção, mas útil em dev
-      // console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido na OP ID ${viewingOrder?.id || 'desconhecido'}. Usando data padrão: ${defaultDateVal.toISOString()}`);
+      console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido. Usando data padrão: ${defaultDateVal.toISOString()}`);
       return defaultDateVal;
   };
 
@@ -218,7 +223,7 @@ export default function ProducaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth]); // Removido viewingOrder?.id de dependências, safeToDate não precisa dele
+  }, [user, toast, bypassAuth]);
 
   useEffect(() => {
     if (user || bypassAuth) {
@@ -249,7 +254,6 @@ export default function ProducaoPage() {
   const updateOriginalOSStatusViaService = async (osId: string, newStatus: OrdemServicoStatus) => {
     try {
       await updateOrdemServico(osId, { status: newStatus });
-      // console.log(`Status da OS ${osId} atualizado para ${newStatus} via serviço.`); // Log para debug
     } catch (error: any) {
       const errorMessage = (error as Error).message || 'Erro desconhecido';
       if (errorMessage.includes("Missing or insufficient permissions")) {
@@ -329,6 +333,7 @@ export default function ProducaoPage() {
         progresso: 100,
         atualizadoEm: Timestamp.now()
     });
+    // Uso direto do valor string do enum
     await updateOriginalOSStatusViaService(productionOrder.agendamentoId, OrdemServicoStatusEnum.Enum.Concluído);
     await performStockDeduction(productionOrder.agendamentoId);
     toast({ title: "Produção Concluída!", description: `Ordem de produção e OS #${productionOrder.agendamentoId.substring(0,6)}... concluídas.` });
@@ -395,7 +400,7 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
         const valorTotalPagoAtualizado = (osForFinalPayment.valorPagoTotal || 0) + paymentData.valorPago;
         await updateOrdemServico(osForFinalPayment.id, {
             valorPagoTotal: valorTotalPagoAtualizado,
-            statusPagamento: PaymentStatusEnum.Enum['Pago Total'],
+            statusPagamento: PaymentStatusEnum.Enum['Pago Total'], // Usando o enum Zod
             dataUltimoPagamento: paymentData.dataPagamento,
             formaUltimoPagamento: paymentData.formaPagamento,
             observacoesPagamento: paymentData.observacoesPagamento,
@@ -433,7 +438,7 @@ const processCompletion = async (order: ProductionOrder, newProgress?: number) =
             progresso: progressToUse,
             atualizadoEm: Timestamp.now()
         });
-        await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
+        await updateOriginalOSStatusViaService(order.agendamentoId, newStatus as OrdemServicoStatus);
         toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
         await fetchProductionOrders();
     }
@@ -458,7 +463,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                 progresso: newProgress,
                 atualizadoEm: Timestamp.now()
             });
-            await updateOriginalOSStatusViaService(order.agendamentoId, newStatus);
+            await updateOriginalOSStatusViaService(order.agendamentoId, newStatus as OrdemServicoStatus);
             toast({ title: "Status Atualizado!", description: `Ordem de produção #${order.id.substring(0,6)}... atualizada para ${newStatus}.` });
             await fetchProductionOrders();
         } catch (error: any) {
@@ -495,7 +500,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                 observacoesProducao: editingOrderDetails.observacoesProducao,
                 atualizadoEm: Timestamp.now(),
             });
-            await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus);
+            await updateOriginalOSStatusViaService(viewingOrder.agendamentoId, newStatus as OrdemServicoStatus);
             toast({ title: "Detalhes da Produção Salvos!", description: "As alterações foram salvas." });
             await fetchProductionOrders();
             setIsViewModalOpen(false);
