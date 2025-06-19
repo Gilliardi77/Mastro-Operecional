@@ -1,3 +1,4 @@
+
 # 📊 Visão Clara Financeira - Resumo de Sincronização
 
 ## Coleção: `usuarios`
@@ -59,6 +60,11 @@
 - **Regra**: `request.auth.uid == resource.data.userId`
 
 ## Coleção: `produtosServicos`
+- **Leitura**: Sim
+- **Escrita**: Sim
+- **Regra**: `request.auth.uid == resource.data.userId`
+
+## Coleção: `fechamentosCaixa`
 - **Leitura**: Sim
 - **Escrita**: Sim
 - **Regra**: `request.auth.uid == resource.data.userId`

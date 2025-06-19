@@ -1,3 +1,4 @@
+
 {
   "app": "Visao Clara Financeira",
   "colecoes": {
@@ -60,6 +61,11 @@
       "regras": "request.auth.uid == resource.data.userId"
     },
     "produtosServicos": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
+    "fechamentosCaixa": {
       "read": true,
       "write": true,
       "regras": "request.auth.uid == resource.data.userId"
