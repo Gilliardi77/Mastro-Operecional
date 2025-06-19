@@ -1,8 +1,8 @@
 
 # Documento Técnico de Backend - Ecossistema Business Maestro
 
-**Versão:** 1.0
-**Data da Última Atualização:** {{ CURRENT_DATE }} <!-- Este placeholder será substituído pela data atual -->
+**Versão:** 1.1
+**Data da Última Atualização:** 04 de Agosto de 2024 <!-- Este placeholder será substituído pela data atual -->
 
 ## 0. Introdução
 
@@ -386,23 +386,27 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   `clienteNome` (String): [Obrigatório] Nome do cliente.
     *   `itens` (Array<Object>): [Obrigatório] Lista de itens da OS. Cada item: `{ produtoServicoId?, nome, quantidade, valorUnitario, tipo }`.
     *   `valorTotal` (Number): [Obrigatório] Valor total da OS.
-    *   `valorAdiantado` (Number): [Opcional] Default: `0`.
+    *   `valorAdiantado` (Number): [Opcional] Default: `0`. Registra o valor pago no momento da criação da OS.
     *   `dataEntrega` (Timestamp): [Obrigatório] Data prevista de entrega.
     *   `observacoes` (String): [Opcional].
     *   `status` (String): [Obrigatório] "Pendente", "Em Andamento", "Concluído", "Cancelado". Default: "Pendente".
-    *   `statusPagamento` (String): [Obrigatório] "Pendente", "Pago Parcial", "Pago Total". Default: "Pendente".
-    *   `valorPagoTotal` (Number): [Opcional] Default: `0`.
-    *   `dataUltimoPagamento` (Timestamp): [Opcional].
-    *   `formaUltimoPagamento` (String): [Opcional].
+    *   `statusPagamento` (String): [Obrigatório] "Pendente", "Pago Parcial", "Pago Total". Default: "Pendente". Inicializado com base no `valorAdiantado`.
+    *   `valorPagoTotal` (Number): [Opcional] Default: `0`. Soma de todos os pagamentos recebidos para esta OS, inicializado com `valorAdiantado`.
+    *   `dataPrimeiroPagamento` (Timestamp): [Opcional, Nullable] Data do adiantamento, se houver.
+    *   `formaPrimeiroPagamento` (String): [Opcional, Nullable] Forma de pagamento do adiantamento, se houver.
+    *   `dataUltimoPagamento` (Timestamp): [Opcional, Nullable] Data do último pagamento subsequente (não o adiantamento).
+    *   `formaUltimoPagamento` (String): [Opcional, Nullable] Forma do último pagamento subsequente.
     *   `observacoesPagamento` (String): [Opcional].
     *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
     *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
 *   **Operações (CRUD):**
     *   **CREATE:**
         *   **Quem executa:** Usuário final (via UI "Maestro Operacional", ex: Nova OS, ou transformação de Venda Balcão em OS). Automação (se um Agendamento com `geraOrdemProducao` for `true` também gerar uma OS base).
+        *   **Observação:** Se `valorAdiantado` > 0, um `lancamentoFinanceiro` do tipo "receita" é criado automaticamente com a `formaPrimeiroPagamento`.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **READ, UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (via UI "Maestro Operacional").
+        *   **Observação UPDATE:** Ao registrar pagamentos subsequentes, os campos `valorPagoTotal`, `statusPagamento`, `dataUltimoPagamento`, `formaUltimoPagamento`, `observacoesPagamento` são atualizados, e um `lancamentoFinanceiro` é gerado.
         *   **Apps que utilizam:** "Maestro Operacional".
 *   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `ordensServico.regras`)
     ```firestore
@@ -447,6 +451,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
         *   **Apps que utilizam:** "Maestro Operacional" (indiretamente).
     *   **READ, UPDATE:**
         *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" - Módulo de Produção).
+        *   **Observação UPDATE:** Ao atualizar o status para "Concluído" (progresso 100%), o sistema verifica o `statusPagamento` da `ordensServico` original. Se houver saldo pendente, um modal para registrar o pagamento final é apresentado. Somente após o pagamento (se necessário) ou se já estiver pago, a OP e a OS são efetivamente marcadas como "Concluído" e a baixa de estoque é realizada.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **DELETE:**
         *   **Quem executa:** Geralmente não aplicável, exceto por Admin ou se a OS original for cancelada.
@@ -490,6 +495,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **Operações (CRUD):**
     *   **CREATE:**
         *   **Quem executa:** Usuário final (via UI do Balcão PDV no "Maestro Operacional").
+        *   **Observação:** Ao criar, um `lancamentoFinanceiro` do tipo "receita" é gerado automaticamente.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **READ:**
         *   **Quem executa:** Usuário final (para histórico, relatórios), IA (para análise financeira).
@@ -525,12 +531,13 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **ID do Documento:** Gerado automaticamente pelo Firestore.
 *   **Campos:**
     *   `userId` (String): [Obrigatório] ID do usuário proprietário.
-    *   `titulo` (String): [Obrigatório] Descrição breve. Ex: "Venda Balcão #123", "Pagamento OS #456".
-    *   `valor` (Number): [Obrigatório] Valor da transação (positivo para receita, negativo para despesa).
+    *   `titulo` (String): [Obrigatório] Descrição breve. Ex: "Venda Balcão #123", "Pagamento OS #456", "Adiantamento OS #789".
+    *   `valor` (Number): [Obrigatório] Valor da transação (sempre positivo, `tipo` define natureza).
     *   `tipo` (String): [Obrigatório] "receita" ou "despesa".
     *   `data` (Timestamp): [Obrigatório] Data da transação/competência.
-    *   `categoria` (String): [Obrigatório] Ex: "Venda Balcão", "Receita de OS", "Aluguel", "Fornecedor".
+    *   `categoria` (String): [Obrigatório] Ex: "Venda Balcão", "Receita de OS", "Adiantamento OS", "Aluguel", "Fornecedor".
     *   `status` (String): [Obrigatório] "pago", "recebido", "pendente".
+    *   `formaPagamento` (String): [Opcional, Nullable] Forma de pagamento utilizada (ex: "dinheiro", "pix").
     *   `descricao` (String): [Opcional] Detalhes adicionais.
     *   `vendaId` (String): [Opcional] ID da venda relacionada (da coleção `vendas`).
     *   `referenciaOSId` (String): [Opcional] ID da OS relacionada (da coleção `ordensServico`).
@@ -538,7 +545,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
     *   `atualizadoEm` (Timestamp): [Obrigatório] Gerenciado automaticamente.
 *   **Operações (CRUD):**
     *   **CREATE:**
-        *   **Quem executa:** Automação/Sistema (ao finalizar uma `venda` ou registrar pagamento de `ordensServico`), Usuário final (ao registrar despesas ou receitas manuais no "Visão Clara Financeira").
+        *   **Quem executa:** Automação/Sistema (ao finalizar uma `venda`, registrar adiantamento ou pagamento de `ordensServico`), Usuário final (ao registrar despesas ou receitas manuais no "Visão Clara Financeira").
         *   **Apps que utilizam:** "Maestro Operacional" (indiretamente), "Visão Clara Financeira".
     *   **READ:**
         *   **Quem executa:** Usuário final (para extratos, relatórios), IA (para análises).
@@ -608,19 +615,21 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **Campos:** (Baseado em `fechamentoCaixaSchema.ts`)
     *   `userId` (String): [Obrigatório] ID do usuário Business Maestro proprietário deste fechamento.
     *   `dataFechamento` (Timestamp): [Obrigatório] Data e hora em que o fechamento foi realizado.
-    *   `totalEntradasCalculado` (Number): [Obrigatório] Somatório de todas as entradas (receitas efetivadas) do dia, calculado pelo sistema com base nos `lancamentosFinanceiros`.
+    *   `totalEntradasCalculado` (Number): [Obrigatório] Somatório de todas as entradas (receitas efetivadas no dia, considerando `lancamentosFinanceiros` e `vendas` que não geraram lançamentos).
     *   `totalSaidasCalculado` (Number): [Obrigatório] Somatório de todas as saídas (despesas pagas) do dia, calculado pelo sistema com base nos `lancamentosFinanceiros`.
-    *   `trocoInicial` (Number): [Opcional, Default: 0] Valor do troco inicial no caixa, informado manualmente.
+    *   `trocoInicial` (Number): [Opcional, Default: 0] Valor do troco inicial no caixa, informado manualmente. Sugerido com base no saldo final do último fechamento.
     *   `sangrias` (Number): [Opcional, Default: 0] Total de retiradas manuais (sangrias) do caixa durante o dia, informado manualmente.
     *   `saldoFinalCalculado` (Number): [Obrigatório] Saldo final do caixa calculado: `(totalEntradasCalculado + trocoInicial) - totalSaidasCalculado - sangrias`.
-    *   `entradasPorMetodo` (Object): [Obrigatório] Detalhamento das entradas por método de pagamento, baseado nas `vendas` do dia. Contém:
+    *   `entradasPorMetodo` (Object): [Obrigatório] Detalhamento das entradas por método de pagamento, baseado nas `vendas` e `lancamentosFinanceiros` (receitas) do dia. Contém:
         *   `dinheiro` (Number)
         *   `pix` (Number)
         *   `cartaoCredito` (Number)
         *   `cartaoDebito` (Number)
         *   `cartao` (Number) - Soma de `cartaoCredito` e `cartaoDebito`.
+        *   `boleto` (Number)
+        *   `transferenciaBancaria` (Number)
         *   `outros` (Number)
-    *   `responsavelNome` (String): [Obrigatório] Nome do usuário responsável pelo fechamento.
+    *   `responsavelNome` (String): [Obrigatório] Nome do usuário responsável pelo fechamento (preferencialmente `displayName`, fallback para `email`).
     *   `responsavelId` (String): [Obrigatório] ID do usuário responsável pelo fechamento.
     *   `observacoes` (String): [Opcional] Observações adicionais sobre o fechamento.
     *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
@@ -628,6 +637,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **Operações (CRUD):**
     *   **CREATE:**
         *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" na página de Fechamento de Caixa).
+        *   **Observação:** Múltiplos fechamentos no mesmo dia são permitidos (ex: para correções). Um diálogo de confirmação é apresentado antes de salvar.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **READ:**
         *   **Quem executa:** Usuário final (para histórico de fechamentos), "Visão Clara Financeira" (para análises e relatórios), "Diagnóstico Maestro" (IA pode usar para entender fluxo de caixa).
@@ -691,22 +701,25 @@ Estas coleções provavelmente pertencem ao app "Visão Clara Financeira" ou sã
 *   **`ordensServico`**
     *   Referencia `clientes` (opcionalmente, via `clienteId`).
     *   Referencia `produtosServicos` (nos `itens`, via `produtoServicoId`).
+    *   Gera `lancamentosFinanceiros` (para adiantamentos e pagamentos subsequentes).
 *   **`ordensDeProducao`**
     *   Referencia `ordensServico` ou `agendamentos` (via `agendamentoId`).
     *   Pode referenciar `clientes` (via `clienteId`, herdado).
+    *   Ao ser concluída, pode acionar a atualização de status e pagamentos na `ordensServico` vinculada.
 *   **`agendamentos`**
     *   Referencia `clientes` (via `clienteId`).
     *   Referencia `produtosServicos` (via `servicoId`).
 *   **`vendas`**
     *   Referencia `clientes` (opcionalmente, via `clienteId`).
     *   Referencia `produtosServicos` (nos `itens`, via `productId`).
+    *   Gera `lancamentosFinanceiros`.
 *   **`lancamentosFinanceiros`**
     *   Pode referenciar `vendas` (via `vendaId`).
-    *   Pode referenciar `ordensServico` (via `referenciaOSId`).
+    *   Pode referenciar `ordensServico` (via `referenciaOSId` para adiantamentos e pagamentos).
     *   Pode referenciar `contasPagar` ou `contasReceber` (via campos de referência, ex: `contaPagarId`).
-    *   Pode ser relacionado a `fechamentosCaixa` (embora `fechamentosCaixa` some `lancamentosFinanceiros` e `vendas`, não há um link direto de `lancamentosFinanceiros` para `fechamentosCaixa`).
+    *   São a fonte primária para os cálculos de `totalEntradasCalculado` e `totalSaidasCalculado` em `fechamentosCaixa`.
 *   **`fechamentosCaixa`**
-    *   Agrega dados de `lancamentosFinanceiros` e `vendas` para um `userId` em uma `dataFechamento`.
+    *   Agrega dados de `lancamentosFinanceiros` e `vendas` (que também geram `lancamentosFinanceiros`) para um `userId` em uma `dataFechamento`.
 *   **`userGoals`**
     *   Pertence a um usuário (via `userId`), mas não referencia diretamente outras coleções de dados operacionais, pois é mais estratégico.
 *   **`consultationsMetadata`** e **`consultations`**
@@ -737,7 +750,7 @@ produtosServicos --M:N-- vendas (via tabela de itens)
 ordensServico --1:N-- ordensDeProducao (via agendamentoId, que aqui seria o osId)
 agendamentos --1:N-- ordensDeProducao (via agendamentoId)
 
-ordensServico --1:N-- lancamentosFinanceiros
+ordensServico --1:N-- lancamentosFinanceiros (para adiantamentos e pagamentos)
 vendas --1:N-- lancamentosFinanceiros
 ```
 
@@ -784,13 +797,13 @@ vendas --1:N-- lancamentosFinanceiros
 *   **Duplicação de Produtos/Serviços em Itens de OS/Venda:**
     *   **Mitigação:** Comportamento desejado. Preços de transações passadas não mudam.
 *   **Consistência de Estoque (`produtosServicos`.`quantidadeEstoque`):**
-    *   **Mitigação:** Usar **transações do Firestore** para operações que leem e escrevem estoque (vendas, saídas manuais).
+    *   **Mitigação:** Usar **transações do Firestore** para operações que leem e escrevem estoque (vendas, saídas manuais, conclusão de OP).
 *   **Geração de `lancamentosFinanceiros`:**
-    *   **Mitigação:** Idealmente, criação da Venda/OS e do `lancamentoFinanceiro` em transação. Alternativa: Cloud Functions ou no código do serviço com tratamento de erros.
+    *   **Mitigação:** Idealmente, criação da Venda/OS e do `lancamentoFinanceiro` em transação Firestore ou uma Cloud Function para garantir atomicidade. Atualmente, são operações sequenciais no cliente/serviço, o que pode gerar inconsistência se uma falhar. O `firestoreService` lida com a criação de um único documento atomicamente.
 *   **`userGoals` (Diagnóstico) vs. `metasFinanceiras` (Financeiro):**
     *   **Mitigação:** `userGoals`: estratégico, gerado por IA. `metasFinanceiras`: operacional/tático, granular, criado pelo usuário no app Financeiro, pode ser inspirado por `userGoals`.
 *   **Sincronia entre `fechamentosCaixa`, `lancamentosFinanceiros` e `vendas`:**
-    *   **Mitigação:** O `fechamentosCaixa` é um snapshot. Se um lançamento ou venda for alterado *após* o fechamento do dia correspondente, o `fechamentosCaixa` não será automaticamente atualizado. Isso é geralmente aceitável, pois o fechamento representa o estado *no momento do fechamento*. Relatórios financeiros mais abrangentes devem sempre consultar as fontes primárias (`lancamentosFinanceiros`, `vendas`).
+    *   **Mitigação:** O `fechamentosCaixa` é um snapshot. Se um lançamento ou venda for alterado *após* o fechamento do dia correspondente, o `fechamentosCaixa` não será automaticamente atualizado. Isso é geralmente aceitável, pois o fechamento representa o estado *no momento do fechamento*. Relatórios financeiros mais abrangentes devem sempre consultar as fontes primárias (`lancamentosFinanceiros`, `vendas`). A lógica de `fechamentosCaixa` deve ser robusta para evitar dupla contagem, idealmente baseando-se apenas em `lancamentosFinanceiros` se estes forem a fonte única da verdade para todas as receitas.
 
 ---
 
@@ -805,3 +818,4 @@ vendas --1:N-- lancamentosFinanceiros
 ---
 
 Este documento serve como um guia técnico detalhado e deve ser mantido atualizado à medida que o ecossistema Business Maestro evolui. Sempre consulte `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` para as especificações canônicas de coleções e regras.
+

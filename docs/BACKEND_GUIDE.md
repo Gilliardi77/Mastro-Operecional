@@ -1,3 +1,4 @@
+
 # Guia Unificado de Dados e Backend para o Business Maestro
 
 Este documento é a **fonte única de verdade** para todas as IAs, desenvolvedores humanos e sistemas que interagem com os dados da aplicação **Business Maestro**. Ele estabelece um padrão universal, prático e automático para criação, leitura, atualização, exclusão e indexação de dados no Firestore, assim como para a modelagem de schemas, geração de serviços e organização geral do backend.
@@ -328,6 +329,58 @@ export async function createDocument<TCreate, TFull extends { id: string }>(
 
 ---
 
+## 🌊 Fluxos de Transação e Integrações Notáveis (App "Maestro Operacional")
+
+Esta seção destaca alguns fluxos de dados importantes dentro do aplicativo "Maestro Operacional" que podem ser relevantes para entender a interação entre diferentes entidades e a origem de certos dados financeiros.
+
+### 1. Criação de Ordem de Serviço (OS) com Adiantamento
+*   **Página:** `/produtos-servicos/atendimentos/novo`
+*   **Fluxo:**
+    1.  Usuário preenche os dados da OS, incluindo um `valorAdiantado` e a `formaPagamentoAdiantamento`.
+    2.  Ao salvar, o sistema:
+        *   Cria um documento na coleção `ordensServico` com os detalhes da OS, incluindo `dataPrimeiroPagamento` (data atual) e `formaPrimeiroPagamento`. O `statusPagamento` é definido como "Pago Parcial" ou "Pago Total" com base no adiantamento.
+        *   Automaticamente cria um `lancamentoFinanceiro` do tipo "receita", status "recebido", categoria "Adiantamento OS", com o valor e forma de pagamento do adiantamento, e o `referenciaOSId` preenchido.
+        *   Cria uma `ordemDeProducao` vinculada.
+*   **Impacto:** O adiantamento entra no caixa no mesmo dia e é refletido no `fechamentoCaixa`.
+
+### 2. Conclusão de Ordem de Produção (OP) e Pagamento Final da OS
+*   **Página:** `/produtos-servicos/producao`
+*   **Fluxo:**
+    1.  Usuário marca uma OP como concluída (progresso 100%).
+    2.  O sistema verifica a `ordemServico` original vinculada.
+    3.  Se houver saldo devedor na OS (`valorTotal - valorPagoTotal > 0`), um modal é exibido para registrar o pagamento final, incluindo valor e forma de pagamento.
+    4.  Após o registro do pagamento (se necessário):
+        *   Um `lancamentoFinanceiro` do tipo "receita", status "recebido", categoria "Receita de OS", é criado para o pagamento final.
+        *   A `ordemServico` é atualizada: `valorPagoTotal` incrementado, `statusPagamento` para "Pago Total", `dataUltimoPagamento` e `formaUltimoPagamento` registrados, e o `status` da OS para "Concluído".
+        *   A `ordemDeProducao` tem seu status atualizado para "Concluído".
+        *   A baixa de estoque dos produtos da OS é realizada.
+    5.  Se não houver saldo devedor na OS, o sistema pula o modal de pagamento e procede diretamente com a conclusão da OP, da OS e a baixa de estoque.
+*   **Impacto:** Garante que o pagamento final seja registrado antes de considerar a OS totalmente concluída, e o valor entra no caixa na data do pagamento.
+
+### 3. Vendas no Balcão (PDV)
+*   **Página:** `/produtos-servicos/balcao`
+*   **Fluxo:**
+    1.  Usuário adiciona itens ao carrinho e finaliza a venda, selecionando a forma de pagamento.
+    2.  O sistema:
+        *   Cria um documento na coleção `vendas`.
+        *   Automaticamente cria um `lancamentoFinanceiro` do tipo "receita", status "recebido", categoria "Venda Balcão", com o valor e forma de pagamento da venda, e o `vendaId` preenchido.
+        *   Realiza a baixa de estoque dos produtos vendidos.
+*   **Impacto:** Vendas PDV entram imediatamente no caixa e são refletidas no `fechamentoCaixa`.
+
+### 4. Fechamento de Caixa
+*   **Página:** `/financeiro/fechamento-caixa`
+*   **Fluxo:**
+    1.  O sistema calcula `totalEntradasCalculado` (somando `lancamentosFinanceiros` do tipo "receita" e status "recebido" do dia, e vendas PDV do dia que não geraram lançamentos como uma contingência) e `totalSaidasCalculado` (somando `lancamentosFinanceiros` do tipo "despesa" e status "pago" do dia).
+    2.  O usuário informa `trocoInicial` (sugerido com base no último fechamento) e `sangrias`.
+    3.  O `saldoFinalCalculado` é exibido.
+    4.  Um resumo de `entradasPorMetodo` (dinheiro, pix, cartão, boleto, transferência, etc.) é apresentado, baseado nas `formaPagamento` dos `lancamentosFinanceiros` de receita e das `vendas`.
+    5.  Múltiplos fechamentos no mesmo dia são permitidos.
+*   **Impacto:** Fornece um resumo diário das movimentações financeiras. A precisão do `entradasPorMetodo` depende da correta atribuição de `formaPagamento` nos `lancamentosFinanceiros`.
+
+Estes fluxos demonstram como as operações e finanças estão interligadas, com lançamentos financeiros sendo gerados automaticamente em momentos chave para manter a integridade dos dados.
+
+---
+
 ## 📊 Aplicativos Modulares (Operacional, Financeiro, Gestão)
 
 Os dados das coleções `usuarios`, `consultationsMetadata` e, especialmente, `userGoals` são fundamentais para que os módulos Operacional e Financeiro possam oferecer uma experiência rica e contextualizada.
@@ -409,3 +462,4 @@ E ele gerará:
 ---
 
 **Este guia deve ser seguido integralmente por qualquer IA ou humano que deseje interagir com os dados da aplicação Business Maestro.**
+
