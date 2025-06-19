@@ -55,6 +55,11 @@ export default function FechamentoCaixaPage() {
   const trocoInicial = watch("trocoInicial", 0);
   const sangrias = watch("sangrias", 0);
 
+  const responsavelPeloFechamento = useMemo(() => {
+    if (!user) return "Usuário Desconhecido";
+    return user.displayName || user.email || "Usuário não identificado";
+  }, [user]);
+
   const saldoFinalCaixa = useMemo(() => {
     const entradas = caixaDiario.totalEntradasLancamentos || 0;
     const saidas = caixaDiario.totalSaidasLancamentos || 0;
@@ -80,7 +85,6 @@ export default function FechamentoCaixaPage() {
         console.warn(`[FechamentoCaixaPage] Permissão negada ao buscar último fechamento de caixa para usuário ${userId}. Isso pode ocorrer devido à configuração do Firebase ou estado de autenticação. Continuando sem sugerir troco inicial.`);
       } else {
         console.error("Erro ao buscar último fechamento de caixa:", error);
-        // Não mostra toast para outros erros aqui, para não poluir se for um usuário novo sem histórico ou outro erro genérico
       }
     }
   }, [setValue, toast]);
@@ -150,13 +154,13 @@ export default function FechamentoCaixaPage() {
   useEffect(() => {
     if (user && !isAuthLoading) {
       fetchDataDiaria();
-    } else if (!user && !isAuthLoading && typeof window !== 'undefined') { // Add typeof window check
+    } else if (!user && !isAuthLoading && typeof window !== 'undefined') { 
         router.push('/login?redirect=/financeiro/fechamento-caixa');
     }
   }, [user, isAuthLoading, fetchDataDiaria, router]);
 
   const onSubmit = async (values: FechamentoCaixaFormValues) => {
-    if (!user?.uid || !user.displayName) {
+    if (!user?.uid) {
       toast({ title: "Erro de Autenticação", description: "Usuário não identificado.", variant: "destructive" });
       return;
     }
@@ -170,7 +174,7 @@ export default function FechamentoCaixaPage() {
         sangrias: values.sangrias || 0,
         saldoFinalCalculado: saldoFinalCaixa,
         entradasPorMetodo: caixaDiario.entradasPorMetodoVendas,
-        responsavelNome: user.displayName,
+        responsavelNome: responsavelPeloFechamento,
         responsavelId: user.uid,
         observacoes: values.observacoes || "",
       };
@@ -293,7 +297,7 @@ export default function FechamentoCaixaPage() {
                         </FormItem>
                       )}
                     />
-                    <p className="text-xs text-muted-foreground">Responsável: {user?.displayName || user?.email}</p>
+                    <p className="text-xs text-muted-foreground">Responsável: {responsavelPeloFechamento}</p>
                   </CardContent>
                   <CardFooter className="flex flex-col gap-2">
                     <Button type="submit" className="w-full" disabled={isSubmitting || isLoadingData}>

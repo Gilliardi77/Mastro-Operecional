@@ -197,8 +197,11 @@ export default function OrdemServicoPage() {
   // Effect 3: Sync clienteNome when clienteId (dropdown) changes, AFTER initial prefill is complete
   const watchedClienteId = osForm.watch('clienteId');
   useEffect(() => {
+    console.log("[NovaOSPage] Effect 3: watchedClienteId changed or dependencies updated.");
+    console.log(`  - isInitialPrefillComplete: ${isInitialPrefillComplete}, isLoadingClients: ${isLoadingClients}`);
+    console.log(`  - watchedClienteId: ${watchedClienteId}, prevClienteIdRef.current: ${prevClienteIdRef.current}`);
+
     if (!isInitialPrefillComplete || isLoadingClients || watchedClienteId === prevClienteIdRef.current) {
-      // Update ref if watchedClienteId changed but other conditions failed, to prevent stale ref
       if (watchedClienteId !== prevClienteIdRef.current) {
          prevClienteIdRef.current = watchedClienteId;
       }
@@ -206,18 +209,20 @@ export default function OrdemServicoPage() {
     }
 
     const currentFormClienteNome = osForm.getValues('clienteNome');
+    console.log(`  - currentFormClienteNome: ${currentFormClienteNome}`);
 
     if (watchedClienteId && watchedClienteId !== "avulso") {
       const client = clients.find(c => c.id === watchedClienteId);
       if (client && client.nome !== currentFormClienteNome) {
+        console.log(`  - Setting clienteNome to '${client.nome}' from selected client.`);
         osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
       }
     } else if (watchedClienteId === "avulso") {
       const defaultAvulsoName = "Cliente Avulso";
-      // Only set to default if it's not already that, and it was previously a specific client OR it's empty
       if (currentFormClienteNome !== defaultAvulsoName) {
         const previousIdWasSpecificClient = prevClienteIdRef.current && prevClienteIdRef.current !== "avulso";
         if (previousIdWasSpecificClient || currentFormClienteNome === "") {
+          console.log(`  - Setting clienteNome to default '${defaultAvulsoName}'.`);
           osForm.setValue('clienteNome', defaultAvulsoName, { shouldValidate: true, shouldDirty: true });
         }
       }
@@ -754,5 +759,6 @@ export default function OrdemServicoPage() {
     
 
     
+
 
 
