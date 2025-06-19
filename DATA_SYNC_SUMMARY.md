@@ -88,4 +88,3 @@
 - **Leitura**: Sim
 - **Escrita**: Sim
 - **Regra**: `request.auth.uid == resource.data.userId`
-

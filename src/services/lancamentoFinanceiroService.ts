@@ -74,7 +74,7 @@ export async function getLancamentosByUserIdAndDateRange(
   orderByField: keyof LancamentoFinanceiro & string = 'data',
   orderDirection: 'asc' | 'desc' = 'desc'
 ): Promise<LancamentoFinanceiro[]> {
-  const { where } = await import('firebase/firestore');
+  const { where, orderBy } = await import('firebase/firestore');
   const constraints: QueryConstraint[] = [
     where("userId", "==", userId),
     where("data", ">=", Timestamp.fromDate(startDate)),
