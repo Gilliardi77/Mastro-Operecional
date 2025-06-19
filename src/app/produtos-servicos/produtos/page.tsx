@@ -57,11 +57,11 @@ export default function ProdutosServicosPage() {
       nome: "",
       tipo: undefined, // Zod enum for 'Produto' | 'Serviço'
       descricao: "",
-      valorVenda: 0,
+      valorVenda: undefined, // Initialize number fields that can be empty as undefined
       unidade: "",
-      custoUnitario: 0,
-      quantidadeEstoque: 0,
-      estoqueMinimo: 0,
+      custoUnitario: undefined,
+      quantidadeEstoque: undefined,
+      estoqueMinimo: undefined,
     },
   });
 
@@ -101,20 +101,20 @@ export default function ProdutosServicosPage() {
         descricao: editingItem.descricao || "",
         valorVenda: editingItem.valorVenda,
         unidade: editingItem.unidade,
-        custoUnitario: editingItem.tipo === 'Produto' ? (editingItem.custoUnitario ?? 0) : 0,
-        quantidadeEstoque: editingItem.tipo === 'Produto' ? (editingItem.quantidadeEstoque ?? 0) : 0,
-        estoqueMinimo: editingItem.tipo === 'Produto' ? (editingItem.estoqueMinimo ?? 0) : 0,
+        custoUnitario: editingItem.tipo === 'Produto' ? (editingItem.custoUnitario ?? undefined) : undefined,
+        quantidadeEstoque: editingItem.tipo === 'Produto' ? (editingItem.quantidadeEstoque ?? undefined) : undefined,
+        estoqueMinimo: editingItem.tipo === 'Produto' ? (editingItem.estoqueMinimo ?? undefined) : undefined,
       });
     } else {
       form.reset({
         nome: "",
         tipo: undefined,
         descricao: "",
-        valorVenda: 0,
+        valorVenda: undefined,
         unidade: "",
-        custoUnitario: 0,
-        quantidadeEstoque: 0,
-        estoqueMinimo: 0,
+        custoUnitario: undefined,
+        quantidadeEstoque: undefined,
+        estoqueMinimo: undefined,
       });
     }
   }, [editingItem, form, isModalOpen]);
@@ -131,15 +131,14 @@ export default function ProdutosServicosPage() {
       nome: values.nome,
       tipo: values.tipo,
       descricao: values.descricao,
-      valorVenda: values.valorVenda,
+      valorVenda: values.valorVenda, // Zod coerce will handle if it's undefined for submission
       unidade: values.unidade,
-      // Conditionally include product-specific fields
       ...(values.tipo === 'Produto' && {
-        custoUnitario: values.custoUnitario ?? 0,
+        custoUnitario: values.custoUnitario ?? 0, // Default to 0 if undefined for product
         quantidadeEstoque: values.quantidadeEstoque ?? 0,
         estoqueMinimo: values.estoqueMinimo ?? 0,
       }),
-      ...(values.tipo === 'Serviço' && { // Ensure these are null for services if schema expects it
+      ...(values.tipo === 'Serviço' && { 
         custoUnitario: null,
         quantidadeEstoque: null,
         estoqueMinimo: null,
@@ -169,8 +168,8 @@ export default function ProdutosServicosPage() {
   const handleAbrirModalParaNovo = () => {
     setEditingItem(null);
     form.reset({
-      nome: "", tipo: undefined, descricao: "", valorVenda: 0, unidade: "",
-      custoUnitario: 0, quantidadeEstoque: 0, estoqueMinimo: 0,
+      nome: "", tipo: undefined, descricao: "", valorVenda: undefined, unidade: "",
+      custoUnitario: undefined, quantidadeEstoque: undefined, estoqueMinimo: undefined,
     });
     setIsModalOpen(true);
   };
@@ -184,9 +183,9 @@ export default function ProdutosServicosPage() {
       descricao: item.descricao || "",
       valorVenda: item.valorVenda,
       unidade: item.unidade,
-      custoUnitario: item.tipo === 'Produto' ? (item.custoUnitario ?? 0) : 0,
-      quantidadeEstoque: item.tipo === 'Produto' ? (item.quantidadeEstoque ?? 0) : 0,
-      estoqueMinimo: item.tipo === 'Produto' ? (item.estoqueMinimo ?? 0) : 0,
+      custoUnitario: item.tipo === 'Produto' ? (item.custoUnitario ?? undefined) : undefined,
+      quantidadeEstoque: item.tipo === 'Produto' ? (item.quantidadeEstoque ?? undefined) : undefined,
+      estoqueMinimo: item.tipo === 'Produto' ? (item.estoqueMinimo ?? undefined) : undefined,
     });
     setIsModalOpen(true);
   };
@@ -333,8 +332,8 @@ export default function ProdutosServicosPage() {
         if (!isOpen) {
           setEditingItem(null);
           form.reset({
-            nome: "", tipo: undefined, descricao: "", valorVenda: 0, unidade: "",
-            custoUnitario: 0, quantidadeEstoque: 0, estoqueMinimo: 0,
+            nome: "", tipo: undefined, descricao: "", valorVenda: undefined, unidade: "",
+            custoUnitario: undefined, quantidadeEstoque: undefined, estoqueMinimo: undefined,
           });
         }
       }}>
@@ -396,7 +395,20 @@ export default function ProdutosServicosPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Preço de Venda (R$)</FormLabel>
-                    <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" min="0" /></FormControl>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        {...field}
+                        value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
+                        onChange={e => {
+                          const num = parseFloat(e.target.value);
+                          field.onChange(isNaN(num) ? undefined : num);
+                        }}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -421,7 +433,20 @@ export default function ProdutosServicosPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Custo Unitário (R$) (Produto)</FormLabel>
-                        <FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" min="0" /></FormControl>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="0.00"
+                            step="0.01"
+                            min="0"
+                            {...field}
+                            value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
+                            onChange={e => {
+                              const num = parseFloat(e.target.value);
+                              field.onChange(isNaN(num) ? undefined : num);
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -433,7 +458,20 @@ export default function ProdutosServicosPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Estoque Atual (Produto)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} step="1" min="0" /></FormControl>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              step="1"
+                              min="0"
+                              {...field}
+                              value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
+                              onChange={e => {
+                                const num = parseInt(e.target.value, 10);
+                                field.onChange(isNaN(num) ? undefined : num);
+                              }}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -444,7 +482,20 @@ export default function ProdutosServicosPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Estoque Mínimo (Produto)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} step="1" min="0" /></FormControl>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              step="1"
+                              min="0"
+                              {...field}
+                              value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
+                              onChange={e => {
+                                const num = parseInt(e.target.value, 10);
+                                field.onChange(isNaN(num) ? undefined : num);
+                              }}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -478,3 +529,4 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
+
