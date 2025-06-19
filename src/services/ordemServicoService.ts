@@ -6,6 +6,7 @@ import {
   type OrdemServico,
   type OrdemServicoCreateData,
   type OrdemServicoUpdateData,
+  PaymentStatusEnum, // Importar PaymentStatusEnum
 } from '@/schemas/ordemServicoSchema';
 import {
   createDocument,
@@ -23,14 +24,16 @@ const COLLECTION_NAME = 'ordensServico';
 
 /**
  * Cria uma nova Ordem de Serviço.
+ * A lógica para calcular statusPagamento, valorPagoTotal, etc., a partir do adiantamento
+ * agora é feita na página de criação antes de chamar este serviço.
  * @param userId O ID do usuário proprietário.
- * @param data Os dados para a nova OS.
+ * @param data Os dados para a nova OS, já processados pela página.
  * @returns A Ordem de Serviço criada.
  */
 export async function createOrdemServico(userId: string, data: OrdemServicoCreateData): Promise<OrdemServico> {
   // A validação de 'data' contra OrdemServicoCreateSchema ocorre dentro de createDocument.
-  // O createDocument agora garante que para 'ordensServico', o campo 'numeroOS' será
-  // definido como o ID do documento se não for fornecido nos dados de entrada, e o persistirá.
+  // Os campos como statusPagamento, valorPagoTotal, dataPrimeiroPagamento, formaPrimeiroPagamento
+  // são agora esperados em 'data' conforme OrdemServicoCreateData.
   return createDocument(COLLECTION_NAME, userId, OrdemServicoCreateSchema, OrdemServicoSchema, data);
 }
 
@@ -79,3 +82,7 @@ export async function updateOrdemServico(id: string, data: OrdemServicoUpdateDat
 export async function deleteOrdemServico(id: string): Promise<void> {
   return deleteDocument(COLLECTION_NAME, id);
 }
+
+// Exportar OrdemServicoStatusEnum para uso na ProducaoPage (se necessário)
+export { OrdemServicoStatusEnum };
+

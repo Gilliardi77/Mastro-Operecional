@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Select, /*SelectTrigger,*/ SelectValue, SelectItem, SelectContent } from "@/components/ui/select"; // SelectTrigger original comentado
-import { SelectTrigger } from "@/components/ui/SelectTrigger"; // Importando o novo SelectTrigger memoizado
+import { Select, SelectValue, SelectItem, SelectContent } from "@/components/ui/select";
+import { SelectTrigger } from "@/components/ui/SelectTrigger";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogPrimitiveDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
@@ -26,22 +26,36 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useAIGuide } from "@/contexts/AIGuideContext";
 
-import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus } from "lucide-react";
+import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus, CreditCard } from "lucide-react";
 
 // Schemas e Tipagens
-import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData } from "@/schemas/ordemServicoSchema";
+import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData, PaymentStatusEnum } from "@/schemas/ordemServicoSchema";
 import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schemas/ordemProducaoSchema";
 import { ClientFormSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema";
 import type { ProductService } from "@/schemas/productServiceSchema";
+import type { LancamentoFinanceiroCreateData } from '@/schemas/lancamentoFinanceiroSchema';
 
 // Services
 import { getAllClientsByUserId, createClient } from "@/services/clientService";
 import { getAllProductServicesByUserId } from "@/services/productServiceService";
 import { createOrdemServico } from "@/services/ordemServicoService";
 import { createOrdemProducao } from "@/services/ordemProducaoService";
+import { createLancamentoFinanceiro } from "@/services/lancamentoFinanceiroService";
+
 
 // Constantes
 const MANUAL_ITEM_PLACEHOLDER_VALUE = "manual_placeholder";
+
+const paymentMethods = [
+  { value: "dinheiro", label: "Dinheiro" },
+  { value: "pix", label: "PIX" },
+  { value: "cartao_credito", label: "Cartão de Crédito" },
+  { value: "cartao_debito", label: "Cartão de Débito" },
+  { value: "transferencia", label: "Transferência Bancária" },
+  // { value: "boleto", label: "Boleto (Prazo)" }, // Boleto geralmente não é para adiantamento
+  { value: "outro", label: "Outro" },
+];
+
 
 interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   numeroOS?: string;
@@ -75,6 +89,7 @@ export default function OrdemServicoPage() {
       itens: [],
       valorTotalOS: 0,
       valorAdiantado: 0,
+      formaPagamentoAdiantamento: undefined,
       observacoes: "",
       dataEntrega: undefined,
     },
@@ -84,6 +99,8 @@ export default function OrdemServicoPage() {
     control: osForm.control,
     name: "itens",
   });
+
+  const watchedValorAdiantado = osForm.watch("valorAdiantado");
 
   const newClientForm = useForm<NewClientFormValues>({
     resolver: zodResolver(ClientFormSchema),
@@ -188,9 +205,9 @@ export default function OrdemServicoPage() {
     }
     
     searchParamsAppliedRef.current = true;
-    setIsInitialPrefillComplete(true); // Set state to trigger other effects
+    setIsInitialPrefillComplete(true); 
     setLastSavedOsData(null);
-    prevClienteIdRef.current = osForm.getValues('clienteId'); // Initialize prevClienteIdRef after reset
+    prevClienteIdRef.current = osForm.getValues('clienteId'); 
   }, [searchParams, clients, catalogoItens, osForm, isLoadingClients, isLoadingCatalogo, setIsInitialPrefillComplete]);
 
 
@@ -253,7 +270,7 @@ export default function OrdemServicoPage() {
 
       if (detail.formName === "ordemServicoForm") {
         const generalFieldNames: Array<FieldPath<OrdemServicoFormValues>> = [
-          "clienteId", "clienteNome", "valorAdiantado", "dataEntrega", "observacoes", "valorTotalOS"
+          "clienteId", "clienteNome", "valorAdiantado", "formaPagamentoAdiantamento", "dataEntrega", "observacoes", "valorTotalOS"
         ];
 
         if (typeof detail.fieldName === 'string' && generalFieldNames.includes(detail.fieldName as FieldPath<OrdemServicoFormValues>)) {
@@ -319,6 +336,22 @@ export default function OrdemServicoPage() {
       nome, quantidade, valorUnitario, tipo
     }));
 
+    let statusPagamentoFinal: PaymentStatusEnum = PaymentStatusEnum.Enum.Pendente;
+    let valorPagoTotalFinal = data.valorAdiantado || 0;
+    let dataPrimeiroPagamentoFinal: Date | null = null;
+    let formaPrimeiroPagamentoFinal: string | null = null;
+
+    if (data.valorAdiantado && data.valorAdiantado > 0) {
+      if (data.valorAdiantado >= (data.valorTotalOS || 0) ) {
+        statusPagamentoFinal = PaymentStatusEnum.Enum['Pago Total'];
+      } else {
+        statusPagamentoFinal = PaymentStatusEnum.Enum['Pago Parcial'];
+      }
+      dataPrimeiroPagamentoFinal = new Date();
+      formaPrimeiroPagamentoFinal = data.formaPagamentoAdiantamento || null;
+    }
+
+
     const osDataToCreate: OrdemServicoCreateData = {
       clienteId: data.clienteId && data.clienteId !== "avulso" ? data.clienteId : null,
       clienteNome: nomeClienteFinal,
@@ -327,6 +360,11 @@ export default function OrdemServicoPage() {
       valorAdiantado: data.valorAdiantado || 0,
       dataEntrega: data.dataEntrega, 
       observacoes: data.observacoes || "",
+      // Campos de pagamento inicial
+      statusPagamento: statusPagamentoFinal,
+      valorPagoTotal: valorPagoTotalFinal,
+      dataPrimeiroPagamento: dataPrimeiroPagamentoFinal,
+      formaPrimeiroPagamento: formaPrimeiroPagamentoFinal,
     };
 
     try {
@@ -345,6 +383,24 @@ export default function OrdemServicoPage() {
       };
       await createOrdemProducao(uid, opDataToCreate);
 
+      // Registrar lançamento financeiro para o adiantamento
+      if (data.valorAdiantado && data.valorAdiantado > 0 && data.formaPagamentoAdiantamento) {
+        const lancamentoAdiantamentoData: LancamentoFinanceiroCreateData = {
+          titulo: `Adiantamento OS #${osDoc.numeroOS.substring(0,6)}`,
+          valor: data.valorAdiantado,
+          tipo: 'receita',
+          data: new Date(), // Data do adiantamento é a data atual
+          categoria: "Adiantamento OS",
+          status: 'recebido',
+          descricao: `Adiantamento para OS de ${nomeClienteFinal}.`,
+          referenciaOSId: osDoc.id,
+          formaPagamento: data.formaPagamentoAdiantamento,
+        };
+        await createLancamentoFinanceiro(uid, lancamentoAdiantamentoData);
+        toast({ title: "Adiantamento Registrado", description: `Lançamento financeiro para o adiantamento de R$ ${data.valorAdiantado.toFixed(2)} criado.` });
+      }
+
+
       toast({ title: "OS Criada", description: `OS #${osDoc.numeroOS.substring(0, 6)}... salva e OP criada.` });
       setLastSavedOsData({
         ...data,
@@ -360,10 +416,10 @@ export default function OrdemServicoPage() {
         itens: [], 
         valorTotalOS: 0, 
         valorAdiantado: 0, 
+        formaPagamentoAdiantamento: undefined,
         observacoes: "", 
         dataEntrega: undefined 
       });
-      // Resetar flags para permitir novo preenchimento se a página for navegada/atualizada com params
       searchParamsAppliedRef.current = false;
       setIsInitialPrefillComplete(false); 
       prevClienteIdRef.current = "avulso";
@@ -397,7 +453,7 @@ export default function OrdemServicoPage() {
       const clienteCriado = await createClient(userIdToSave, clientDataToCreate);
       setClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
       osForm.setValue('clienteId', clienteCriado.id, {shouldDirty: true}); 
-      prevClienteIdRef.current = clienteCriado.id; // Update ref as selection changed
+      prevClienteIdRef.current = clienteCriado.id; 
       toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
       setIsNewClientModalOpen(false);
       newClientForm.reset();
@@ -473,7 +529,7 @@ export default function OrdemServicoPage() {
             <FileText className="h-6 w-6 text-primary" />
             <div>
               <CardTitle>Nova Ordem de Serviço</CardTitle>
-              <CardDescription>Preencha os dados para criar uma nova OS.</CardDescription>
+              <CardDescription>Preencha os dados para criar uma nova OS. Adiantamentos geram lançamentos financeiros.</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -499,7 +555,7 @@ export default function OrdemServicoPage() {
                           disabled={isLoadingClients}
                         >
                           <FormControl>
-                            <SelectTrigger> {/* Usando o SelectTrigger memoizado */}
+                            <SelectTrigger> 
                               <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecione o cliente"} />
                             </SelectTrigger>
                           </FormControl>
@@ -553,7 +609,7 @@ export default function OrdemServicoPage() {
                                       disabled={isLoadingCatalogo}
                                   >
                                       <FormControl>
-                                        <SelectTrigger> {/* Usando o SelectTrigger memoizado */}
+                                        <SelectTrigger> 
                                           <SelectValue placeholder={isLoadingCatalogo ? "Carregando..." : "Selecione ou digite abaixo"} />
                                         </SelectTrigger>
                                       </FormControl>
@@ -613,6 +669,32 @@ export default function OrdemServicoPage() {
                     )}
                   />
                 </div>
+                
+                {watchedValorAdiantado !== undefined && watchedValorAdiantado > 0 && (
+                  <FormField
+                    control={osForm.control}
+                    name="formaPagamentoAdiantamento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1"><CreditCard className="h-4 w-4 text-muted-foreground"/> Forma de Pagamento do Adiantamento</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a forma de pagamento do adiantamento" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {paymentMethods.map(method => (
+                              <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
 
                 <FormField
                   control={osForm.control}
@@ -759,6 +841,3 @@ export default function OrdemServicoPage() {
     
 
     
-
-
-
