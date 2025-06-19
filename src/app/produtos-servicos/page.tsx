@@ -1,4 +1,3 @@
-
 // Otimizado e corrigido: ProdutosServicosPage
 'use client';
 
@@ -126,7 +125,11 @@ export default function ProdutosServicosPage() {
         where('dataVenda', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataVenda', '<=', Timestamp.fromDate(hojeFim))
       ));
-      vendasSnap.forEach(doc => vendasHojeValor += doc.data().totalVenda);
+      vendasSnap.forEach(doc => {
+        if (typeof doc.data().totalVenda === 'number') {
+            vendasHojeValor += doc.data().totalVenda;
+        }
+      });
 
       // OS em Atraso
       const atrasadasSnap = await getDocs(query(
@@ -283,4 +286,3 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
-
