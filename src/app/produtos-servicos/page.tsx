@@ -1,3 +1,4 @@
+
 // Otimizado e corrigido: ProdutosServicosPage
 'use client';
 
@@ -9,14 +10,14 @@ import {
   collection, query, where, getDocs, Timestamp, orderBy, limit, type Firestore
 } from 'firebase/firestore';
 import { useAuth } from '@/components/auth/auth-provider';
-import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
+import { getFirebaseInstances } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   CalendarDays, PlusCircle, BarChart3, Users,
   Package, Settings, ActivitySquare, ListOrdered,
-  CheckCircle, AlertTriangle, Loader2
+  CheckCircle, AlertTriangle, Loader2, FilePlus2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -32,6 +33,7 @@ interface ResumoOperacional {
   osConcluidasHoje: number;
   vendasHojeValor: number;
   osAtrasadas: number;
+  novasOsHoje: number; // Novo campo
 }
 
 export default function ProdutosServicosPage() {
@@ -42,10 +44,11 @@ export default function ProdutosServicosPage() {
     osConcluidasHoje: 0,
     vendasHojeValor: 0,
     osAtrasadas: 0,
+    novasOsHoje: 0, // Inicializa o novo campo
   });
   const [loading, setLoading] = useState({ agenda: true, resumo: true });
 
-  const userId = user?.uid || 'bypass_user_placeholder'; // Ensure userId is available for queries
+  const userId = user?.uid || 'bypass_user_placeholder';
 
   const getStatusClass = (status: string): string => {
     const map: Record<string, string> = {
@@ -75,7 +78,7 @@ export default function ProdutosServicosPage() {
         where('dataHora', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataHora', '<=', Timestamp.fromDate(hojeFim)),
         orderBy('dataHora', 'asc'),
-        limit(3)
+        limit(5) // Aumentado para 5
       );
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({
@@ -104,21 +107,19 @@ export default function ProdutosServicosPage() {
     try {
       const hojeInicio = startOfDay(new Date());
       const hojeFim = endOfDay(new Date());
-      let osConcluidasHoje = 0, vendasHojeValor = 0, osAtrasadas = 0;
+      let osConcluidasHoje = 0, vendasHojeValor = 0, osAtrasadas = 0, novasOsHoje = 0;
 
-      const osSnap = await getDocs(query(
+      // OS Concluídas Hoje
+      const osConcluidasSnap = await getDocs(query(
         collection(dbInstance, 'ordensServico'),
         where('userId', '==', userId),
-        where('status', '==', 'Concluído')
+        where('status', '==', 'Concluído'),
+        where('updatedAt', '>=', Timestamp.fromDate(hojeInicio)), // updatedAt pode não ser ideal, mas é o que temos
+        where('updatedAt', '<=', Timestamp.fromDate(hojeFim))
       ));
-      osSnap.forEach(doc => {
-        const d = doc.data();
-        if (d.atualizadoEm && d.atualizadoEm instanceof Timestamp) {
-          const atual = (d.atualizadoEm as Timestamp).toDate();
-          if (atual >= hojeInicio && atual <= hojeFim) osConcluidasHoje++;
-        }
-      });
+      osConcluidasHoje = osConcluidasSnap.size;
 
+      // Vendas de Hoje
       const vendasSnap = await getDocs(query(
         collection(dbInstance, 'vendas'),
         where('userId', '==', userId),
@@ -127,17 +128,30 @@ export default function ProdutosServicosPage() {
       ));
       vendasSnap.forEach(doc => vendasHojeValor += doc.data().totalVenda);
 
+      // OS em Atraso
       const atrasadasSnap = await getDocs(query(
         collection(dbInstance, 'ordensServico'),
         where('userId', '==', userId),
         where('dataEntrega', '<', Timestamp.fromDate(hojeInicio))
+        // Adicionar filtro para status !== 'Concluído' e !== 'Cancelado'
       ));
       atrasadasSnap.forEach(doc => {
         const status = doc.data().status;
-        if (['Pendente', 'Em Andamento'].includes(status)) osAtrasadas++;
+        if (status === 'Pendente' || status === 'Em Andamento') {
+            osAtrasadas++;
+        }
       });
+      
+      // Novas OS Criadas Hoje
+      const novasOsSnap = await getDocs(query(
+        collection(dbInstance, 'ordensServico'),
+        where('userId', '==', userId),
+        where('createdAt', '>=', Timestamp.fromDate(hojeInicio)),
+        where('createdAt', '<=', Timestamp.fromDate(hojeFim))
+      ));
+      novasOsHoje = novasOsSnap.size;
 
-      setResumoOperacional({ osConcluidasHoje, vendasHojeValor, osAtrasadas });
+      setResumoOperacional({ osConcluidasHoje, vendasHojeValor, osAtrasadas, novasOsHoje });
     } catch (e:any) {
       console.error('Erro resumo operacional:', e);
       toast({ title: "Erro ao buscar resumo", description: e.message, variant: "destructive" });
@@ -147,7 +161,7 @@ export default function ProdutosServicosPage() {
   }, [userId, toast]);
 
   useEffect(() => {
-    if (userId) { // Only fetch if userId is available
+    if (userId) { 
         fetchAgendaHoje();
         fetchResumo();
     }
@@ -156,11 +170,11 @@ export default function ProdutosServicosPage() {
   return (
     <div className="space-y-8">
       <section className="text-center">
-        <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl">Módulo Produtos + Serviços</h2>
-        <p className="mt-4 text-lg text-muted-foreground">Gestão completa de atendimentos, orçamentos, ordens de serviço e mais.</p>
+        <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl">Dashboard Operacional Diário</h2>
+        <p className="mt-4 text-lg text-muted-foreground">Visão geral da sua operação hoje.</p>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">OS Concluídas Hoje</CardTitle>
@@ -170,10 +184,19 @@ export default function ProdutosServicosPage() {
             {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.osConcluidasHoje}</div>}
           </CardContent>
         </Card>
+         <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Novas OS Hoje</CardTitle>
+            <FilePlus2 className="h-5 w-5 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{resumoOperacional.novasOsHoje}</div>}
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Vendas de Hoje (R$)</CardTitle>
-            <BarChart3 className="h-5 w-5 text-blue-500" />
+            <BarChart3 className="h-5 w-5 text-indigo-500" />
           </CardHeader>
           <CardContent>
           {loading.resumo ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">R$ {resumoOperacional.vendasHojeValor.toFixed(2)}</div>}
@@ -194,7 +217,7 @@ export default function ProdutosServicosPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> Agenda para Hoje</CardTitle>
-            <CardDescription>Próximos 3 compromissos de hoje.</CardDescription>
+            <CardDescription>Próximos 5 compromissos de hoje.</CardDescription>
           </CardHeader>
           <CardContent>
             {loading.agenda ? (
@@ -202,7 +225,7 @@ export default function ProdutosServicosPage() {
             ) : agendaHoje.length > 0 ? (
               <ul className="space-y-3">
                 {agendaHoje.map(ag => (
-                  <li key={ag.id} className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                  <li key={ag.id} className="flex items-center justify-between p-3 rounded-md border bg-muted/30 hover:bg-muted/50 transition-colors">
                     <div>
                       <p className="font-medium">{ag.servicoNome}</p>
                       <p className="text-sm text-muted-foreground">{ag.clienteNome} - {format(ag.dataHora, 'HH:mm', { locale: ptBR })}</p>
@@ -260,3 +283,4 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
+
