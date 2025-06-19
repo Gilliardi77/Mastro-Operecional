@@ -4,15 +4,15 @@ import { BaseSchema, BaseCreateSchema, FirestoreTimestampSchema } from './common
 
 /**
  * Schema para o objeto que detalha as entradas por método de pagamento.
+ * Ajustado para refletir as formas de pagamento das vendas e manter um total para cartões.
  */
 export const EntradasPorMetodoSchema = z.object({
-  dinheiro: z.coerce.number().nonnegative().default(0).describe("Total de entradas em dinheiro."),
-  pix: z.coerce.number().nonnegative().default(0).describe("Total de entradas via PIX."),
-  cartaoCredito: z.coerce.number().nonnegative().default(0).describe("Total de entradas via Cartão de Crédito."),
-  cartaoDebito: z.coerce.number().nonnegative().default(0).describe("Total de entradas via Cartão de Débito."),
-  // Adicionado 'cartao' para simplificar o que o PRD pedia, mas mantendo granularidade
-  cartao: z.coerce.number().nonnegative().default(0).describe("Total de entradas via Cartão (geral, se não detalhado)."),
-  outros: z.coerce.number().nonnegative().default(0).describe("Total de entradas por outros métodos não especificados."),
+  dinheiro: z.coerce.number().nonnegative().default(0).describe("Total de entradas em dinheiro das vendas."),
+  pix: z.coerce.number().nonnegative().default(0).describe("Total de entradas via PIX das vendas."),
+  cartaoCredito: z.coerce.number().nonnegative().default(0).describe("Total de entradas via Cartão de Crédito das vendas."),
+  cartaoDebito: z.coerce.number().nonnegative().default(0).describe("Total de entradas via Cartão de Débito das vendas."),
+  cartao: z.coerce.number().nonnegative().default(0).describe("Somatório de todas as entradas via cartão (Crédito + Débito) das vendas."),
+  outros: z.coerce.number().nonnegative().default(0).describe("Total de entradas por outros métodos de pagamento das vendas (ex: boleto, transferência)."),
 });
 export type EntradasPorMetodo = z.infer<typeof EntradasPorMetodoSchema>;
 
@@ -26,7 +26,7 @@ export const FechamentoCaixaSchema = BaseSchema.extend({
   trocoInicial: z.coerce.number().nonnegative().optional().default(0).describe("Valor do troco inicial no caixa (informado manualmente)."),
   sangrias: z.coerce.number().nonnegative().optional().default(0).describe("Total de retiradas manuais (sangrias) do caixa durante o dia (informado manualmente)."),
   saldoFinalCalculado: z.coerce.number().describe("Saldo final do caixa calculado: (Entradas + Troco Inicial) - Saídas - Sangrias."),
-  entradasPorMetodo: EntradasPorMetodoSchema.describe("Detalhamento das entradas por método de pagamento."),
+  entradasPorMetodo: EntradasPorMetodoSchema.describe("Detalhamento das entradas por método de pagamento, baseado nas vendas do dia."),
   responsavelNome: z.string().min(1, "Nome do responsável é obrigatório.").describe("Nome do usuário responsável pelo fechamento."),
   responsavelId: z.string().min(1, "ID do responsável é obrigatório.").describe("ID do usuário responsável pelo fechamento."),
   observacoes: z.string().optional().or(z.literal('')).describe("Observações adicionais sobre o fechamento."),
