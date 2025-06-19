@@ -4,8 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator } from 'lucide-react'; // Adicionado Calculator
-// import InteractiveModuleGuide from '@/components/ai/InteractiveModuleGuide'; // Removido
+import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator, TrendingUp } from 'lucide-react';
 import React, { useState, useEffect } from 'react'; // Importar useState e useEffect
 
 interface QuickAccessCardProps {
@@ -86,6 +85,13 @@ export default function Home() {
       href: '/produtos-servicos/produtos',
       icon: PackageSearch,
       cta: 'Ver Produtos/Serviços',
+    },
+    {
+      title: 'Dashboard Financeiro',
+      description: 'Acompanhe a saúde financeira do seu negócio.',
+      href: '/financeiro/dashboard',
+      icon: TrendingUp,
+      cta: 'Ver Dashboard',
     },
     {
       title: 'Fechamento de Caixa',

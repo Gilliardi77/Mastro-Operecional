@@ -1,8 +1,8 @@
 
 import { ListChecks } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+// import { Button } from '@/components/ui/button'; // Botão removido
+// import Link from 'next/link'; // Link removido
 
 export default function LancamentosFinanceirosPage() {
   return (
@@ -18,14 +18,17 @@ export default function LancamentosFinanceirosPage() {
       </section>
 
       <Card className="shadow-lg">
-        <CardHeader className="flex flex-row justify-between items-center">
+        <CardHeader>
           <div>
             <CardTitle>Histórico de Lançamentos</CardTitle>
-            <CardDescription>Receitas e despesas registradas.</CardDescription>
+            <CardDescription>Receitas e despesas registradas. (Funcionalidade de adicionar lançamentos manuais em desenvolvimento)</CardDescription>
           </div>
+          {/* O botão de adicionar despesa foi removido pois a rota /financeiro/despesas/nova não existe.
+              A adição manual de lançamentos será centralizada em uma funcionalidade futura.
           <Button asChild variant="outline">
             <Link href="/financeiro/despesas/nova">Adicionar Despesa</Link>
           </Button>
+          */}
         </CardHeader>
         <CardContent>
           <div className="p-8 text-center border-2 border-dashed rounded-md border-muted">
