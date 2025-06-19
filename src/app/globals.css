@@ -8,37 +8,36 @@ body {
 
 @layer base {
   :root {
-    /* Cores Atualizadas conforme PRD e nova cor primária */
     --background: 0 0% 95%;            /* Light Gray #F2F2F2 */
-    --foreground: 0 0% 10%;            /* Dark Gray #1A1A1A (mantido para contraste) */
+    --foreground: 0 0% 10%;            /* Dark Gray #1A1A1A */
 
-    --card: 0 0% 100%;                  /* White cards (mantido) */
-    --card-foreground: 0 0% 10%;       /* Dark gray text on cards (mantido) */
+    --card: 0 0% 100%;                  /* White cards */
+    --card-foreground: 0 0% 10%;       /* Dark gray text on cards */
 
-    --popover: 0 0% 100%;               /* White popovers (mantido) */
-    --popover-foreground: 0 0% 10%;    /* Dark gray text on popovers (mantido) */
+    --popover: 0 0% 100%;               /* White popovers */
+    --popover-foreground: 0 0% 10%;    /* Dark gray text on popovers */
 
-    --primary: 145 46% 30%;             /* Dark Green #297341 */
-    --primary-foreground: 0 0% 98%;     /* Light text on primary (mantido) */
+    --primary: 190 60% 35%;             /* Petroleum Blue */
+    --primary-foreground: 0 0% 98%;     /* Light text on primary */
 
-    --secondary: 0 0% 98%;              /* Very light gray for secondary elements (mantido) */
-    --secondary-foreground: 0 0% 10%;   /* Dark gray text on secondary (mantido) */
+    --secondary: 0 0% 98%;              /* Very light gray for secondary elements */
+    --secondary-foreground: 0 0% 10%;   /* Dark gray text on secondary */
 
-    --muted: 0 0% 92%;                  /* Slightly darker gray than background (mantido) */
-    --muted-foreground: 0 0% 40%;       /* Muted text color (mantido) */
+    --muted: 0 0% 92%;                  /* Slightly darker gray than background */
+    --muted-foreground: 0 0% 40%;       /* Muted text color */
 
-    --accent: 96 46% 82%;              /* Light Olive #D3E8C7 */
-    --accent-foreground: 145 46% 20%;   /* Darker green text on accent (ajustado para contraste com nova primária) */
+    --accent: 96 46% 82%;              /* Light Olive */
+    --accent-foreground: 0 0% 15%;      /* Darker gray/green text on accent */
 
-    --destructive: 0 70% 50%;           /* Standard red (mantido) */
-    --destructive-foreground: 0 0% 98%; /* Light text on destructive (mantido) */
+    --destructive: 0 70% 50%;           /* Standard red */
+    --destructive-foreground: 0 0% 98%; /* Light text on destructive */
 
-    --success: 145 63% 42%;             /* Vibrant green for success actions (mantido, já é um verde bom) */
-    --success-foreground: 0 0% 100%;    /* White text on success (mantido) */
+    --success: 145 63% 42%;             /* Vibrant green for success actions */
+    --success-foreground: 0 0% 100%;    /* White text on success */
 
-    --border: 0 0% 88%;                 /* Border color, subtle gray (mantido) */
-    --input: 0 0% 98%;                  /* Input background, very light (mantido) */
-    --ring: 145 46% 35%;                /* Ring color for focus states, related to new primary */
+    --border: 0 0% 88%;                 /* Border color, subtle gray */
+    --input: 0 0% 98%;                  /* Input background, very light */
+    --ring: 190 60% 40%;                /* Ring color for focus states, related to primary */
     
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -50,46 +49,45 @@ body {
     /* Sidebar variables */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 145 46% 30%; /* Alinhado com a nova cor primária */
+    --sidebar-primary: 190 60% 35%; /* Alinhado com a cor primária original */
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 96 46% 90%; /* Um tom mais claro de Light Olive para acentos de sidebar */
-    --sidebar-accent-foreground: 145 46% 20%; /* Darker green text on sidebar accent */
+    --sidebar-accent-foreground: 0 0% 15%; /* Darker gray/green text on sidebar accent */
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 145 46% 35%; /* Alinhado com a nova cor primária */
+    --sidebar-ring: 190 60% 40%; /* Alinhado com a cor primária original */
   }
 
   .dark {
-    /* Cores Atualizadas para Dark Mode conforme PRD e nova cor primária */
-    --background: 0 0% 10%;            /* Dark Gray (um pouco mais claro que o foreground do light) */
-    --foreground: 0 0% 95%;            /* Light Gray */
+    --background: 0 0% 10%;
+    --foreground: 0 0% 95%;
 
-    --card: 0 0% 12%;                   /* Darker cards */
-    --card-foreground: 0 0% 95%;        /* Light text on cards */
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 12%;                /* Darker popovers */
-    --popover-foreground: 0 0% 95%;     /* Light text on popovers */
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 145 46% 40%;             /* Lighter Dark Green for dark mode */
-    --primary-foreground: 0 0% 98%;     /* Light text on primary (mantido) */
+    --primary: 190 60% 45%; /* Lighter Petroleum Blue for dark mode */
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 0 0% 18%;              /* Darker secondary */
-    --secondary-foreground: 0 0% 95%;   /* Light text on secondary */
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 95%;
 
-    --muted: 0 0% 20%;                  /* Darker muted */
-    --muted-foreground: 0 0% 65%;       /* Lighter muted text */
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 96 46% 40%;               /* Darker Light Olive */
-    --accent-foreground: 0 0% 98%;      /* Light text on accent (mantido) */
+    --accent: 96 46% 50%; /* Darker Light Olive for dark mode */
+    --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 70% 40%;           /* Darker red */
-    --destructive-foreground: 0 0% 98%; /* Light text on destructive (mantido) */
+    --destructive: 0 70% 40%;
+    --destructive-foreground: 0 0% 98%;
 
-    --success: 145 50% 50%;             /* Slightly lighter/less saturated green for dark mode */
-    --success-foreground: 0 0% 100%;    /* White text on success */
+    --success: 145 50% 50%;
+    --success-foreground: 0 0% 100%;
 
-    --border: 0 0% 22%;                 /* Darker border */
-    --input: 0 0% 18%;                  /* Darker input background */
-    --ring: 145 46% 45%;                /* Lighter ring for dark mode, related to new primary */
+    --border: 0 0% 22%;
+    --input: 0 0% 18%;
+    --ring: 190 60% 50%;
 
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -100,12 +98,12 @@ body {
     /* Sidebar dark variables */
     --sidebar-background: 0 0% 12%;
     --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 145 46% 40%; /* Alinhado com a nova cor primária dark */
+    --sidebar-primary: 190 60% 45%; /* Alinhado com a cor primária original dark */
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 96 46% 30%; /* Um tom mais escuro de Light Olive para acentos de sidebar dark */
-    --sidebar-accent-foreground: 0 0% 98%; /* Light text on sidebar accent (mantido) */
+    --sidebar-accent: 96 46% 40%; /* Um tom mais escuro de Light Olive para acentos de sidebar dark */
+    --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 22%;
-    --sidebar-ring: 145 46% 45%; /* Alinhado com a nova cor primária dark */
+    --sidebar-ring: 190 60% 50%; /* Alinhado com a cor primária original dark */
   }
 }
 
