@@ -57,7 +57,7 @@ import { cn } from '@/lib/utils';
 
 import { 
   type OrdemServico as OrdemServicoOriginal, 
-  OrdemServicoStatusEnum, 
+  OrdemServicoStatusEnum, // Importado aqui
   updateOrdemServico,
   getOrdemServicoById,
   PagamentoOsSchema,
@@ -170,7 +170,7 @@ export default function ProducaoPage() {
       if (timestampField && typeof timestampField.toDate === 'function') {
         return timestampField.toDate();
       }
-      console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido. Usando data padrão: ${defaultDateVal.toISOString()}`);
+      console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido na OP ID ${viewingOrder?.id || 'desconhecido'}. Usando data padrão: ${defaultDateVal.toISOString()}`);
       return defaultDateVal;
   };
 
@@ -217,7 +217,7 @@ export default function ProducaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast, bypassAuth, viewingOrder?.id]); // Adicionado viewingOrder?.id para contexto no safeToDate
 
   useEffect(() => {
     if (user || bypassAuth) {
@@ -252,10 +252,10 @@ export default function ProducaoPage() {
     } catch (error: any) {
       const errorMessage = (error as Error).message || 'Erro desconhecido';
       if (errorMessage.includes("Missing or insufficient permissions")) {
-        console.warn(`[Permissão Negada] Falha ao atualizar status da OS Original ${osId} para ${newStatus}. Usuário atual: ${user?.uid}. Verifique a propriedade 'userId' na OS.`, error);
+        console.warn(`[Permissão Negada] Falha ao atualizar status da OS Original ${osId} para ${newStatus}. Usuário atual: ${user?.uid}. Verifique a propriedade 'userId' na OS ou se a OS existe.`, error);
         toast({
           title: `Permissão Negada (OS Original)`,
-          description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para "${newStatus}". Verifique se você é o proprietário desta OS.`,
+          description: `Não foi possível atualizar o status da OS #${osId.substring(0,6)}... para "${newStatus}". Verifique se você é o proprietário desta OS ou se ela existe.`,
           variant: "destructive",
           duration: 7000,
         });
@@ -342,13 +342,14 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
         const osData = await getOrdemServicoById(order.agendamentoId);
         if (!osData) {
             toast({ title: "Erro", description: "Ordem de Serviço original não encontrada.", variant: "destructive" });
+            setIsSubmitting(false);
             return;
         }
         setOsForFinalPayment(osData);
         setOrderForFinalPayment(order);
 
         const valorPendente = osData.valorTotal - (osData.valorPagoTotal || 0);
-        if (valorPendente <= 0) { // Já está pago ou com crédito
+        if (valorPendente <= 0) { 
             await completeProductionAndOS(order);
         } else {
             finalPaymentForm.reset({
@@ -378,7 +379,6 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
     }
 
     try {
-        // 1. Criar lançamento financeiro
         await createLancamentoFinanceiro(userIdToSave, {
             titulo: `Pagamento Final OS #${osForFinalPayment.numeroOS.substring(0,6)}`,
             valor: paymentData.valorPago,
@@ -391,17 +391,15 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
             descricao: paymentData.observacoesPagamento || "",
         });
 
-        // 2. Atualizar OS
         const valorTotalPagoAtualizado = (osForFinalPayment.valorPagoTotal || 0) + paymentData.valorPago;
         await updateOrdemServico(osForFinalPayment.id, {
             valorPagoTotal: valorTotalPagoAtualizado,
-            statusPagamento: PaymentStatusEnum.Enum['Pago Total'], // Assumindo que este pagamento quita
+            statusPagamento: PaymentStatusEnum.Enum['Pago Total'], 
             dataUltimoPagamento: paymentData.dataPagamento,
             formaUltimoPagamento: paymentData.formaPagamento,
             observacoesPagamento: paymentData.observacoesPagamento,
         });
         
-        // 3. Concluir Produção e OS, e baixar estoque
         await completeProductionAndOS(orderForFinalPayment);
 
         setIsFinalPaymentModalOpen(false);
@@ -416,12 +414,11 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
   };
 
 
-  const processCompletion = async (order: ProductionOrder, newProgress?: number) => {
+const processCompletion = async (order: ProductionOrder, newProgress?: number) => {
     const progressToUse = newProgress !== undefined ? newProgress : (order.progresso ?? 0);
     if (progressToUse === 100 || getStatusFromProgress(progressToUse) === "Concluído") {
         await handleOpenFinalPaymentModal(order);
     } else {
-        // Se não for 100%, apenas atualiza o status da OP e OS (sem pagamento)
         const { db: dbInstance } = getFirebaseInstances();
         if (!dbInstance) {
             toast({ title: "Erro de Firebase", description: "DB não disponível.", variant: "destructive" });
@@ -487,12 +484,9 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
         const newStatus = getStatusFromProgress(editingOrderDetails.progresso);
         
         if (newStatus === "Concluído" && viewingOrder.status !== "Concluído") {
-            // Se está sendo marcado como concluído via modal de detalhes
-            setIsViewModalOpen(false); // Fecha o modal de detalhes
-            await handleOpenFinalPaymentModal(viewingOrder); // Abre o modal de pagamento
-            // O restante do fluxo (atualizar OP, OS, estoque) será tratado por handleFinalPaymentSubmit ou completeProductionAndOS
+            setIsViewModalOpen(false); 
+            await handleOpenFinalPaymentModal(viewingOrder); 
         } else {
-            // Se não está concluindo ou já estava concluído, apenas salva os detalhes da OP
             const docRef = doc(dbInstance, "ordensDeProducao", viewingOrder.id);
             await updateDoc(docRef, {
                 progresso: editingOrderDetails.progresso,
@@ -788,6 +782,3 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     </div>
   );
 }
-
-
-    
