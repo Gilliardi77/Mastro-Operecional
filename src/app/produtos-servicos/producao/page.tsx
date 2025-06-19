@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
+import { getFirebaseInstances } from '@/lib/firebase';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -116,7 +116,7 @@ export default function ProducaoPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<ProductionOrder | null>(null);
   const [editingOrderDetails, setEditingOrderDetails] = useState<EditingOrderState | null>(null);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false); // Added state for modal visibility
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
 
   const bypassAuth = true;
@@ -155,14 +155,23 @@ export default function ProducaoPage() {
       const querySnapshot = await getDocs(q);
       const fetchedOrders = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<ProductionOrderFirestore, 'id'>;
+
+        const safeToDate = (timestampField: any, fieldName: string, defaultDateVal: Date): Date => {
+          if (timestampField && typeof timestampField.toDate === 'function') {
+            return timestampField.toDate();
+          }
+          console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido no documento ${docSnap.id}. Usando data padrão: ${defaultDateVal.toISOString()}`);
+          return defaultDateVal;
+        };
+
         return {
           id: docSnap.id,
           ...data,
           progresso: data.progresso ?? 0,
           observacoesProducao: data.observacoesProducao ?? '',
-          dataAgendamento: data.dataAgendamento.toDate(),
-          criadoEm: data.criadoEm.toDate(),
-          atualizadoEm: data.atualizadoEm.toDate(),
+          dataAgendamento: safeToDate(data.dataAgendamento, 'dataAgendamento', new Date(0)), // Epoch for problematic main date
+          criadoEm: safeToDate(data.criadoEm, 'criadoEm', new Date()), // Current date as fallback
+          atualizadoEm: safeToDate(data.atualizadoEm, 'atualizadoEm', new Date()), // Current date as fallback
         } as ProductionOrder;
       });
       setProductionOrders(fetchedOrders);
@@ -566,3 +575,4 @@ export default function ProducaoPage() {
     </div>
   );
 }
+
