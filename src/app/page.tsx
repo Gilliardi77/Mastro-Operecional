@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator, TrendingUp } from 'lucide-react';
+import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator, TrendingUp, Settings, ActivitySquare } from 'lucide-react'; // Adicionado LayoutGrid e Settings
 import React, { useState, useEffect } from 'react'; // Importar useState e useEffect
 
 interface QuickAccessCardProps {
@@ -52,6 +52,20 @@ export default function Home() {
 
   const quickAccessItems: QuickAccessCardProps[] = [
     {
+      title: 'Dashboard Operacional',
+      description: 'Visão geral das atividades diárias do seu negócio.',
+      href: '/produtos-servicos',
+      icon: LayoutGrid,
+      cta: 'Ver Dashboard',
+    },
+    {
+      title: 'Controle de Produção',
+      description: 'Acompanhe e gerencie o progresso das suas ordens de produção.',
+      href: '/produtos-servicos/producao',
+      icon: Settings, // Ou ActivitySquare, se preferir algo mais relacionado a processos
+      cta: 'Acessar Produção',
+    },
+    {
       title: 'Nova Ordem de Serviço',
       description: 'Crie e gerencie ordens de serviço para seus clientes.',
       href: '/produtos-servicos/atendimentos/novo',
@@ -91,7 +105,7 @@ export default function Home() {
       description: 'Acompanhe a saúde financeira do seu negócio.',
       href: '/financeiro/dashboard',
       icon: TrendingUp,
-      cta: 'Ver Dashboard',
+      cta: 'Ver Dashboard Fin.',
     },
     {
       title: 'Fechamento de Caixa',
@@ -129,3 +143,4 @@ export default function Home() {
     </div>
   );
 }
+
