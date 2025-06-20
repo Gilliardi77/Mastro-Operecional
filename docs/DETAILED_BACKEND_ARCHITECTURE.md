@@ -2,7 +2,7 @@
 # Documento Técnico de Backend - Ecossistema Business Maestro
 
 **Versão:** 1.2
-**Data da Última Atualização:** 05 de Agosto de 2024
+**Data da Última Atualização:** 20 de Junho de 2025
 
 ## 0. Introdução
 
@@ -402,11 +402,11 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **Operações (CRUD):**
     *   **CREATE:**
         *   **Quem executa:** Usuário final (via UI "Maestro Operacional", ex: Nova OS, ou transformação de Venda Balcão em OS). Automação (se um Agendamento com `geraOrdemProducao` for `true` também gerar uma OS base).
-        *   **Observação:** Se `valorAdiantado` > 0, um `lancamentoFinanceiro` do tipo "receita" e categoria "Adiantamento OS" é criado automaticamente com a `formaPrimeiroPagamento` e `dataPrimeiroPagamento` (data atual).
+        *   **Observação:** Se `valorAdiantado` > 0, um `lancamentoFinanceiro` do tipo "receita" é criado automaticamente com a `formaPrimeiroPagamento`.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **READ, UPDATE, DELETE:**
         *   **Quem executa:** Usuário final (via UI "Maestro Operacional").
-        *   **Observação UPDATE:** Ao registrar pagamentos subsequentes (ex: na listagem de OS ou ao concluir OP), os campos `valorPagoTotal`, `statusPagamento`, `dataUltimoPagamento`, `formaUltimoPagamento`, `observacoesPagamento` são atualizados, e um `lancamentoFinanceiro` (categoria "Receita de OS") é gerado.
+        *   **Observação UPDATE:** Ao registrar pagamentos subsequentes, os campos `valorPagoTotal`, `statusPagamento`, `dataUltimoPagamento`, `formaUltimoPagamento`, `observacoesPagamento` são atualizados, e um `lancamentoFinanceiro` é gerado.
         *   **Apps que utilizam:** "Maestro Operacional".
 *   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `ordensServico.regras`)
     ```firestore
@@ -451,7 +451,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
         *   **Apps que utilizam:** "Maestro Operacional" (indiretamente).
     *   **READ, UPDATE:**
         *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" - Módulo de Produção).
-        *   **Observação UPDATE:** Ao atualizar o status da OP para "Concluído" (progresso 100%), o sistema verifica o `statusPagamento` da `ordensServico` original. Se houver saldo devedor na OS, um modal é apresentado para registrar o pagamento final (valor, forma de pagamento, data). Somente após o registro do pagamento (se necessário) ou se a OS já estiver totalmente paga, a OP tem seu status atualizado para "Concluído", a `ordensServico` original é marcada como "Concluído", e a baixa de estoque dos produtos da OS é realizada.
+        *   **Observação UPDATE:** Ao atualizar o status para "Concluído" (progresso 100%), o sistema verifica o `statusPagamento` da `ordensServico` original. Se houver saldo pendente, um modal para registrar o pagamento final é apresentado. Somente após o pagamento (se necessário) ou se já estiver pago, a OP e a OS são efetivamente marcadas como "Concluído" e a baixa de estoque é realizada.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **DELETE:**
         *   **Quem executa:** Geralmente não aplicável, exceto por Admin ou se a OS original for cancelada.
@@ -615,9 +615,9 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **Campos:** (Baseado em `fechamentoCaixaSchema.ts`)
     *   `userId` (String): [Obrigatório] ID do usuário Business Maestro proprietário deste fechamento.
     *   `dataFechamento` (Timestamp): [Obrigatório] Data e hora em que o fechamento foi realizado.
-    *   `totalEntradasCalculado` (Number): [Obrigatório] Somatório de todas as entradas (receitas efetivadas no dia, calculado com base em `lancamentosFinanceiros` de receita e `vendas` PDV que não geraram lançamentos).
+    *   `totalEntradasCalculado` (Number): [Obrigatório] Somatório de todas as entradas (receitas efetivadas no dia, considerando `lancamentosFinanceiros` e `vendas` que não geraram lançamentos).
     *   `totalSaidasCalculado` (Number): [Obrigatório] Somatório de todas as saídas (despesas pagas) do dia, calculado pelo sistema com base nos `lancamentosFinanceiros`.
-    *   `trocoInicial` (Number): [Opcional, Default: 0] Valor do troco inicial no caixa, informado manualmente. Sugerido com base no saldo final do último fechamento registrado, independentemente do dia.
+    *   `trocoInicial` (Number): [Opcional, Default: 0] Valor do troco inicial no caixa, informado manualmente. Sugerido com base no saldo final do último fechamento.
     *   `sangrias` (Number): [Opcional, Default: 0] Total de retiradas manuais (sangrias) do caixa durante o dia, informado manualmente.
     *   `saldoFinalCalculado` (Number): [Obrigatório] Saldo final do caixa calculado: `(totalEntradasCalculado + trocoInicial) - totalSaidasCalculado - sangrias`.
     *   `entradasPorMetodo` (Object): [Obrigatório] Detalhamento das entradas por método de pagamento, baseado nas `vendas` e `lancamentosFinanceiros` (receitas) do dia. Contém:
@@ -637,7 +637,7 @@ A seguir, uma lista das principais coleções de dados no Firestore utilizadas p
 *   **Operações (CRUD):**
     *   **CREATE:**
         *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" na página de Fechamento de Caixa).
-        *   **Observação:** Múltiplos fechamentos no mesmo dia são permitidos. Um diálogo de confirmação é apresentado antes de salvar, e um aviso informa se já existem fechamentos para o dia.
+        *   **Observação:** Múltiplos fechamentos no mesmo dia são permitidos (ex: para correções). Um diálogo de confirmação é apresentado antes de salvar.
         *   **Apps que utilizam:** "Maestro Operacional".
     *   **READ:**
         *   **Quem executa:** Usuário final (para histórico de fechamentos), "Visão Clara Financeira" (para análises e relatórios), "Diagnóstico Maestro" (IA pode usar para entender fluxo de caixa).
@@ -819,4 +819,3 @@ vendas --1:N-- lancamentosFinanceiros
 
 Este documento serve como um guia técnico detalhado e deve ser mantido atualizado à medida que o ecossistema Business Maestro evolui. Sempre consulte `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` para as especificações canônicas de coleções e regras.
 
-    

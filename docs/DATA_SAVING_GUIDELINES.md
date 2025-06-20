@@ -1,7 +1,7 @@
 
 # Diretrizes para Salvamento de Dados no Ecossistema Gestor Maestro
 
-**Data da Última Revisão:** 05 de Agosto de 2024
+**Data da Última Revisão:** 20 de Junho de 2025
 
 Este documento fornece orientações essenciais para todos os aplicativos do ecossistema Gestor Maestro (Diagnóstico Maestro, Visão Clara Financeira, Maestro Operacional, etc.) sobre como os dados devem ser salvos no Firebase Firestore compartilhado. A adesão a estas diretrizes é crucial para garantir a consistência, integridade e interoperabilidade dos dados entre os módulos.
 
@@ -94,4 +94,3 @@ Para que a importação de dados na página `/goals` do "Diagnóstico Maestro" f
 
 Aderindo a estas diretrizes, podemos construir um ecossistema de aplicativos robusto, confiável e fácil de manter.
 
-    
