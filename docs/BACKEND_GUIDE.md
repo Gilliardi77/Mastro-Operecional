@@ -371,10 +371,10 @@ Esta seção destaca alguns fluxos de dados importantes dentro do aplicativo "Ma
 *   **Página:** `/financeiro/fechamento-caixa`
 *   **Fluxo:**
     1.  O sistema calcula `totalEntradasCalculado` (somando `lancamentosFinanceiros` do tipo "receita" e status "recebido" do dia, e vendas PDV do dia que não geraram lançamentos como uma contingência) e `totalSaidasCalculado` (somando `lancamentosFinanceiros` do tipo "despesa" e status "pago" do dia).
-    2.  O usuário informa `trocoInicial` (sugerido com base no último fechamento) e `sangrias`.
+    2.  O usuário informa `trocoInicial` (sugerido com base no último fechamento registrado, independentemente do dia) e `sangrias`.
     3.  O `saldoFinalCalculado` é exibido.
     4.  Um resumo de `entradasPorMetodo` (dinheiro, pix, cartão, boleto, transferência, etc.) é apresentado, baseado nas `formaPagamento` dos `lancamentosFinanceiros` de receita e das `vendas`.
-    5.  Múltiplos fechamentos no mesmo dia são permitidos.
+    5.  Múltiplos fechamentos no mesmo dia são permitidos, com avisos apropriados.
 *   **Impacto:** Fornece um resumo diário das movimentações financeiras. A precisão do `entradasPorMetodo` depende da correta atribuição de `formaPagamento` nos `lancamentosFinanceiros`.
 
 Estes fluxos demonstram como as operações e finanças estão interligadas, com lançamentos financeiros sendo gerados automaticamente em momentos chave para manter a integridade dos dados.
@@ -463,3 +463,4 @@ E ele gerará:
 
 **Este guia deve ser seguido integralmente por qualquer IA ou humano que deseje interagir com os dados da aplicação Business Maestro.**
 
+    
