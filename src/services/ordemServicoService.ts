@@ -9,7 +9,7 @@ import {
   PaymentStatusEnum, 
   PagamentoOsSchema, 
   type PagamentoOsFormValues,
-  OrdemServicoStatusEnum
+  OrdemServicoStatusEnum // Mantido para exportação, se necessário em outros lugares
 } from '@/schemas/ordemServicoSchema';
 import {
   createDocument,
@@ -35,10 +35,10 @@ const COLLECTION_NAME = 'ordensServico';
  * @returns A Ordem de Serviço criada.
  */
 export async function createOrdemServico(userId: string, data: OrdemServicoCreateData): Promise<OrdemServico> {
-  // OrdemServicoCreateSchema (passado como createSchema para createDocument)
-  // tem status: OrdemServicoStatusEnum.optional().default("Pendente").
-  // Isso significa que createDocument's call to createSchema.parse(data)
-  // irá garantir que status seja "Pendente" se data.status for undefined.
+  // O schema OrdemServicoCreateSchema (passado para createDocument)
+  // já tem status: OrdemServicoStatusEnum.optional().default("Pendente").
+  // Isso garante que o Zod aplicará "Pendente" se data.status for undefined.
+  // A função createDocument lida com a validação de 'data' contra OrdemServicoCreateSchema.
   return createDocument(COLLECTION_NAME, userId, OrdemServicoCreateSchema, OrdemServicoSchema, data);
 }
 
@@ -63,8 +63,8 @@ export async function getAllOrdensServicoByUserId(
   orderByField: keyof OrdemServico & string = 'createdAt',
   orderDirection: 'asc' | 'desc' = 'desc'
 ): Promise<OrdemServico[]> {
-  // OrdemServicoSchema has a default for 'status', so it should not be undefined after parsing.
-  // The filter is an extra safety measure for type correctness if TS inference is tricky.
+  // OrdemServicoSchema tem um default para 'status', então não deveria ser undefined após o parse.
+  // Este filtro é uma camada extra de segurança para a tipagem TypeScript.
   const ordens = await getAllDocumentsByUserId(COLLECTION_NAME, userId, OrdemServicoSchema, orderByField, orderDirection);
   return ordens.filter(os => os.status !== undefined) as OrdemServico[];
 }
@@ -76,19 +76,9 @@ export async function getAllOrdensServicoByUserId(
  * @returns A OS atualizada.
  */
 export async function updateOrdemServico(id: string, data: OrdemServicoUpdateData): Promise<OrdemServico> {
-  // OrdemServicoUpdateSchema allows status to be optional (meaning "don't update if not provided").
-  // OrdemServicoSchema (used as fullSchema in updateDocument) ensures the returned object has a status.
-  const dataWithoutUndefinedStatus = { ...data };
-  if (dataWithoutUndefinedStatus.status === undefined) {
-    // If status is explicitly undefined in the update payload,
-    // it means "do not update the status field".
-    // We can remove it from the object passed to Firestore if it's truly optional there.
-    // However, our updateSchema allows it to be optional, so Firestore won't update it if not present in dataWithoutUndefinedStatus.
-    // If it *must* be present in the update payload for some reason but means "no change", this logic needs review.
-    // For now, we assume undefined means "don't touch this field".
-    // No action needed here as updateDocument only updates provided fields.
-  }
-  const updatedOS = await updateDocument(COLLECTION_NAME, id, dataWithoutUndefinedStatus, OrdemServicoUpdateSchema, OrdemServicoSchema);
+  // OrdemServicoUpdateSchema permite que status seja opcional (significando "não atualizar se não fornecido").
+  // OrdemServicoSchema (usado como fullSchema no updateDocument) garante que o objeto retornado tenha um status.
+  const updatedOS = await updateDocument(COLLECTION_NAME, id, data, OrdemServicoUpdateSchema, OrdemServicoSchema);
   if (!updatedOS) {
     throw new Error(`Ordem de Serviço com ID ${id} não encontrada após a atualização.`);
   }
@@ -105,6 +95,9 @@ export async function deleteOrdemServico(id: string): Promise<void> {
 
 // Exportar OrdemServicoStatusEnum para uso na ProducaoPage (se necessário)
 // Exportar também PaymentStatusEnum, PagamentoOsSchema e PagamentoOsFormValues
-export { OrdemServicoStatusEnum, PaymentStatusEnum, PagamentoOsSchema, type PagamentoOsFormValues };
-
+export { PaymentStatusEnum, PagamentoOsSchema, type PagamentoOsFormValues };
+// OrdemServicoStatusEnum é exportado implicitamente ao ser importado de '@/schemas/ordemServicoSchema'
+// e não usado diretamente neste arquivo após as simplificações, mas pode ser necessário em outros locais.
+// Para clareza, se for usado por outros módulos através deste serviço, a exportação explícita é boa:
+export { OrdemServicoStatusEnum };
     
