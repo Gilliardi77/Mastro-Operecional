@@ -22,7 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from '@/components/auth/auth-provider';
-import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
+import { getFirebaseInstances } from '@/lib/firebase'; 
 import { collection, addDoc, Timestamp, doc, runTransaction, type Firestore } from "firebase/firestore"; 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
@@ -217,7 +217,7 @@ export default function BalcaoPage() {
     }
 
     try {
-      const dataVenda = Timestamp.now();
+      const dataVendaDate = new Date(); // Usar new Date()
       const clienteSelecionado = fetchedClients.find(c => c.id === selectedClient);
       const clienteNome = selectedClient === "avulso" ? "Cliente Avulso" : clienteSelecionado?.nome || "Não identificado";
 
@@ -236,27 +236,37 @@ export default function BalcaoPage() {
         })),
         totalVenda: totalVenda,
         formaPagamento: paymentMethod,
-        dataVenda: dataVenda,
+        dataVenda: dataVendaDate, // Usar objeto Date
         status: "Concluída",
-        criadoEm: dataVenda,
-        atualizadoEm: dataVenda,
+        // criadoEm e atualizadoEm serão gerenciados pelo firestoreService
       };
-      const vendaDocRef = await addDoc(collection(dbInstance, "vendas"), vendaData);
+      // Supondo que createVenda espera VendaCreateData que usa Date para dataVenda
+      const vendaDocRef = await addDoc(collection(dbInstance, "vendas"), {
+          ...vendaData, 
+          criadoEm: Timestamp.fromDate(dataVendaDate), // firestoreService faria isso, mas como usamos addDoc direto...
+          atualizadoEm: Timestamp.fromDate(dataVendaDate)
+      });
+
 
       const lancamentoReceita = {
         userId: userIdToSave,
         titulo: `Venda Balcão #${vendaDocRef.id.substring(0,6)} - ${clienteNome}`,
         valor: totalVenda,
         tipo: 'receita' as 'receita' | 'despesa',
-        data: dataVenda,
+        data: dataVendaDate, // Usar objeto Date
         categoria: "Venda Balcão",
         status: paymentMethod === "boleto" ? 'pendente' : 'recebido' as 'pago' | 'recebido' | 'pendente',
         descricao: `Venda realizada no balcão. Cliente: ${clienteNome}. Itens: ${cartItems.map(i => i.nome).join(', ')}.`,
         vendaId: vendaDocRef.id,
-        criadoEm: dataVenda,
-        atualizadoEm: dataVenda,
+        // criadoEm e atualizadoEm serão gerenciados pelo firestoreService ao chamar createLancamentoFinanceiro
       };
-      await addDoc(collection(dbInstance, "lancamentosFinanceiros"), lancamentoReceita);
+      // Supondo que createLancamentoFinanceiro espera LancamentoFinanceiroCreateData
+      await addDoc(collection(dbInstance, "lancamentosFinanceiros"), {
+        ...lancamentoReceita,
+        criadoEm: Timestamp.fromDate(dataVendaDate), // Novamente, se createLancamentoFinanceiro for usado, não precisaríamos disto
+        atualizadoEm: Timestamp.fromDate(dataVendaDate)
+      });
+
 
       for (const item of cartItems) {
         if (item.productId && !item.manual && item.productType === 'Produto') {
@@ -273,7 +283,7 @@ export default function BalcaoPage() {
               const novoEstoque = estoqueAtual - item.quantidade;
               transaction.update(productRef, { 
                 quantidadeEstoque: novoEstoque,
-                atualizadoEm: Timestamp.now()
+                atualizadoEm: Timestamp.now() 
               });
             });
             console.log(`Estoque do produto ${item.nome} atualizado.`);
@@ -598,3 +608,4 @@ export default function BalcaoPage() {
     </div>
   );
 }
+

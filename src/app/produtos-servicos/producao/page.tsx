@@ -67,10 +67,10 @@ import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroServi
 import {
   type ItemOS,
   type OrdemServicoStatus,
-  OrdemServicoStatusEnum, // Importação direta
-  PaymentStatusEnum,      // Importação direta
-  PagamentoOsSchema,      // Importação direta
-  type PagamentoOsFormValues // Importação direta (tipo)
+  PagamentoOsSchema,
+  type PagamentoOsFormValues,
+  OrdemServicoStatusEnum, // Importar o enum Zod para acessar os valores
+  PaymentStatusEnum
 } from '@/schemas/ordemServicoSchema';
 
 
@@ -173,11 +173,12 @@ export default function ProducaoPage() {
   });
 
   const safeToDate = (timestampField: any, fieldName: string, defaultDateVal: Date): Date => {
-      if (timestampField && typeof timestampField.toDate === 'function') {
-        return timestampField.toDate();
-      }
-      console.warn(`[ProducaoPage] Campo de timestamp '${fieldName}' ausente ou inválido. Usando data padrão: ${defaultDateVal.toISOString()}`);
-      return defaultDateVal;
+    if (timestampField && typeof timestampField.toDate === 'function') {
+      return timestampField.toDate();
+    }
+    const defaultValToUse = fieldName === 'dataAgendamento' ? new Date(0) : defaultDateVal;
+    console.warn(`[ProducaoPage] Campo Timestamp '${fieldName}' ausente ou inválido para OP ID ${viewingOrder?.id || 'desconhecido'}. Usando data padrão: ${defaultValToUse.toISOString()}`);
+    return defaultValToUse;
   };
 
   const fetchProductionOrders = useCallback(async () => {
@@ -223,7 +224,7 @@ export default function ProducaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast, bypassAuth, viewingOrder?.id]); // viewingOrder?.id adicionado para referência no safeToDate
 
   useEffect(() => {
     if (user || bypassAuth) {
@@ -333,7 +334,6 @@ export default function ProducaoPage() {
         progresso: 100,
         atualizadoEm: Timestamp.now()
     });
-    // Uso direto do valor string do enum
     await updateOriginalOSStatusViaService(productionOrder.agendamentoId, OrdemServicoStatusEnum.Enum.Concluído);
     await performStockDeduction(productionOrder.agendamentoId);
     toast({ title: "Produção Concluída!", description: `Ordem de produção e OS #${productionOrder.agendamentoId.substring(0,6)}... concluídas.` });
@@ -389,7 +389,7 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
             titulo: `Pagamento Final OS #${osForFinalPayment.numeroOS.substring(0,6)}`,
             valor: paymentData.valorPago,
             tipo: 'receita',
-            data: paymentData.dataPagamento,
+            data: paymentData.dataPagamento, // Passando objeto Date diretamente
             categoria: "Receita de OS (Final)",
             status: 'recebido',
             referenciaOSId: osForFinalPayment.id,
@@ -400,8 +400,8 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
         const valorTotalPagoAtualizado = (osForFinalPayment.valorPagoTotal || 0) + paymentData.valorPago;
         await updateOrdemServico(osForFinalPayment.id, {
             valorPagoTotal: valorTotalPagoAtualizado,
-            statusPagamento: PaymentStatusEnum.Enum['Pago Total'], // Usando o enum Zod
-            dataUltimoPagamento: paymentData.dataPagamento,
+            statusPagamento: PaymentStatusEnum.Enum['Pago Total'],
+            dataUltimoPagamento: paymentData.dataPagamento, // Passando objeto Date diretamente
             formaUltimoPagamento: paymentData.formaPagamento,
             observacoesPagamento: paymentData.observacoesPagamento,
         });
@@ -776,7 +776,8 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsFinalPaymentModalOpen(false)} disabled={isSubmitting}>Cancelar</Button>
                             <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Confirmar Pagamento e Concluir
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Confirmar Pagamento e Concluir
                             </Button>
                         </DialogFooter>
                     </form>
