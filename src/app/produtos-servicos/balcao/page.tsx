@@ -28,6 +28,7 @@ import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
 import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
 import type { ProductService } from '@/schemas/productServiceSchema'; 
+import CashBoxGuard from "@/components/cash-box/CashBoxGuard";
 
 interface CartItem {
   id: string;
@@ -47,6 +48,8 @@ const paymentMethods = [
   { value: "cartao_debito", label: "Cartão de Débito" },
   { value: "pix", label: "PIX" },
   { value: "boleto", label: "Boleto (Prazo)" },
+  { value: "transferencia", label: "Transferência Bancária" },
+  { value: "outro", label: "Outro" },
 ];
 
 export default function BalcaoPage() {
@@ -217,7 +220,7 @@ export default function BalcaoPage() {
     }
 
     try {
-      const dataVendaDate = new Date(); // Usar new Date()
+      const dataVendaDate = new Date();
       const clienteSelecionado = fetchedClients.find(c => c.id === selectedClient);
       const clienteNome = selectedClient === "avulso" ? "Cliente Avulso" : clienteSelecionado?.nome || "Não identificado";
 
@@ -236,14 +239,12 @@ export default function BalcaoPage() {
         })),
         totalVenda: totalVenda,
         formaPagamento: paymentMethod,
-        dataVenda: dataVendaDate, // Usar objeto Date
+        dataVenda: dataVendaDate,
         status: "Concluída",
-        // criadoEm e atualizadoEm serão gerenciados pelo firestoreService
       };
-      // Supondo que createVenda espera VendaCreateData que usa Date para dataVenda
       const vendaDocRef = await addDoc(collection(dbInstance, "vendas"), {
           ...vendaData, 
-          criadoEm: Timestamp.fromDate(dataVendaDate), // firestoreService faria isso, mas como usamos addDoc direto...
+          criadoEm: Timestamp.fromDate(dataVendaDate),
           atualizadoEm: Timestamp.fromDate(dataVendaDate)
       });
 
@@ -253,17 +254,16 @@ export default function BalcaoPage() {
         titulo: `Venda Balcão #${vendaDocRef.id.substring(0,6)} - ${clienteNome}`,
         valor: totalVenda,
         tipo: 'receita' as 'receita' | 'despesa',
-        data: dataVendaDate, // Usar objeto Date
+        data: dataVendaDate,
         categoria: "Venda Balcão",
         status: paymentMethod === "boleto" ? 'pendente' : 'recebido' as 'pago' | 'recebido' | 'pendente',
         descricao: `Venda realizada no balcão. Cliente: ${clienteNome}. Itens: ${cartItems.map(i => i.nome).join(', ')}.`,
         vendaId: vendaDocRef.id,
-        // criadoEm e atualizadoEm serão gerenciados pelo firestoreService ao chamar createLancamentoFinanceiro
+        formaPagamento: paymentMethod,
       };
-      // Supondo que createLancamentoFinanceiro espera LancamentoFinanceiroCreateData
       await addDoc(collection(dbInstance, "lancamentosFinanceiros"), {
         ...lancamentoReceita,
-        criadoEm: Timestamp.fromDate(dataVendaDate), // Novamente, se createLancamentoFinanceiro for usado, não precisaríamos disto
+        criadoEm: Timestamp.fromDate(dataVendaDate),
         atualizadoEm: Timestamp.fromDate(dataVendaDate)
       });
 
@@ -366,246 +366,247 @@ export default function BalcaoPage() {
 
 
   return (
-    <div className="grid md:grid-cols-3 gap-6">
-      <div className="md:col-span-2 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Balcão de Vendas</CardTitle>
-            <CardDescription>
-              Registre vendas rapidamente. Vendas atualizam o financeiro. Adicione itens do catálogo ou manualmente. Cliente opcional.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <div className="relative flex-grow min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar produto ou serviço..."
-                  className="pl-10"
-                  value={searchTermProducts}
-                  onChange={(e) => setSearchTermProducts(e.target.value)}
-                />
+    <CashBoxGuard>
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Balcão de Vendas</CardTitle>
+              <CardDescription>
+                Registre vendas rapidamente. Vendas atualizam o financeiro. Adicione itens do catálogo ou manualmente. Cliente opcional.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <div className="relative flex-grow min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar produto ou serviço..."
+                    className="pl-10"
+                    value={searchTermProducts}
+                    onChange={(e) => setSearchTermProducts(e.target.value)}
+                  />
+                </div>
+                <Button variant="outline" size="icon" aria-label="Scan Barcode" disabled>
+                  <ScanLine className="h-5 w-5" />
+                </Button>
+                <Button variant="outline" onClick={() => setIsManualItemModalOpen(true)}>
+                  <Edit className="mr-2 h-4 w-4" /> Adicionar Item Manual
+                </Button>
               </div>
-              <Button variant="outline" size="icon" aria-label="Scan Barcode" disabled>
-                <ScanLine className="h-5 w-5" />
-              </Button>
-              <Button variant="outline" onClick={() => setIsManualItemModalOpen(true)}>
-                <Edit className="mr-2 h-4 w-4" /> Adicionar Item Manual
-              </Button>
-            </div>
 
-            {(isLoadingProducts || isLoadingClients) && (
-              <div className="flex justify-center items-center h-40">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-2">Carregando dados...</p>
+              {(isLoadingProducts || isLoadingClients) && (
+                <div className="flex justify-center items-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="ml-2">Carregando dados...</p>
+                </div>
+              )}
+
+              {!isLoadingProducts && filteredAvailableProducts.length === 0 && (
+                <div className="text-center py-10">
+                  <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {availableProducts.length === 0 ? "Nenhum produto ou serviço cadastrado." : "Nenhum item encontrado para a busca."}
+                  </p>
+                  <Button onClick={() => router.push('/produtos-servicos/produtos')} className="mt-4">Cadastrar Produtos/Serviços</Button>
+                </div>
+              )}
+
+              {!isLoadingProducts && filteredAvailableProducts.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto p-1">
+                  {filteredAvailableProducts.map((product) => (
+                    <Card key={product.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToCart(product)}>
+                      <CardContent className="p-3 flex flex-col items-center text-center">
+                        <Image
+                          src={`https://placehold.co/100x80.png?text=${encodeURIComponent(product.nome.substring(0,12))}`}
+                          alt={product.nome}
+                          width={100}
+                          height={80}
+                          className="rounded-md mb-2 object-cover"
+                          data-ai-hint={product.nome.toLowerCase().split(" ").slice(0,2).join(" ")}
+                        />
+                        <p className="text-sm font-medium truncate w-full" title={product.nome}>{product.nome}</p>
+                        <p className="text-xs text-muted-foreground">R$ {product.valorVenda.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">({product.tipo})</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="md:col-span-1 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumo da Venda</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="cliente">Cliente</Label>
+                <div className="flex gap-2">
+                  <Select value={selectedClient} onValueChange={setSelectedClient} disabled={isLoadingClients}>
+                    <SelectTrigger id="cliente">
+                      <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecionar cliente"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="avulso">Cliente Avulso</SelectItem>
+                      {fetchedClients.map(client => (
+                          <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="icon" aria-label="Adicionar novo cliente" disabled>
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            )}
 
-            {!isLoadingProducts && filteredAvailableProducts.length === 0 && (
-              <div className="text-center py-10">
-                <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {availableProducts.length === 0 ? "Nenhum produto ou serviço cadastrado." : "Nenhum item encontrado para a busca."}
-                </p>
-                <Button onClick={() => router.push('/produtos-servicos/produtos')} className="mt-4">Cadastrar Produtos/Serviços</Button>
-              </div>
-            )}
+              <Separator />
 
-            {!isLoadingProducts && filteredAvailableProducts.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto p-1">
-                {filteredAvailableProducts.map((product) => (
-                  <Card key={product.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToCart(product)}>
-                    <CardContent className="p-3 flex flex-col items-center text-center">
-                      <Image
-                        src={`https://placehold.co/100x80.png?text=${encodeURIComponent(product.nome.substring(0,12))}`}
-                        alt={product.nome}
-                        width={100}
-                        height={80}
-                        className="rounded-md mb-2 object-cover"
-                        data-ai-hint={product.nome.toLowerCase().split(" ").slice(0,2).join(" ")}
-                      />
-                      <p className="text-sm font-medium truncate w-full" title={product.nome}>{product.nome}</p>
-                      <p className="text-xs text-muted-foreground">R$ {product.valorVenda.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">({product.tipo})</p>
-                    </CardContent>
-                  </Card>
+              <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                {cartItems.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-2 rounded-md hover:bg-muted/50">
+                    <div>
+                      <p className="text-sm font-medium">{item.nome} {item.manual && <span className="text-xs text-muted-foreground">(Manual)</span>}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.quantidade} x R$ {item.valorUnitario.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold">R$ {item.valorTotal.toFixed(2)}</p>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
+                {cartItems.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum item na venda.</p>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
-      <div className="md:col-span-1 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Resumo da Venda</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="cliente">Cliente</Label>
-              <div className="flex gap-2">
-                <Select value={selectedClient} onValueChange={setSelectedClient} disabled={isLoadingClients}>
-                  <SelectTrigger id="cliente">
-                    <SelectValue placeholder={isLoadingClients ? "Carregando..." : "Selecionar cliente"} />
+              <Separator />
+
+              <div>
+                <Label htmlFor="paymentMethod">Forma de Pagamento</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger id="paymentMethod">
+                    <SelectValue placeholder="Selecione a forma de pagamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="avulso">Cliente Avulso</SelectItem>
-                    {fetchedClients.map(client => (
-                        <SelectItem key={client.id} value={client.id}>{client.nome}</SelectItem>
+                    {paymentMethods.map(method => (
+                      <SelectItem key={method.value} value={method.value}>
+                        {method.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="icon" aria-label="Adicionar novo cliente" disabled>
-                  <UserPlus className="h-4 w-4" />
-                </Button>
               </div>
-            </div>
 
-            <Separator />
+              <Separator />
 
-            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-              {cartItems.map(item => (
-                <div key={item.id} className="flex justify-between items-center p-2 rounded-md hover:bg-muted/50">
-                  <div>
-                    <p className="text-sm font-medium">{item.nome} {item.manual && <span className="text-xs text-muted-foreground">(Manual)</span>}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.quantidade} x R$ {item.valorUnitario.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">R$ {item.valorTotal.toFixed(2)}</p>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <p className="text-muted-foreground">Subtotal</p>
+                  <p>R$ {totalVenda.toFixed(2)}</p>
                 </div>
-              ))}
-              {cartItems.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhum item na venda.</p>
-              )}
-            </div>
-
-            <Separator />
-
-            <div>
-              <Label htmlFor="paymentMethod">Forma de Pagamento</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger id="paymentMethod">
-                  <SelectValue placeholder="Selecione a forma de pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentMethods.map(method => (
-                    <SelectItem key={method.value} value={method.value}>
-                      {method.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <p className="text-muted-foreground">Subtotal</p>
-                <p>R$ {totalVenda.toFixed(2)}</p>
+                <div className="flex justify-between">
+                  <p className="text-muted-foreground">Desconto</p>
+                  <p className="text-primary cursor-pointer hover:underline">R$ 0,00</p>
+                </div>
+                <div className="flex justify-between text-lg font-bold">
+                  <p>Total</p>
+                  <p>R$ {totalVenda.toFixed(2)}</p>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <p className="text-muted-foreground">Desconto</p>
-                <p className="text-primary cursor-pointer hover:underline">R$ 0,00</p>
-              </div>
-              <div className="flex justify-between text-lg font-bold">
-                <p>Total</p>
-                <p>R$ {totalVenda.toFixed(2)}</p>
-              </div>
-            </div>
 
-            <div className="flex flex-col gap-2">
-                <Button
-                    variant="success"
-                    className="w-full"
-                    size="lg"
-                    onClick={handleFinalizarVenda}
-                    disabled={cartItems.length === 0 || isFinalizingSale}
-                >
-                    {isFinalizingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ShoppingCart className="mr-2 h-5 w-5" />}
-                    {isFinalizingSale ? "Finalizando..." : "Finalizar Venda"}
-                </Button>
-                <Button
-                    variant="default" 
-                    className="w-full"
-                    onClick={handleTransformarEmOS}
-                    disabled={cartItems.length === 0 || isFinalizingSale}
-                >
-                    <FileText className="mr-2 h-4 w-4" /> Transformar em OS
-                </Button>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="flex flex-col gap-2">
+                  <Button
+                      variant="success"
+                      className="w-full"
+                      size="lg"
+                      onClick={handleFinalizarVenda}
+                      disabled={cartItems.length === 0 || isFinalizingSale}
+                  >
+                      {isFinalizingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ShoppingCart className="mr-2 h-5 w-5" />}
+                      {isFinalizingSale ? "Finalizando..." : "Finalizar Venda"}
+                  </Button>
+                  <Button
+                      variant="default" 
+                      className="w-full"
+                      onClick={handleTransformarEmOS}
+                      disabled={cartItems.length === 0 || isFinalizingSale}
+                  >
+                      <FileText className="mr-2 h-4 w-4" /> Transformar em OS
+                  </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Dialog open={isManualItemModalOpen} onOpenChange={setIsManualItemModalOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Adicionar Item Manualmente</DialogTitle>
+              <DialogDescription>
+                Insira os detalhes do produto ou serviço que não está cadastrado.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddManualItem}>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="manualItemName" className="text-right">
+                    Nome
+                  </Label>
+                  <Input
+                    id="manualItemName"
+                    value={manualItemName}
+                    onChange={(e) => setManualItemName(e.target.value)}
+                    className="col-span-3"
+                    placeholder="Nome do Produto/Serviço"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="manualItemQuantity" className="text-right">
+                    Qtd.
+                  </Label>
+                  <Input
+                    id="manualItemQuantity"
+                    type="number"
+                    value={manualItemQuantity}
+                    onChange={(e) => setManualItemQuantity(parseInt(e.target.value, 10) || 1)}
+                    className="col-span-3"
+                    min="1"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="manualItemPrice" className="text-right">
+                    Preço Unit.
+                  </Label>
+                  <Input
+                    id="manualItemPrice"
+                    type="number"
+                    value={manualItemPrice}
+                    onChange={(e) => setManualItemPrice(parseFloat(e.target.value) || 0)}
+                    className="col-span-3"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="R$ 0,00"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button type="submit">Adicionar ao Carrinho</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      <Dialog open={isManualItemModalOpen} onOpenChange={setIsManualItemModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Adicionar Item Manualmente</DialogTitle>
-            <DialogDescription>
-              Insira os detalhes do produto ou serviço que não está cadastrado.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleAddManualItem}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="manualItemName" className="text-right">
-                  Nome
-                </Label>
-                <Input
-                  id="manualItemName"
-                  value={manualItemName}
-                  onChange={(e) => setManualItemName(e.target.value)}
-                  className="col-span-3"
-                  placeholder="Nome do Produto/Serviço"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="manualItemQuantity" className="text-right">
-                  Qtd.
-                </Label>
-                <Input
-                  id="manualItemQuantity"
-                  type="number"
-                  value={manualItemQuantity}
-                  onChange={(e) => setManualItemQuantity(parseInt(e.target.value, 10) || 1)}
-                  className="col-span-3"
-                  min="1"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="manualItemPrice" className="text-right">
-                  Preço Unit.
-                </Label>
-                <Input
-                  id="manualItemPrice"
-                  type="number"
-                  value={manualItemPrice}
-                  onChange={(e) => setManualItemPrice(parseFloat(e.target.value) || 0)}
-                  className="col-span-3"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="R$ 0,00"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancelar</Button>
-              </DialogClose>
-              <Button type="submit">Adicionar ao Carrinho</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </CashBoxGuard>
   );
 }
-

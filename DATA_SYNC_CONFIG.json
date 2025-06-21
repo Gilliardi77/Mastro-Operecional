@@ -70,6 +70,11 @@
       "write": true,
       "regras": "request.auth.uid == resource.data.userId"
     },
+    "sessoesCaixa": {
+      "read": true,
+      "write": true,
+      "regras": "request.auth.uid == resource.data.userId"
+    },
     "contasPagar": {
       "read": true,
       "write": true,

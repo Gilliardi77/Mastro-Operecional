@@ -2,11 +2,11 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Fechamento de Caixa - Maestro Operacional',
-  description: 'Realize o fechamento do caixa diário.',
+  title: 'Gestão de Caixa - Maestro Operacional',
+  description: 'Abra e feche o caixa da sua operação diária.',
 };
 
-export default function FechamentoCaixaLayout({
+export default function GestaoCaixaLayout({
   children,
 }: {
   children: React.ReactNode;
