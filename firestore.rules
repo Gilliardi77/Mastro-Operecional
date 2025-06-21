@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -121,15 +120,22 @@ service cloud.firestore {
       allow read, update, delete: if isUserPrefixOfId(metaId);
     }
 
-    // Nova regra para fechamentosCaixa
     match /fechamentosCaixa/{docId} {
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner();
+    }
+    
+    // Regra para a nova coleção de Sessões de Caixa
+    match /sessoesCaixa/{docId} {
       allow create: if isRequestDataOwner();
       allow read, update, delete: if isResourceOwner();
     }
 
     // ======================= BLOQUEIO PADRÃO =======================
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Descomente a linha abaixo para produção para garantir que nenhuma coleção
+    // fique sem regras de segurança definidas.
+    // match /{document=**} {
+    //   allow read, write: if false;
+    // }
   }
 }

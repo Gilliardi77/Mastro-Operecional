@@ -1,12 +1,15 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
-    "public": ".next", // Aponta o diretório público padrão para .next
-    "site": "gestor-maestro", // Especifica o ID do site do Firebase
+    "public": ".next",
+    "site": "gestor-maestro",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ]
-    // Removemos a seção targets por enquanto para simplificar
   }
 }
