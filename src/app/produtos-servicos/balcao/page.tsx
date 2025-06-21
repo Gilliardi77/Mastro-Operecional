@@ -43,13 +43,13 @@ interface CartItem {
 }
 
 const paymentMethods = [
-  { value: "dinheiro", label: "Dinheiro" },
-  { value: "cartao_credito", label: "Cartão de Crédito" },
-  { value: "cartao_debito", label: "Cartão de Débito" },
-  { value: "pix", label: "PIX" },
-  { value: "boleto", label: "Boleto (Prazo)" },
-  { value: "transferencia_bancaria", label: "Transferência Bancária" },
-  { value: "outro", label: "Outro" },
+    { value: "dinheiro", label: "Dinheiro" },
+    { value: "pix", label: "PIX" },
+    { value: "cartao_credito", label: "Cartão de Crédito" },
+    { value: "cartao_debito", label: "Cartão de Débito" },
+    { value: "boleto", label: "Boleto" },
+    { value: "transferencia_bancaria", label: "Transferência Bancária" },
+    { value: "outro", label: "Outro" },
 ];
 
 export default function BalcaoPage() {
@@ -256,7 +256,7 @@ export default function BalcaoPage() {
         tipo: 'receita' as 'receita' | 'despesa',
         data: dataVendaDate,
         categoria: "Venda Balcão",
-        status: paymentMethod === "boleto" ? 'pendente' : 'recebido' as 'pago' | 'recebido' | 'pendente',
+        status: 'recebido' as 'pago' | 'recebido' | 'pendente',
         descricao: `Venda realizada no balcão. Cliente: ${clienteNome}. Itens: ${cartItems.map(i => i.nome).join(', ')}.`,
         vendaId: vendaDocRef.id,
         formaPagamento: paymentMethod,

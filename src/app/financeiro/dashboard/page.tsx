@@ -1,5 +1,5 @@
 
-import { TrendingUp, Calculator, ListChecks, ExternalLink, History } from 'lucide-react';
+import { TrendingUp, Calculator, ListChecks, ExternalLink, History, ShoppingBag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -17,7 +17,7 @@ export default function DashboardFinanceiroPage() {
         </p>
       </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card className="shadow-lg hover:shadow-xl transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -58,6 +58,26 @@ export default function DashboardFinanceiroPage() {
             <Button asChild className="w-full">
               <Link href="/financeiro/lancamentos">
                 <ListChecks className="mr-2 h-5 w-5" /> Ver Lançamentos
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+         <Card className="shadow-lg hover:shadow-xl transition-shadow">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="h-6 w-6" />
+                Histórico de Vendas
+            </CardTitle>
+            <CardDescription>Consulte o detalhe de todas as vendas realizadas.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
+            <p className="text-sm text-muted-foreground text-center mb-4">
+              Visualize cada venda, incluindo os itens, valores e formas de pagamento.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/financeiro/vendas">
+                <History className="mr-2 h-5 w-5" /> Ver Histórico de Vendas
               </Link>
             </Button>
           </CardContent>

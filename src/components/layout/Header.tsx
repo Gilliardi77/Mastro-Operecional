@@ -7,7 +7,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
-  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase, Calculator, TrendingUp
+  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase, Calculator, TrendingUp, History
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -135,6 +135,12 @@ export default function Header() {
                 <DropdownMenuItem asChild className="sm:hidden">
                   <Link href="/financeiro/dashboard">
                     <TrendingUp className="mr-2 h-4 w-4" /> Financeiro
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/financeiro/vendas">
+                    <History className="mr-2 h-4 w-4" />
+                    <span>Histórico de Vendas</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
