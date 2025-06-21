@@ -144,7 +144,16 @@ export default function OrdemServicoPage() {
 
   // Effect 1: Fetch initial data (clients, catalog, and user profile)
   useEffect(() => {
-    const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : "");
+    // This guard prevents fetching data with a placeholder ID, which would violate Firestore rules.
+    if (bypassAuth && !user) {
+        console.warn("[OrdemServicoPage] Em modo bypass sem usuário. Pulando busca de dados do Firestore para evitar erros de permissão.");
+        setIsLoadingClients(false);
+        setIsLoadingCatalogo(false);
+        setIsLoadingUserProfile(false);
+        return;
+    }
+
+    const userIdToQuery = user?.uid;
     if (!userIdToQuery) {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
@@ -337,15 +346,15 @@ export default function OrdemServicoPage() {
 
 
   async function onOsSubmit(data: OrdemServicoFormValues) {
-    setIsSaving(true);
-    setLastSavedOsData(null);
-    const uid = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!uid) {
-      toast({ title: "Erro de Autenticação", variant: "destructive" });
-      setIsSaving(false);
+    if (!user) {
+      toast({ title: "Ação não permitida", description: "Você precisa estar logado para salvar uma Ordem de Serviço.", variant: "destructive" });
       return;
     }
+    const uid = user.uid;
 
+    setIsSaving(true);
+    setLastSavedOsData(null);
+    
     const selectedClient = data.clienteId && data.clienteId !== "avulso" ? clients.find(c => c.id === data.clienteId) : null;
     const nomeClienteFinal = selectedClient ? selectedClient.nome : (data.clienteNome || "Cliente Avulso");
 
@@ -457,13 +466,14 @@ export default function OrdemServicoPage() {
   }
 
   async function onSaveNewClient(data: NewClientFormValues) {
-    if (!user && !bypassAuth) {
-      toast({ title: "Usuário não autenticado", variant: "destructive" });
+    if (!user) {
+      toast({ title: "Ação não permitida", description: "Você precisa estar logado para salvar um novo cliente.", variant: "destructive" });
       return;
     }
+    const userIdToSave = user.uid;
+
     setIsSavingNewClient(true);
-    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
-    
+        
     const clientDataToCreate: ClientCreateData = {
         nome: data.nome,
         email: data.email,
