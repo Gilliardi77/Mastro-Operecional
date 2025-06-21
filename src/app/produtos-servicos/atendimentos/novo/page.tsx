@@ -100,7 +100,20 @@ export default function OrdemServicoPage() {
     name: "itens",
   });
 
+  const watchedItens = osForm.watch("itens");
   const watchedValorAdiantado = osForm.watch("valorAdiantado");
+
+  // Effect to auto-calculate total value
+  useEffect(() => {
+    const total = watchedItens.reduce((sum, item) => {
+        const itemTotal = (item.quantidade || 0) * (item.valorUnitario || 0);
+        return sum + itemTotal;
+    }, 0);
+
+    if (total !== osForm.getValues('valorTotalOS')) {
+        osForm.setValue('valorTotalOS', total, { shouldValidate: true });
+    }
+  }, [watchedItens, osForm]);
 
   const newClientForm = useForm<NewClientFormValues>({
     resolver: zodResolver(ClientFormSchema),
@@ -335,6 +348,11 @@ export default function OrdemServicoPage() {
       produtoServicoId: (produtoServicoId && produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE) ? produtoServicoId : null,
       nome, quantidade, valorUnitario, tipo
     }));
+    
+    const valorTotalFinal = itensParaSalvar.reduce(
+      (acc, item) => acc + (item.quantidade * item.valorUnitario), 0
+    );
+
 
     let statusPagamentoFinal: PaymentStatusEnum = PaymentStatusEnum.Enum.Pendente;
     let valorPagoTotalFinal = data.valorAdiantado || 0;
@@ -342,7 +360,7 @@ export default function OrdemServicoPage() {
     let formaPrimeiroPagamentoFinal: string | null = null;
 
     if (data.valorAdiantado && data.valorAdiantado > 0) {
-      if (data.valorAdiantado >= (data.valorTotalOS || 0) ) {
+      if (data.valorAdiantado >= valorTotalFinal ) {
         statusPagamentoFinal = PaymentStatusEnum.Enum['Pago Total'];
       } else {
         statusPagamentoFinal = PaymentStatusEnum.Enum['Pago Parcial'];
@@ -356,7 +374,7 @@ export default function OrdemServicoPage() {
       clienteId: data.clienteId && data.clienteId !== "avulso" ? data.clienteId : null,
       clienteNome: nomeClienteFinal,
       itens: itensParaSalvar,
-      valorTotal: data.valorTotalOS || 0,
+      valorTotal: valorTotalFinal,
       valorAdiantado: data.valorAdiantado || 0,
       dataEntrega: data.dataEntrega, 
       observacoes: data.observacoes || "",
@@ -650,9 +668,9 @@ export default function OrdemServicoPage() {
                     name="valorTotalOS"
                     render={({ field }) => (
                       <FormItem>
-                          <FormLabel>Valor Total da OS (R$) (Opcional)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
-                          <FormDescription>Se não informado, será calculado com base nos itens ao salvar.</FormDescription>
+                          <FormLabel>Valor Total da OS (R$)</FormLabel>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} readOnly className="bg-muted/50 focus-visible:ring-0 focus-visible:ring-offset-0" /></FormControl>
+                          <FormDescription>Este valor é calculado automaticamente com base nos itens adicionados.</FormDescription>
                           <FormMessage />
                       </FormItem>
                     )}

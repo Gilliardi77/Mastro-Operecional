@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, type ReactNode } from 'react';
 import useSWR, { type KeyedMutator } from 'swr';
-import { useAuth } from './auth-provider';
+import { useAuth } from '@/components/auth/auth-provider';
 import { buscarSessaoAtiva, type SessaoCaixa } from '@/services/sessaoCaixaService';
 import { Loader2 } from 'lucide-react';
 
