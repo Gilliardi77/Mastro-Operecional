@@ -5,6 +5,12 @@ import { BaseSchema, BaseCreateSchema, BaseUpdateSchema, FirestoreTimestampSchem
 export const LancamentoTipoEnum = z.enum(['receita', 'despesa']);
 export type LancamentoTipo = z.infer<typeof LancamentoTipoEnum>;
 
+// Schema para o campo 'tipo' que aceita variações de caixa e converte para minúsculas
+const TipoLancamentoPreprocessed = z.preprocess(
+  (val) => (typeof val === 'string' ? val.toLowerCase() : val),
+  LancamentoTipoEnum
+);
+
 export const LancamentoStatusEnum = z.enum(['pago', 'recebido', 'pendente']);
 export type LancamentoStatus = z.infer<typeof LancamentoStatusEnum>;
 
@@ -15,14 +21,13 @@ export type LancamentoStatus = z.infer<typeof LancamentoStatusEnum>;
 export const LancamentoFinanceiroSchema = BaseSchema.extend({
   titulo: z.string().min(1, "Título é obrigatório.").describe("Descrição breve do lançamento. Ex: Venda Balcão #123, Pagamento OS #456."),
   valor: z.coerce.number().describe("Valor da transação. Positivo para receita, pode ser negativo ou positivo para despesa dependendo da convenção, mas aqui forçaremos positivo e o 'tipo' define a natureza."),
-  tipo: LancamentoTipoEnum.describe("Tipo do lançamento: 'receita' ou 'despesa'."),
+  tipo: TipoLancamentoPreprocessed.describe("Tipo do lançamento: 'receita' ou 'despesa'."),
   data: FirestoreTimestampSchema.describe("Data da transação ou competência."),
   categoria: z.string().min(1, "Categoria é obrigatória.").describe("Categoria do lançamento. Ex: Venda Balcão, Receita de OS, Aluguel, Fornecedor."),
   status: LancamentoStatusEnum.describe("Status do lançamento: 'pago' (para despesa), 'recebido' (para receita), 'pendente'."),
   descricao: z.string().optional().or(z.literal('')).describe("Detalhes adicionais sobre o lançamento."),
   vendaId: z.string().nullable().optional().describe("ID da venda relacionada (da coleção 'vendas'), se aplicável."),
   referenciaOSId: z.string().nullable().optional().describe("ID da OS relacionada (da coleção 'ordensServico'), se aplicável."),
-  // Adicionar 'formaPagamento' se for ser armazenado diretamente aqui
   formaPagamento: z.string().nullable().optional().describe("Forma de pagamento, se aplicável (ex: dinheiro, pix, cartao_credito).")
 });
 export type LancamentoFinanceiro = z.infer<typeof LancamentoFinanceiroSchema>;
@@ -33,7 +38,7 @@ export type LancamentoFinanceiro = z.infer<typeof LancamentoFinanceiroSchema>;
 export const LancamentoFinanceiroCreateSchema = BaseCreateSchema.extend({
   titulo: z.string().min(1, "Título é obrigatório."),
   valor: z.coerce.number(), // Validação de positivo/negativo pode ser mais específica dependendo do tipo
-  tipo: LancamentoTipoEnum,
+  tipo: TipoLancamentoPreprocessed,
   data: FirestoreTimestampSchema, // Espera Date
   categoria: z.string().min(1, "Categoria é obrigatória."),
   status: LancamentoStatusEnum,
@@ -57,7 +62,7 @@ export type LancamentoFinanceiroCreateData = z.infer<typeof LancamentoFinanceiro
 export const LancamentoFinanceiroUpdateSchema = BaseUpdateSchema.extend({
   titulo: z.string().min(1).optional(),
   valor: z.coerce.number().optional(),
-  tipo: LancamentoTipoEnum.optional(),
+  tipo: TipoLancamentoPreprocessed.optional(),
   data: FirestoreTimestampSchema.optional(), // Espera Date
   categoria: z.string().min(1).optional(),
   status: LancamentoStatusEnum.optional(),
