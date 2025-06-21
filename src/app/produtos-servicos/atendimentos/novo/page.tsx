@@ -36,6 +36,7 @@ import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from "@/schema
 import { ClientFormSchema, type ClientFormValues as NewClientFormValues, type ClientCreateData, type Client } from "@/schemas/clientSchema";
 import type { ProductService } from "@/schemas/productServiceSchema";
 import type { LancamentoFinanceiroCreateData } from '@/schemas/lancamentoFinanceiroSchema';
+import type { UserProfileData } from "@/schemas/userProfileSchema";
 
 // Services
 import { getAllClientsByUserId, createClient } from "@/services/clientService";
@@ -43,6 +44,7 @@ import { getAllProductServicesByUserId } from "@/services/productServiceService"
 import { createOrdemServico } from "@/services/ordemServicoService";
 import { createOrdemProducao } from "@/services/ordemProducaoService";
 import { createLancamentoFinanceiro } from "@/services/lancamentoFinanceiroService";
+import { getUserProfile } from "@/services/userProfileService";
 
 
 // Constantes
@@ -65,6 +67,7 @@ interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   clienteEmail?: string;
   itensSalvos: Array<Omit<ItemOSFormValues, 'idTemp'>>;
   createdAt?: Date;
+  userProfile?: UserProfileData | null;
 }
 
 interface AIFillFormEventPayload {
@@ -127,8 +130,10 @@ export default function OrdemServicoPage() {
   const [isSavingNewClient, setIsSavingNewClient] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [catalogoItens, setCatalogoItens] = useState<ProductService[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(true);
+  const [isLoadingUserProfile, setIsLoadingUserProfile] = useState(true);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   
@@ -137,30 +142,35 @@ export default function OrdemServicoPage() {
   const prevClienteIdRef = useRef<string | undefined>(osForm.getValues('clienteId'));
 
 
-  // Effect 1: Fetch initial data (clients and catalog)
+  // Effect 1: Fetch initial data (clients, catalog, and user profile)
   useEffect(() => {
     const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : "");
     if (!userIdToQuery) {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
+      setIsLoadingUserProfile(false);
       return;
     }
 
     setIsLoadingClients(true);
     setIsLoadingCatalogo(true);
+    setIsLoadingUserProfile(true);
 
     Promise.all([
       getAllClientsByUserId(userIdToQuery),
       getAllProductServicesByUserId(userIdToQuery, "nome", "asc"),
-    ]).then(([fetchedClients, fetchedCatalogoItens]) => {
+      getUserProfile(userIdToQuery),
+    ]).then(([fetchedClients, fetchedCatalogoItens, fetchedUserProfile]) => {
       setClients(fetchedClients);
       setCatalogoItens(fetchedCatalogoItens);
+      setUserProfile(fetchedUserProfile);
     }).catch((err: any) => {
-      console.error("Erro ao carregar dados iniciais (clientes/catálogo):", err);
-      toast({ title: "Erro ao carregar dados", description: `Não foi possível carregar clientes ou catálogo. Detalhe: ${err.message}`, variant: "destructive", duration: 7000 });
+      console.error("Erro ao carregar dados iniciais (clientes/catálogo/perfil):", err);
+      toast({ title: "Erro ao carregar dados", description: `Não foi possível carregar os dados da página. Detalhe: ${err.message}`, variant: "destructive", duration: 7000 });
     }).finally(() => {
       setIsLoadingClients(false);
       setIsLoadingCatalogo(false);
+      setIsLoadingUserProfile(false);
     });
   }, [user, bypassAuth, toast]);
 
@@ -229,10 +239,6 @@ export default function OrdemServicoPage() {
   // Effect 3: Sync clienteNome when clienteId (dropdown) changes, AFTER initial prefill is complete
   const watchedClienteId = osForm.watch('clienteId');
   useEffect(() => {
-    console.log("[NovaOSPage] Effect 3: watchedClienteId changed or dependencies updated.");
-    console.log(`  - isInitialPrefillComplete: ${isInitialPrefillComplete}, isLoadingClients: ${isLoadingClients}`);
-    console.log(`  - watchedClienteId: ${watchedClienteId}, prevClienteIdRef.current: ${prevClienteIdRef.current}`);
-
     if (!isInitialPrefillComplete || isLoadingClients || watchedClienteId === prevClienteIdRef.current) {
       if (watchedClienteId !== prevClienteIdRef.current) {
          prevClienteIdRef.current = watchedClienteId;
@@ -241,12 +247,10 @@ export default function OrdemServicoPage() {
     }
 
     const currentFormClienteNome = osForm.getValues('clienteNome');
-    console.log(`  - currentFormClienteNome: ${currentFormClienteNome}`);
 
     if (watchedClienteId && watchedClienteId !== "avulso") {
       const client = clients.find(c => c.id === watchedClienteId);
       if (client && client.nome !== currentFormClienteNome) {
-        console.log(`  - Setting clienteNome to '${client.nome}' from selected client.`);
         osForm.setValue('clienteNome', client.nome, { shouldValidate: true, shouldDirty: true });
       }
     } else if (watchedClienteId === "avulso") {
@@ -254,7 +258,6 @@ export default function OrdemServicoPage() {
       if (currentFormClienteNome !== defaultAvulsoName) {
         const previousIdWasSpecificClient = prevClienteIdRef.current && prevClienteIdRef.current !== "avulso";
         if (previousIdWasSpecificClient || currentFormClienteNome === "") {
-          console.log(`  - Setting clienteNome to default '${defaultAvulsoName}'.`);
           osForm.setValue('clienteNome', defaultAvulsoName, { shouldValidate: true, shouldDirty: true });
         }
       }
@@ -430,6 +433,7 @@ export default function OrdemServicoPage() {
         clienteEmail: selectedClient?.email,
         itensSalvos: itensParaSalvar,
         createdAt: osDoc.createdAt,
+        userProfile: userProfile,
       });
       setIsPrintModalOpen(true);
       osForm.reset({ 
@@ -556,10 +560,10 @@ export default function OrdemServicoPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {(isLoadingClients || isLoadingCatalogo) && !isInitialPrefillComplete && (
+          {(isLoadingClients || isLoadingCatalogo || isLoadingUserProfile) && !isInitialPrefillComplete && (
              <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados do formulário...</p></div>
           )}
-          {(!isLoadingClients && !isLoadingCatalogo) && (
+          {(!isLoadingClients && !isLoadingCatalogo && !isLoadingUserProfile) && (
             <Form {...osForm}>
               <form onSubmit={osForm.handleSubmit(onOsSubmit)} className="space-y-6">
                 <FormField
@@ -787,16 +791,19 @@ export default function OrdemServicoPage() {
             <DialogHeader className="print:hidden">
                 <DialogTitle>Ordem de Serviço Gerada</DialogTitle>
                 <DialogPrimitiveDescription>
-                    Abaixo uma visualização da OS para impressão ou compartilhamento com o cliente.
+                    Use esta tela para imprimir ou compartilhar a OS com o cliente.
                 </DialogPrimitiveDescription>
             </DialogHeader>
             {lastSavedOsData && (
             <div id="printable-os" className="space-y-6 p-2 print:p-0">
                 <div className="flex justify-between items-start pb-4 border-b">
                     <div>
-                        <h2 className="text-2xl font-bold text-primary">Sua Empresa Aqui</h2>
-                        <p className="text-xs text-muted-foreground">Seu Endereço, Cidade, Estado, CEP</p>
-                        <p className="text-xs text-muted-foreground">seuemail@empresa.com | (XX) XXXX-XXXX</p>
+                        <h2 className="text-2xl font-bold text-primary">{lastSavedOsData.userProfile?.companyName || 'Sua Empresa Aqui'}</h2>
+                        <p className="text-xs text-muted-foreground">{lastSavedOsData.userProfile?.businessType || 'Ramo de Atividade'}</p>
+                        <p className="text-xs text-muted-foreground">
+                            {lastSavedOsData.userProfile?.companyEmail || 'seuemail@empresa.com'}
+                            {lastSavedOsData.userProfile?.companyPhone && ` | ${lastSavedOsData.userProfile.companyPhone}`}
+                        </p>
                     </div>
                     <div className="text-right">
                         <h3 className="text-lg font-bold">ORDEM DE SERVIÇO</h3>
