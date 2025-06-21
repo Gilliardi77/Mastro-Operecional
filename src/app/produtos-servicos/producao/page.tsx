@@ -761,7 +761,16 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                                             </Button>
                                         </FormControl>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={ptBR} /></PopoverContent>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            required
+                                            selected={field.value}
+                                            onSelect={field.onChange}
+                                            initialFocus
+                                            locale={ptBR}
+                                        />
+                                    </PopoverContent>
                                 </Popover>
                                 <FormMessage />
                             </FormItem>
