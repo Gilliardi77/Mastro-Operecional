@@ -24,7 +24,7 @@ export const FormaPagamentoEnum = z.enum([
   "cartao_credito", 
   "cartao_debito", 
   "boleto",
-  "transferencia",
+  "transferencia_bancaria",
   "outro" 
 ]);
 export type FormaPagamento = z.infer<typeof FormaPagamentoEnum>;

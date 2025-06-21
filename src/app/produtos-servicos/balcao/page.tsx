@@ -48,7 +48,7 @@ const paymentMethods = [
   { value: "cartao_debito", label: "Cartão de Débito" },
   { value: "pix", label: "PIX" },
   { value: "boleto", label: "Boleto (Prazo)" },
-  { value: "transferencia", label: "Transferência Bancária" },
+  { value: "transferencia_bancaria", label: "Transferência Bancária" },
   { value: "outro", label: "Outro" },
 ];
 

@@ -51,7 +51,7 @@ const paymentMethods = [
   { value: "pix", label: "PIX" },
   { value: "cartao_credito", label: "Cartão de Crédito" },
   { value: "cartao_debito", label: "Cartão de Débito" },
-  { value: "transferencia", label: "Transferência Bancária" },
+  { value: "transferencia_bancaria", label: "Transferência Bancária" },
   // { value: "boleto", label: "Boleto (Prazo)" }, // Boleto geralmente não é para adiantamento
   { value: "outro", label: "Outro" },
 ];

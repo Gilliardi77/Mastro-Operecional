@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ import { getVendasByUserIdAndDateRange } from '@/services/vendaService';
 import { abrirSessaoCaixa, fecharSessaoCaixa, getUltimaSessaoFechada } from '@/services/sessaoCaixaService';
 import type { SessaoCaixaUpdateData } from '@/schemas/sessaoCaixaSchema';
 import type { EntradasPorMetodo } from '@/schemas/fechamentoCaixaSchema';
-import { EntradasPorMetodoSchema } from '@/schemas/fechamentoCaixaSchema';
+import { FechamentoCaixaFormSchema, EntradasPorMetodoSchema } from '@/schemas/fechamentoCaixaSchema';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -149,10 +150,7 @@ const FecharCaixaForm = () => {
     const [confirmationData, setConfirmationData] = useState<any>(null);
 
     const form = useForm({
-        resolver: zodResolver(z.object({
-            sangrias: z.coerce.number().nonnegative().default(0),
-            observacoes: z.string().optional(),
-        })),
+        resolver: zodResolver(FechamentoCaixaFormSchema),
         defaultValues: { sangrias: 0, observacoes: "" },
     });
     
@@ -172,54 +170,46 @@ const FecharCaixaForm = () => {
             const inicioSessao = activeSession.dataAbertura;
             const fimSessao = new Date(); // Até o momento atual
 
-            const [lancamentos, vendas] = await Promise.all([
-                getLancamentosByUserIdAndDateRange(user.uid, inicioSessao, fimSessao),
-                getVendasByUserIdAndDateRange(user.uid, inicioSessao, fimSessao)
-            ]);
-
+            // ÚNICA FONTE DA VERDADE: lancamentosFinanceiros
+            const lancamentos = await getLancamentosByUserIdAndDateRange(user.uid, inicioSessao, fimSessao);
+            
             let totalEntradas = 0;
             let totalSaidas = 0;
-            const entradasPorMetodoTemp: Record<keyof EntradasPorMetodo, number> = { dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, boleto: 0, transferenciaBancaria: 0, outros: 0 };
+            const entradasPorMetodoTemp: Record<keyof EntradasPorMetodo, number> = {
+                dinheiro: 0, pix: 0, cartaoCredito: 0, cartaoDebito: 0, cartao: 0, boleto: 0, transferenciaBancaria: 0, outros: 0
+            };
             
-            const lancamentosIdsDasVendas = new Set(vendas.map(v => v.id));
-
             lancamentos.forEach(l => {
                 if (l.tipo === 'receita' && l.status === 'recebido') {
-                    if (l.vendaId && lancamentosIdsDasVendas.has(l.vendaId)) {
-                        // Este lançamento veio de uma venda, já será processado abaixo
-                    } else {
-                        totalEntradas += l.valor;
-                        // ... lógica de agrupar por forma de pagamento ...
-                         const formaPagamento = l.formaPagamento?.toLowerCase() || 'outros';
-                          if (formaPagamento.includes('dinheiro')) entradasPorMetodoTemp.dinheiro += l.valor;
-                          else if (formaPagamento.includes('pix')) entradasPorMetodoTemp.pix += l.valor;
-                          else if (formaPagamento.includes('crédito') || formaPagamento.includes('credito')) {
+                    totalEntradas += l.valor;
+                    const formaPagamento = l.formaPagamento || 'outros';
+                    switch (formaPagamento) {
+                        case 'dinheiro':
+                            entradasPorMetodoTemp.dinheiro += l.valor;
+                            break;
+                        case 'pix':
+                            entradasPorMetodoTemp.pix += l.valor;
+                            break;
+                        case 'cartao_credito':
                             entradasPorMetodoTemp.cartaoCredito += l.valor;
                             entradasPorMetodoTemp.cartao += l.valor;
-                          } else if (formaPagamento.includes('débito') || formaPagamento.includes('debito')) {
+                            break;
+                        case 'cartao_debito':
                             entradasPorMetodoTemp.cartaoDebito += l.valor;
                             entradasPorMetodoTemp.cartao += l.valor;
-                          } else if (formaPagamento.includes('boleto')) entradasPorMetodoTemp.boleto += l.valor;
-                          else if (formaPagamento.includes('transferência') || formaPagamento.includes('transferencia')) entradasPorMetodoTemp.transferenciaBancaria += l.valor;
-                          else entradasPorMetodoTemp.outros += l.valor;
+                            break;
+                        case 'boleto':
+                            entradasPorMetodoTemp.boleto += l.valor;
+                            break;
+                        case 'transferencia_bancaria':
+                            entradasPorMetodoTemp.transferenciaBancaria += l.valor;
+                            break;
+                        default:
+                            entradasPorMetodoTemp.outros += l.valor;
+                            break;
                     }
                 } else if (l.tipo === 'despesa' && l.status === 'pago') {
                     totalSaidas += l.valor;
-                }
-            });
-
-            vendas.forEach(venda => {
-                if (venda.status === 'Concluída') {
-                    totalEntradas += venda.totalVenda;
-                    switch (venda.formaPagamento.toLowerCase()) {
-                      case 'dinheiro': entradasPorMetodoTemp.dinheiro += venda.totalVenda; break;
-                      case 'pix': entradasPorMetodoTemp.pix += venda.totalVenda; break;
-                      case 'cartao_credito': entradasPorMetodoTemp.cartaoCredito += venda.totalVenda; entradasPorMetodoTemp.cartao += venda.totalVenda; break;
-                      case 'cartao_debito': entradasPorMetodoTemp.cartaoDebito += venda.totalVenda; entradasPorMetodoTemp.cartao += venda.totalVenda; break;
-                      case 'boleto': entradasPorMetodoTemp.boleto += venda.totalVenda; break;
-                      case 'transferencia': entradasPorMetodoTemp.transferenciaBancaria += venda.totalVenda; break;
-                      default: entradasPorMetodoTemp.outros += venda.totalVenda;
-                    }
                 }
             });
 

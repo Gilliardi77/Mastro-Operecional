@@ -57,9 +57,8 @@ import { cn } from '@/lib/utils';
 
 // Importações de Serviços
 import {
-  type OrdemServico as OrdemServicoOriginal,
-  updateOrdemServico,
   getOrdemServicoById,
+  updateOrdemServico,
 } from '@/services/ordemServicoService';
 import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroService';
 
@@ -69,8 +68,9 @@ import {
   type OrdemServicoStatus,
   PagamentoOsSchema,
   type PagamentoOsFormValues,
-  OrdemServicoStatusEnum, // Importar o enum Zod para acessar os valores
-  PaymentStatusEnum
+  OrdemServicoStatusEnum,
+  PaymentStatusEnum,
+  type OrdemServico as OrdemServicoOriginal
 } from '@/schemas/ordemServicoSchema';
 
 
@@ -114,7 +114,7 @@ const paymentMethods = [
   { value: "cartao_credito", label: "Cartão de Crédito" },
   { value: "cartao_debito", label: "Cartão de Débito" },
   { value: "boleto", label: "Boleto Bancário" },
-  { value: "transferencia", label: "Transferência Bancária" },
+  { value: "transferencia_bancaria", label: "Transferência Bancária" },
   { value: "outro", label: "Outro" },
 ];
 
@@ -798,4 +798,3 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     </div>
   );
 }
-
