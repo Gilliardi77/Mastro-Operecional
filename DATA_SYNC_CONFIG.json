@@ -17,17 +17,17 @@
     "consultations": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "userGoals": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "lancamentosFinanceiros": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "metasFinanceiras": {
       "read": true,
@@ -38,62 +38,62 @@
     "vendas": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "ordensServico": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "agendamentos": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "clientes": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "ordensDeProducao": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "produtosServicos": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "fechamentosCaixa": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "sessoesCaixa": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "contasPagar": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "contasReceber": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "custos": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     },
     "custosFixosConfigurados": {
       "read": true,
       "write": true,
-      "regras": "request.auth.uid == resource.data.userId"
+      "regras": "request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId)"
     }
   }
 }
