@@ -59,5 +59,20 @@ export async function getUltimaSessaoFechada(userId: string): Promise<SessaoCaix
     limit(1)
   ];
   const sessoes = await queryDocuments(COLLECTION_NAME, constraints, SessaoCaixaSchema);
+  // O tipo de dataFechamento em SessaoCaixa é opcional, mas para a última fechada, ele deve existir.
+  // A consulta por status 'fechado' e ordenação por 'dataFechamento' já garante isso.
   return sessoes.length > 0 ? sessoes[0] : null;
+}
+
+export async function getAllSessoesFechadasByUserId(userId: string): Promise<SessaoCaixa[]> {
+  const { where, orderBy } = await import('firebase/firestore');
+  const constraints: QueryConstraint[] = [
+    where("userId", "==", userId),
+    where("status", "==", "fechado"),
+    orderBy("dataFechamento", "desc")
+  ];
+  const sessoes = await queryDocuments(COLLECTION_NAME, constraints, SessaoCaixaSchema);
+  // Filtro de segurança para TypeScript, garantindo que a data de fechamento não seja nula.
+  // Pela lógica da query (status fechado), ela sempre existirá.
+  return sessoes.filter(s => s.dataFechamento != null);
 }

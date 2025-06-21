@@ -1,5 +1,5 @@
 
-import { TrendingUp, Calculator, ListChecks, ExternalLink } from 'lucide-react';
+import { TrendingUp, Calculator, ListChecks, ExternalLink, History } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -26,14 +26,19 @@ export default function DashboardFinanceiroPage() {
             </CardTitle>
             <CardDescription>Ações relacionadas ao gerenciamento do seu caixa diário.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center p-6 space-y-4">
-            <p className="text-sm text-muted-foreground text-center mb-4">
+          <CardContent className="flex flex-col items-center justify-center p-6 space-y-2">
+            <p className="text-sm text-muted-foreground text-center mb-2">
               Realize o fechamento diário do seu caixa, registrando entradas, saídas, sangrias e troco.
             </p>
             <Button asChild className="w-full">
               <Link href="/financeiro/fechamento-caixa">
-                <Calculator className="mr-2 h-5 w-5" /> Ir para Fechamento de Caixa
+                <Calculator className="mr-2 h-5 w-5" /> Abrir / Fechar Caixa
               </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full">
+                <Link href="/financeiro/caixa/historico">
+                    <History className="mr-2 h-5 w-5" /> Ver Histórico de Caixa
+                </Link>
             </Button>
           </CardContent>
         </Card>

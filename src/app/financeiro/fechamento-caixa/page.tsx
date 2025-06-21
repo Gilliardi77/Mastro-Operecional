@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -22,7 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Printer, Calculator, Lock, Unlock } from "lucide-react";
+import { Loader2, DollarSign, TrendingUp, TrendingDown, AlertCircle, Info, Printer, Calculator, Lock, Unlock, History } from "lucide-react";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -407,6 +408,15 @@ export default function GestaoCaixaPage() {
         </p>
       </section>
       
+      <div className="text-center sm:text-right">
+        <Button asChild variant="link">
+          <Link href="/financeiro/caixa/historico">
+            <History className="mr-2 h-4 w-4" />
+            Ver Histórico de Caixa
+          </Link>
+        </Button>
+      </div>
+
       {activeSession ? <FecharCaixaForm /> : <AbrirCaixaForm />}
     </div>
   );
