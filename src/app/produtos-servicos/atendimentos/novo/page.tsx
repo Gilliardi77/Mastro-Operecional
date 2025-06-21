@@ -20,13 +20,15 @@ import { SelectTrigger } from "@/components/ui/SelectTrigger";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogPrimitiveDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useAIGuide } from "@/contexts/AIGuideContext";
 
-import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus, CreditCard } from "lucide-react";
+import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus, CreditCard, Printer } from "lucide-react";
 
 // Schemas e Tipagens
 import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData, PaymentStatusEnum } from "@/schemas/ordemServicoSchema";
@@ -52,7 +54,6 @@ const paymentMethods = [
   { value: "cartao_credito", label: "Cartão de Crédito" },
   { value: "cartao_debito", label: "Cartão de Débito" },
   { value: "transferencia_bancaria", label: "Transferência Bancária" },
-  // { value: "boleto", label: "Boleto (Prazo)" }, // Boleto geralmente não é para adiantamento
   { value: "outro", label: "Outro" },
 ];
 
@@ -63,6 +64,7 @@ interface LastSavedOsDataType extends Omit<OrdemServicoFormValues, 'itens'> {
   clienteTelefone?: string;
   clienteEmail?: string;
   itensSalvos: Array<Omit<ItemOSFormValues, 'idTemp'>>;
+  createdAt?: Date;
 }
 
 interface AIFillFormEventPayload {
@@ -103,17 +105,16 @@ export default function OrdemServicoPage() {
   const watchedItens = osForm.watch("itens");
   const watchedValorAdiantado = osForm.watch("valorAdiantado");
 
-  // Effect to auto-calculate total value
-  useEffect(() => {
-    const total = watchedItens.reduce((sum, item) => {
-        const itemTotal = (item.quantidade || 0) * (item.valorUnitario || 0);
-        return sum + itemTotal;
-    }, 0);
+  const valorTotalCalculado = watchedItens.reduce((sum, item) => {
+    const itemTotal = (item.quantidade || 0) * (item.valorUnitario || 0);
+    return sum + itemTotal;
+  }, 0);
 
-    if (total !== osForm.getValues('valorTotalOS')) {
-        osForm.setValue('valorTotalOS', total, { shouldValidate: true });
+  useEffect(() => {
+    if (valorTotalCalculado !== osForm.getValues('valorTotalOS')) {
+        osForm.setValue('valorTotalOS', valorTotalCalculado, { shouldValidate: true });
     }
-  }, [watchedItens, osForm]);
+  }, [valorTotalCalculado, osForm]);
 
   const newClientForm = useForm<NewClientFormValues>({
     resolver: zodResolver(ClientFormSchema),
@@ -129,6 +130,7 @@ export default function OrdemServicoPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(true);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   
   const [isInitialPrefillComplete, setIsInitialPrefillComplete] = useState(false);
   const searchParamsAppliedRef = useRef(false);
@@ -427,7 +429,9 @@ export default function OrdemServicoPage() {
         clienteTelefone: selectedClient?.telefone,
         clienteEmail: selectedClient?.email,
         itensSalvos: itensParaSalvar,
+        createdAt: osDoc.createdAt,
       });
+      setIsPrintModalOpen(true);
       osForm.reset({ 
         clienteId: "avulso", 
         clienteNome: "Cliente Avulso", 
@@ -777,6 +781,100 @@ export default function OrdemServicoPage() {
           )}
         </CardContent>
       </Card>
+      
+      <Dialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}>
+        <DialogContent className="max-w-3xl print:max-w-full print:shadow-none print:border-0">
+            <DialogHeader className="print:hidden">
+                <DialogTitle>Ordem de Serviço Gerada</DialogTitle>
+                <DialogPrimitiveDescription>
+                    Abaixo uma visualização da OS para impressão ou compartilhamento com o cliente.
+                </DialogPrimitiveDescription>
+            </DialogHeader>
+            {lastSavedOsData && (
+            <div id="printable-os" className="space-y-6 p-2 print:p-0">
+                <div className="flex justify-between items-start pb-4 border-b">
+                    <div>
+                        <h2 className="text-2xl font-bold text-primary">Sua Empresa Aqui</h2>
+                        <p className="text-xs text-muted-foreground">Seu Endereço, Cidade, Estado, CEP</p>
+                        <p className="text-xs text-muted-foreground">seuemail@empresa.com | (XX) XXXX-XXXX</p>
+                    </div>
+                    <div className="text-right">
+                        <h3 className="text-lg font-bold">ORDEM DE SERVIÇO</h3>
+                        <p className="text-sm">Nº: <span className="font-mono">{lastSavedOsData.numeroOS?.substring(0, 8)}...</span></p>
+                        <p className="text-sm">Data: <span className="font-mono">{format(lastSavedOsData.createdAt || new Date(), "dd/MM/yyyy")}</span></p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <h4 className="font-semibold text-muted-foreground">CLIENTE:</h4>
+                        <p className="font-bold">{lastSavedOsData.clienteNomeFinal}</p>
+                        <p className="text-sm">{lastSavedOsData.clienteEmail}</p>
+                        <p className="text-sm">{lastSavedOsData.clienteTelefone}</p>
+                    </div>
+                    <div className="text-right">
+                        <h4 className="font-semibold text-muted-foreground">DATA DE ENTREGA PREVISTA:</h4>
+                        <p className="font-bold">{format(lastSavedOsData.dataEntrega || new Date(), "dd/MM/yyyy")}</p>
+                    </div>
+                </div>
+                
+                <div className="border rounded-lg">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[60%]">Descrição do Item/Serviço</TableHead>
+                                <TableHead className="text-center">Qtd.</TableHead>
+                                <TableHead className="text-right">Preço Unit.</TableHead>
+                                <TableHead className="text-right">Total</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {lastSavedOsData.itensSalvos.map((item, index) => (
+                                <TableRow key={index}>
+                                    <TableCell className="font-medium">{item.nome}</TableCell>
+                                    <TableCell className="text-center">{item.quantidade}</TableCell>
+                                    <TableCell className="text-right">R$ {item.valorUnitario.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">R$ {(item.quantidade * item.valorUnitario).toFixed(2)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+                
+                <div className="flex justify-end">
+                    <div className="w-full max-w-sm space-y-2">
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Subtotal</span>
+                            <span className="font-medium">R$ {lastSavedOsData.valorTotalOS.toFixed(2)}</span>
+                        </div>
+                        {lastSavedOsData.valorAdiantado > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Adiantamento</span>
+                            <span className="font-medium">- R$ {lastSavedOsData.valorAdiantado.toFixed(2)}</span>
+                        </div>
+                        )}
+                        <Separator />
+                        <div className="flex justify-between text-lg font-bold">
+                            <span>Valor a Pagar</span>
+                            <span>R$ {(lastSavedOsData.valorTotalOS - (lastSavedOsData.valorAdiantado || 0)).toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                {lastSavedOsData.observacoes && (
+                <div className="pt-4 border-t">
+                    <h4 className="font-semibold text-muted-foreground">Observações:</h4>
+                    <p className="text-sm whitespace-pre-wrap">{lastSavedOsData.observacoes}</p>
+                </div>
+                )}
+            </div>
+            )}
+            <DialogFooter className="print:hidden">
+                <Button variant="outline" onClick={() => setIsPrintModalOpen(false)}>Fechar</Button>
+                <Button onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir / Salvar PDF</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isNewClientModalOpen} onOpenChange={(isOpen) => { setIsNewClientModalOpen(isOpen); if (!isOpen) newClientForm.reset(); }}>
         <DialogContent className="sm:max-w-md">
@@ -857,6 +955,3 @@ export default function OrdemServicoPage() {
     </div>
   );
 }
-    
-
-    
