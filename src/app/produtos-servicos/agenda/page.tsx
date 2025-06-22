@@ -44,6 +44,8 @@ import { collection, addDoc, Timestamp, type Firestore } from "firebase/firestor
 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
+import { getAllProductServicesByUserId } from '@/services/productServiceService';
+import type { ProductService } from '@/schemas/productServiceSchema';
 import { 
   createAppointment, 
   getAllAppointmentsByUserId, 
@@ -59,24 +61,12 @@ import {
 } from '@/schemas/appointmentSchema';
 
 
-interface Servico {
-  id: string;
-  nome: string;
-}
-
 type ProductionOrderStatusAgenda = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
-
-
-const sampleServices: Servico[] = [
-  { id: "s1", nome: "Corte de Cabelo" },
-  { id: "s2", nome: "Manutenção de Motor" },
-  { id: "s3", nome: "Pintura Residencial" },
-];
 
 
 export default function AgendaPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(new Date());
@@ -86,11 +76,15 @@ export default function AgendaPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const [fetchedClients, setFetchedClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
+  
+  const [fetchedServices, setFetchedServices] = useState<ProductService[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+
   const [datesWithAppointments, setDatesWithAppointments] = useState<Date[]>([]);
 
-  const bypassAuth = true; 
 
   const [statusFilters, setStatusFilters] = useState<Record<AppointmentStatus, boolean>>({
     "Pendente": true,
@@ -113,69 +107,64 @@ export default function AgendaPage() {
       geraOrdemProducao: false,
     },
   });
-
-  const fetchClients = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
-      setFetchedClients([]);
-      setIsLoadingClients(false);
-      return;
+  
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/agenda');
     }
-    setIsLoadingClients(true);
-    try {
-      const clientsData = await getAllClientsByUserId(userIdToQuery);
-      setFetchedClients(clientsData);
-    } catch (error: any) {
-      console.error("[AgendaPage] Erro ao buscar clientes via service:", error);
-      toast({ 
-        title: `Erro ao buscar clientes`, 
-        description: error.message || "Não foi possível carregar os dados dos clientes.", 
-        variant: "destructive" 
-      });
-    } finally {
-      setIsLoadingClients(false);
-    }
-  }, [user, bypassAuth, toast]);
+  }, [user, isAuthenticating, router]);
 
-
-  const fetchAppointments = useCallback(async () => {
-    const userIdToQuery = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToQuery) {
-      setAppointments([]);
-      setDatesWithAppointments([]);
+  const fetchInitialData = useCallback(async () => {
+    if (!user?.uid) {
       setIsLoading(false);
+      setIsLoadingClients(false);
+      setIsLoadingServices(false);
       return;
     }
+    
     setIsLoading(true);
+    setIsLoadingClients(true);
+    setIsLoadingServices(true);
+
     try {
-      const fetchedAppointments = await getAllAppointmentsByUserId(userIdToQuery, 'dataHora', 'asc');
-      setAppointments(fetchedAppointments);
-      if (fetchedAppointments.length > 0) {
+      const [appointmentsData, clientsData, servicesData] = await Promise.all([
+        getAllAppointmentsByUserId(user.uid, 'dataHora', 'asc'),
+        getAllClientsByUserId(user.uid),
+        getAllProductServicesByUserId(user.uid)
+      ]);
+
+      setAppointments(appointmentsData);
+      if (appointmentsData.length > 0) {
         const uniqueDates = Array.from(
-          new Set(fetchedAppointments.map(app => startOfDay(app.dataHora).toISOString()))
+          new Set(appointmentsData.map(app => startOfDay(app.dataHora).toISOString()))
         ).map(dateStr => new Date(dateStr));
         setDatesWithAppointments(uniqueDates);
       } else {
         setDatesWithAppointments([]);
       }
+
+      setFetchedClients(clientsData);
+      setFetchedServices(servicesData);
+
     } catch (error: any) {
-      console.error("[AgendaPage] Erro ao buscar agendamentos via service:", error);
-      toast({ 
-        title: `Erro ao buscar agendamentos`, 
-        description: `Não foi possível carregar os dados. ${error.message || 'Erro desconhecido.'}`, 
-        variant: "destructive" 
-      });
+        console.error("[AgendaPage] Erro ao buscar dados iniciais:", error);
+        toast({ 
+            title: `Erro ao carregar dados da agenda`, 
+            description: error.message || "Não foi possível carregar os dados necessários.", 
+            variant: "destructive" 
+        });
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
+        setIsLoadingClients(false);
+        setIsLoadingServices(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast]);
 
   useEffect(() => {
-    if (user || bypassAuth) {
-        fetchAppointments();
-        fetchClients();
+    if (!isAuthenticating && user) {
+        fetchInitialData();
     }
-  }, [fetchAppointments, fetchClients, user, bypassAuth]);
+  }, [fetchInitialData, user, isAuthenticating]);
 
   useEffect(() => {
     if (editingAppointment) {
@@ -266,17 +255,12 @@ export default function AgendaPage() {
   };
 
   const handleSaveAppointment = async (values: AppointmentFormValues) => {
-    if (!user && !bypassAuth) {
+    if (!user) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
-    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-     if (!userIdToSave) {
-        toast({ title: "Erro: ID do usuário não encontrado", variant: "destructive" });
-        setIsSubmitting(false);
-        return;
-    }
+    const userIdToSave = user.uid;
 
     let finalClienteId = "";
     let finalClienteNome = "";
@@ -307,7 +291,7 @@ export default function AgendaPage() {
     let finalServicoId = "";
     let finalServicoNome = "";
     if (values.servicoId && values.servicoId.trim() !== "" && values.servicoId !== "__placeholder_servico__") {
-        const selectedServiceObj = sampleServices.find(s => s.id === values.servicoId);
+        const selectedServiceObj = fetchedServices.find(s => s.id === values.servicoId);
          if (selectedServiceObj) {
             finalServicoId = selectedServiceObj.id;
             finalServicoNome = selectedServiceObj.nome;
@@ -381,7 +365,7 @@ export default function AgendaPage() {
         toast({ title: "Ordem de Produção Iniciada!", description: `Uma ordem de produção para ${finalServicoNome} foi criada.` });
       }
 
-      await fetchAppointments();
+      await fetchInitialData();
       setIsAppointmentModalOpen(false);
       setEditingAppointment(null);
       form.reset();
@@ -394,13 +378,13 @@ export default function AgendaPage() {
   };
 
   const handleMarkAsCompleted = async (appointment: Appointment) => {
-    if (!user && !bypassAuth) return;
+    if (!user) return;
     setIsSubmitting(true);
     try {
       const updateData: AppointmentUpdateData = { status: "Concluído" };
       await updateAppointment(appointment.id, updateData);
       toast({ title: "Status Atualizado", description: "Agendamento marcado como concluído." });
-      await fetchAppointments();
+      await fetchInitialData();
     } catch (error: any) {
       console.error("Erro ao marcar como concluído:", error);
       toast({ title: "Erro ao Atualizar Status", variant: "destructive", description: `Detalhe: ${error.message || 'Erro desconhecido.'}` });
@@ -418,23 +402,11 @@ export default function AgendaPage() {
     }
   };
 
-  if (isAuthLoading) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
-  }
-
-  if (!bypassAuth && !user) {
-     return (
-      <Card>
-        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent>
-          <p>Você precisa estar logado para acessar a agenda.</p>
-          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
-        </CardContent>
-      </Card>
-    );
+  if (isAuthenticating || !user) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  if (isLoading || isLoadingClients) {
+  if (isLoading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados da agenda...</p></div>;
   }
 
@@ -519,7 +491,7 @@ export default function AgendaPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {filteredAppointments.length === 0 && !(isLoading || isLoadingClients) && <p className="text-muted-foreground text-center py-4">Nenhum agendamento para a data selecionada ou filtros aplicados.</p>}
+              {filteredAppointments.length === 0 && !isLoading && <p className="text-muted-foreground text-center py-4">Nenhum agendamento para a data selecionada ou filtros aplicados.</p>}
               {filteredAppointments.map((appointment) => (
                 <Card key={appointment.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -549,7 +521,7 @@ export default function AgendaPage() {
                   </CardContent>
                 </Card>
               ))}
-              {filteredAppointments.length === 0 && !(isLoading || isLoadingClients) && (
+              {filteredAppointments.length === 0 && !isLoading && (
                 <div className="text-center py-8">
                   <CalendarIconLucide className="mx-auto h-12 w-12 text-muted-foreground" />
                   <p className="mt-2 text-sm text-muted-foreground">
@@ -566,11 +538,7 @@ export default function AgendaPage() {
           setIsAppointmentModalOpen(isOpen);
           if (!isOpen) {
             setEditingAppointment(null);
-            form.reset({
-                id: undefined, clienteId: undefined, clienteNomeInput: "", servicoId: undefined, servicoNomeInput: "",
-                data: selectedCalendarDate || new Date(), hora: "09:00",
-                observacoes: "", status: "Pendente", geraOrdemProducao: false,
-            });
+            form.reset();
           }
       }}>
         <DialogContent className="sm:max-w-[480px]">
@@ -619,11 +587,12 @@ export default function AgendaPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Serviço/Produto (Seleção)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione o serviço/produto" /></SelectTrigger></FormControl>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingServices}>
+                      <FormControl><SelectTrigger><SelectValue placeholder={isLoadingServices ? "Carregando..." : "Selecione o serviço/produto"} /></SelectTrigger></FormControl>
                       <SelectContent>
+                        {isLoadingServices && <SelectItem value="loading_services" disabled>Carregando serviços...</SelectItem>}
                         <SelectItem value="__placeholder_servico__" disabled={!!field.value}>-- Selecione ou digite abaixo --</SelectItem>
-                        {sampleServices.map(service => <SelectItem key={service.id} value={service.id}>{service.nome}</SelectItem>)}
+                        {fetchedServices.map(service => <SelectItem key={service.id} value={service.id}>{service.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -764,4 +733,3 @@ export default function AgendaPage() {
     </div>
   );
 }
-

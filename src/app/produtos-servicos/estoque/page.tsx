@@ -35,24 +35,22 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase"; // Mantido para transações
+import { db } from "@/lib/firebase"; 
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-import { collection, Timestamp, doc, updateDoc, runTransaction } from "firebase/firestore"; // addDoc e query removidos daqui
+import { collection, Timestamp, doc, updateDoc, runTransaction } from "firebase/firestore";
 import { cn } from '@/lib/utils';
 import { 
   getAllProductServicesByUserId, 
   createProductService, 
-  // updateProductService, // Comentado pois as atualizações de estoque usam runTransaction
 } from '@/services/productServiceService';
 import { 
   type ProductService, 
-  ProductServiceFormSchema, // Usaremos este para o novo produto
-  type ProductServiceFormValues, // Tipo para o formulário de novo produto
-  type ProductServiceCreateData, // Tipo para criar
+  ProductServiceFormSchema, 
+  type ProductServiceFormValues,
+  type ProductServiceCreateData,
 } from '@/schemas/productServiceSchema';
 
-// ProdutoEstoque e ProdutoEstoqueFirestore removidos, usaremos ProductService
 
 const movimentacaoSchemaBase = z.object({
   produtoId: z.string().min(1, "Selecione um produto."),
@@ -78,14 +76,12 @@ const ajusteSchema = z.object({
 });
 type AjusteFormValues = z.infer<typeof ajusteSchema>;
 
-// Schema para o formulário de novo produto já está em ProductServiceFormSchema
-// type NewProductFormValues foi substituído por ProductServiceFormValues
 
 export default function ControleEstoquePage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
-  const [produtos, setProdutos] = useState<ProductService[]>([]); // Alterado para ProductService
+  const [produtos, setProdutos] = useState<ProductService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -96,18 +92,15 @@ export default function ControleEstoquePage() {
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductService | null>(null);
 
-  const bypassAuth = true;
-
   const entradaForm = useForm<EntradaFormValues>({ resolver: zodResolver(entradaSchema), defaultValues: { quantidade: 1, data: new Date(), custoUnitario: 0 } });
   const saidaForm = useForm<SaidaFormValues>({ resolver: zodResolver(saidaSchema), defaultValues: { quantidade: 1, data: new Date() } });
   const ajusteForm = useForm<AjusteFormValues>({ resolver: zodResolver(ajusteSchema), defaultValues: { novaQuantidade: 0 } });
   
-  // Usando ProductServiceFormSchema para o novo produto
   const newProductForm = useForm<ProductServiceFormValues>({
     resolver: zodResolver(ProductServiceFormSchema),
     defaultValues: {
       nome: "",
-      tipo: "Produto", // Default para Produto já que estamos em Estoque
+      tipo: "Produto",
       descricao: "",
       valorVenda: 0,
       unidade: "UN",
@@ -117,18 +110,21 @@ export default function ControleEstoquePage() {
     },
   });
 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/estoque');
+    }
+  }, [user, isAuthenticating, router]);
+
   const fetchProdutos = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
+    if (!user?.uid) {
       setProdutos([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      // Usando productServiceService
-      const fetchedProdutos = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
-      // Filtrar apenas produtos, já que esta página é de estoque
+      const fetchedProdutos = await getAllProductServicesByUserId(user.uid, 'nome', 'asc');
       setProdutos(fetchedProdutos.filter(p => p.tipo === 'Produto'));
     } catch (error: any) {
       console.error("Erro ao buscar produtos para estoque via service:", error);
@@ -136,13 +132,13 @@ export default function ControleEstoquePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast]);
 
   useEffect(() => {
-    if (user || bypassAuth) {
+    if (!isAuthenticating && user) {
       fetchProdutos();
     }
-  }, [fetchProdutos, user, bypassAuth]);
+  }, [fetchProdutos, user, isAuthenticating]);
 
   const openModal = (type: 'entrada' | 'saida' | 'ajuste' | 'newProduct', product?: ProductService) => {
     setSelectedProductForModal(product || null);
@@ -228,7 +224,6 @@ export default function ControleEstoquePage() {
         quantidadeEstoque: values.novaQuantidade,
         atualizadoEm: Timestamp.now(),
       });
-      // Aqui poderia chamar updateProductService se a transação fosse movida para lá.
       toast({ title: "Estoque Ajustado!", description: `Estoque atualizado para ${values.novaQuantidade} unidades.` });
       fetchProdutos();
       setIsAjusteModalOpen(false);
@@ -240,16 +235,16 @@ export default function ControleEstoquePage() {
   };
 
   const handleSaveNewProduct = async (data: ProductServiceFormValues) => {
-    if (!user && !bypassAuth) {
+    if (!user) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
-    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : "unknown_user");
+    const userIdToSave = user.uid;
 
     const createData: ProductServiceCreateData = {
       nome: data.nome,
-      tipo: "Produto", // Forçado para Produto, já que é a página de estoque
+      tipo: "Produto",
       descricao: data.descricao,
       valorVenda: data.valorVenda,
       unidade: data.unidade,
@@ -263,7 +258,7 @@ export default function ControleEstoquePage() {
       toast({ title: "Produto Cadastrado!", description: `${data.nome} foi adicionado ao catálogo e ao estoque.` });
       fetchProdutos();
       setIsNewProductModalOpen(false);
-      newProductForm.reset(); // Resetar o formulário
+      newProductForm.reset();
     } catch (error: any) {
       console.error("Erro ao salvar novo produto via service:", error);
       toast({ title: "Erro ao Salvar Produto", description: error.message, variant: "destructive" });
@@ -286,9 +281,13 @@ export default function ControleEstoquePage() {
     [produtos]
   );
 
-  if (isAuthLoading && !bypassAuth) return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
-  if (!user && !bypassAuth) return <div className="p-4">Acesso negado. Faça login.</div>;
-  if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+  if (isAuthenticating || !user) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+  }
+  
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -562,4 +561,3 @@ export default function ControleEstoquePage() {
     </div>
   );
 }
-

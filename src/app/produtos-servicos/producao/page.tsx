@@ -55,14 +55,12 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from '@/lib/utils';
 
-// Importações de Serviços
 import {
   getOrdemServicoById,
   updateOrdemServico,
 } from '@/services/ordemServicoService';
 import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroService';
 
-// Importações de Schemas e Tipos diretamente dos schemas
 import {
   type ItemOS,
   type OrdemServicoStatus,
@@ -138,7 +136,7 @@ const getStatusFromProgress = (progress: number): ProductionOrderStatus => {
 
 export default function ProducaoPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
@@ -151,8 +149,6 @@ export default function ProducaoPage() {
   const [isFinalPaymentModalOpen, setIsFinalPaymentModalOpen] = useState(false);
   const [orderForFinalPayment, setOrderForFinalPayment] = useState<ProductionOrder | null>(null);
   const [osForFinalPayment, setOsForFinalPayment] = useState<OrdemServicoOriginal | null>(null);
-
-  const bypassAuth = true;
 
   const [statusFilters, setStatusFilters] = useState<Record<ProductionOrderStatus, boolean>>({
     "Pendente": true,
@@ -172,6 +168,12 @@ export default function ProducaoPage() {
     },
   });
 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/producao');
+    }
+  }, [user, isAuthenticating, router]);
+
   const safeToDate = (timestampField: any, fieldName: string, defaultDateVal: Date): Date => {
     if (timestampField && typeof timestampField.toDate === 'function') {
       return timestampField.toDate();
@@ -182,8 +184,7 @@ export default function ProducaoPage() {
   };
 
   const fetchProductionOrders = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
+    if (!user?.uid) {
       setProductionOrders([]);
       setIsLoading(false);
       return;
@@ -201,7 +202,7 @@ export default function ProducaoPage() {
       const collectionRef = collection(dbInstance, "ordensDeProducao");
       const q = query(
         collectionRef,
-        where("userId", "==", userIdToQuery),
+        where("userId", "==", user.uid),
         orderBy("dataAgendamento", "desc")
       );
       const querySnapshot = await getDocs(q);
@@ -224,13 +225,13 @@ export default function ProducaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth, viewingOrder?.id]); // viewingOrder?.id adicionado para referência no safeToDate
+  }, [user, toast, viewingOrder?.id]);
 
   useEffect(() => {
-    if (user || bypassAuth) {
+    if (!isAuthenticating && user) {
         fetchProductionOrders();
     }
-  }, [fetchProductionOrders, user, bypassAuth]);
+  }, [fetchProductionOrders, user, isAuthenticating]);
 
   useEffect(() => {
     const agendamentoIdFromParams = searchParams.get('agendamentoId');
@@ -342,7 +343,7 @@ export default function ProducaoPage() {
 
 
 const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
-    if (!user && !bypassAuth) return;
+    if (!user) return;
     setIsSubmitting(true);
     try {
         const osData = await getOrdemServicoById(order.agendamentoId);
@@ -375,21 +376,16 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
 
 
   const handleFinalPaymentSubmit = async (paymentData: PagamentoOsFormValues) => {
-    if (!orderForFinalPayment || !osForFinalPayment || (!user && !bypassAuth)) return;
+    if (!orderForFinalPayment || !osForFinalPayment || !user) return;
     setIsSubmitting(true);
-    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToSave) {
-        toast({ title: "Erro de Autenticação", variant: "destructive" });
-        setIsSubmitting(false);
-        return;
-    }
+    const userIdToSave = user.uid;
 
     try {
         await createLancamentoFinanceiro(userIdToSave, {
             titulo: `Pagamento Final OS #${osForFinalPayment.numeroOS.substring(0,6)}`,
             valor: paymentData.valorPago,
             tipo: 'receita',
-            data: paymentData.dataPagamento, // Passando objeto Date diretamente
+            data: paymentData.dataPagamento,
             categoria: "Receita de OS (Final)",
             status: 'recebido',
             referenciaOSId: osForFinalPayment.id,
@@ -401,7 +397,7 @@ const handleOpenFinalPaymentModal = async (order: ProductionOrder) => {
         await updateOrdemServico(osForFinalPayment.id, {
             valorPagoTotal: valorTotalPagoAtualizado,
             statusPagamento: PaymentStatusEnum.Enum['Pago Total'],
-            dataUltimoPagamento: paymentData.dataPagamento, // Passando objeto Date diretamente
+            dataUltimoPagamento: paymentData.dataPagamento,
             formaUltimoPagamento: paymentData.formaPagamento,
             observacoesPagamento: paymentData.observacoesPagamento,
         });
@@ -445,7 +441,7 @@ const processCompletion = async (order: ProductionOrder, newProgress?: number) =
 };
 
 const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: ProductionOrderStatus, newProgress: number) => {
-    if (!user && !bypassAuth) return;
+    if (!user) return;
     setIsSubmitting(true);
     if (newStatus === "Concluído") {
         await handleOpenFinalPaymentModal(order);
@@ -476,7 +472,7 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
 
 
   const handleSaveProductionDetails = async () => {
-    if (!viewingOrder || !editingOrderDetails || (!user && !bypassAuth)) return;
+    if (!viewingOrder || !editingOrderDetails || !user) return;
     setIsSubmitting(true);
 
     const { db: dbInstance } = getFirebaseInstances();
@@ -537,23 +533,11 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     });
   }, [productionOrders, statusFilters, searchTerm]);
 
-  if (isAuthLoading && !bypassAuth) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
+  if (isAuthenticating || !user) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
-  if (!user && !bypassAuth) {
-     return (
-      <Card>
-        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent>
-          <p>Você precisa estar logado para acessar o controle de produção.</p>
-          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (isLoading && (user || bypassAuth)) {
+  if (isLoading) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando ordens de produção...</p></div>;
   }
 

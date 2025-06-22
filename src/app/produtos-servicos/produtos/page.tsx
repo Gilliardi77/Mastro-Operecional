@@ -40,7 +40,7 @@ import {
 
 export default function ProdutosServicosPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [allProdutosServicos, setAllProdutosServicos] = useState<ProductService[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,15 +49,13 @@ export default function ProdutosServicosPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const bypassAuth = true;
-
   const form = useForm<ProductServiceFormValues>({
     resolver: zodResolver(ProductServiceFormSchema),
     defaultValues: {
       nome: "",
-      tipo: undefined, // Zod enum for 'Produto' | 'Serviço'
+      tipo: undefined,
       descricao: "",
-      valorVenda: undefined, // Initialize number fields that can be empty as undefined
+      valorVenda: undefined,
       unidade: "",
       custoUnitario: undefined,
       quantidadeEstoque: undefined,
@@ -67,16 +65,21 @@ export default function ProdutosServicosPage() {
 
   const tipoSelecionado = form.watch('tipo');
 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/produtos');
+    }
+  }, [user, isAuthenticating, router]);
+
   const fetchProdutosServicos = useCallback(async () => {
-    const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToQuery) {
+    if (!user?.uid) {
       setAllProdutosServicos([]);
       setIsLoadingData(false);
       return;
     }
     setIsLoadingData(true);
     try {
-      const fetchedItems = await getAllProductServicesByUserId(userIdToQuery);
+      const fetchedItems = await getAllProductServicesByUserId(user.uid);
       setAllProdutosServicos(fetchedItems);
     } catch (error: any) {
       console.error("Erro ao buscar produtos/serviços:", error);
@@ -84,13 +87,13 @@ export default function ProdutosServicosPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast]);
 
   useEffect(() => {
-    if (!isAuthLoading) {
+    if (!isAuthenticating && user) {
       fetchProdutosServicos();
     }
-  }, [fetchProdutosServicos, isAuthLoading]);
+  }, [fetchProdutosServicos, user, isAuthenticating]);
 
   useEffect(() => {
     if (editingItem) {
@@ -120,8 +123,7 @@ export default function ProdutosServicosPage() {
   }, [editingItem, form, isModalOpen]);
 
   const handleSalvarItem = async (values: ProductServiceFormValues) => {
-    const userIdToSave = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToSave) {
+    if (!user?.uid) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
       return;
     }
@@ -131,10 +133,10 @@ export default function ProdutosServicosPage() {
       nome: values.nome,
       tipo: values.tipo,
       descricao: values.descricao,
-      valorVenda: values.valorVenda, // Zod coerce will handle if it's undefined for submission
+      valorVenda: values.valorVenda,
       unidade: values.unidade,
       ...(values.tipo === 'Produto' && {
-        custoUnitario: values.custoUnitario ?? 0, // Default to 0 if undefined for product
+        custoUnitario: values.custoUnitario ?? 0,
         quantidadeEstoque: values.quantidadeEstoque ?? 0,
         estoqueMinimo: values.estoqueMinimo ?? 0,
       }),
@@ -151,7 +153,7 @@ export default function ProdutosServicosPage() {
         await updateProductService(editingItem.id, dataForService as ProductServiceUpdateData);
         toast({ title: "Item Atualizado!", description: `${values.nome} foi atualizado.` });
       } else {
-        await createProductService(userIdToSave, dataForService as ProductServiceCreateData);
+        await createProductService(user.uid, dataForService as ProductServiceCreateData);
         toast({ title: "Item Adicionado!", description: `${values.nome} foi cadastrado.` });
       }
       setEditingItem(null);
@@ -191,8 +193,7 @@ export default function ProdutosServicosPage() {
   };
 
   const handleExcluirItem = async (itemId: string) => {
-    const userIdRequester = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdRequester) {
+    if (!user?.uid) {
         toast({ title: "Ação não permitida", description: "Usuário não autenticado.", variant: "destructive" });
         return;
     }
@@ -224,23 +225,11 @@ export default function ProdutosServicosPage() {
     (item.descricao && item.descricao.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  if (isAuthLoading && !bypassAuth) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
+  if (isAuthenticating || !user) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
-
-  if (!user && !bypassAuth) {
-    return (
-      <Card>
-        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent>
-          <p>Você precisa estar logado para gerenciar produtos e serviços.</p>
-          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (isLoadingData && (user || bypassAuth)) {
+  
+  if (isLoadingData) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando itens...</p></div>;
   }
 
@@ -529,4 +518,3 @@ export default function ProdutosServicosPage() {
     </div>
   );
 }
-
