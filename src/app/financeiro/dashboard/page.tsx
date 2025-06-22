@@ -99,7 +99,7 @@ export default function DashboardFinanceiroPage() {
             </div>
              <div className="mt-4 text-center">
                 <Button variant="outline" asChild>
-                    <Link href="https://studio--viso-clara-financeira.us-central1.hosted.app" target="_blank">
+                    <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app" target="_blank">
                         Acessar Visão Clara Financeira <ExternalLink className="ml-2 h-4 w-4" />
                     </Link>
                 </Button>
