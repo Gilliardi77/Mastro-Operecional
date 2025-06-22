@@ -2,6 +2,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -13,28 +15,27 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ListChecks, AlertTriangle, Info } from "lucide-react";
-import { useAuth } from '@/components/auth/auth-provider';
-import { useRouter } from 'next/navigation';
 import { getAllLancamentosFinanceirosByUserId } from '@/services/lancamentoFinanceiroService';
 import type { LancamentoFinanceiro, LancamentoStatus, LancamentoTipo } from '@/schemas/lancamentoFinanceiroSchema';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button'; // Import Button
 
 export default function LancamentosFinanceirosPage() {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [lancamentos, setLancamentos] = useState<LancamentoFinanceiro[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/financeiro/lancamentos');
+    }
+  }, [isAuthenticating, user, router]);
+
   const fetchLancamentos = useCallback(async () => {
     if (!user?.uid) {
-      setIsLoadingData(false);
-      if (!isAuthLoading) { // Apenas redireciona se a autenticação já foi verificada
-        router.push('/login?redirect=/financeiro/lancamentos');
-      }
       return;
     }
     setIsLoadingData(true);
@@ -48,18 +49,18 @@ export default function LancamentosFinanceirosPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [user, router, isAuthLoading]);
+  }, [user]);
 
   useEffect(() => {
-    if (!isAuthLoading) { // Executa fetchLancamentos apenas quando o estado de autenticação estiver resolvido
+    if (user?.uid) {
         fetchLancamentos();
     }
-  }, [fetchLancamentos, isAuthLoading]);
+  }, [user, fetchLancamentos]);
 
   const getStatusVariant = (status: LancamentoStatus) => {
     switch (status) {
-      case 'pago': return 'bg-green-100 text-green-800 border-green-300'; // Despesa paga
-      case 'recebido': return 'bg-blue-100 text-blue-800 border-blue-300'; // Receita recebida
+      case 'pago': return 'bg-green-100 text-green-800 border-green-300';
+      case 'recebido': return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'pendente': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
@@ -69,36 +70,13 @@ export default function LancamentosFinanceirosPage() {
     return tipo === 'receita' ? 'bg-emerald-500/20 text-emerald-700 border-emerald-400' : 'bg-rose-500/20 text-rose-700 border-rose-400';
   };
 
-  if (isAuthLoading || (!user && isLoadingData)) {
+  if (isAuthenticating || !user) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
-  
-  if (!user && !isLoadingData) {
-     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Acesso Negado</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Autenticação Necessária</AlertTitle>
-                    <AlertDescription>
-                        Você precisa estar logado para ver seus lançamentos financeiros.
-                    </AlertDescription>
-                </Alert>
-                <Button onClick={() => router.push('/login?redirect=/financeiro/lancamentos')} className="mt-4">
-                    Fazer Login
-                </Button>
-            </CardContent>
-        </Card>
-     );
-  }
-
 
   return (
     <div className="space-y-8">
@@ -124,7 +102,6 @@ export default function LancamentosFinanceirosPage() {
               }
             </CardDescription>
           </div>
-          {/* Futuramente, adicionar filtros aqui (data, tipo, categoria, etc.) */}
         </CardHeader>
         <CardContent>
           {isLoadingData && (

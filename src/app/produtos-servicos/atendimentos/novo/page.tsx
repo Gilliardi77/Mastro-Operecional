@@ -4,9 +4,10 @@
 
 // Imports agrupados por funcionalidade
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useFieldArray, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -25,7 +26,6 @@ import { Separator } from "@/components/ui/separator";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/components/auth/auth-provider";
 import { useAIGuide } from "@/contexts/AIGuideContext";
 
 import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus, CreditCard, Printer } from "lucide-react";
@@ -82,10 +82,15 @@ export default function OrdemServicoPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const { updateAICurrentPageContext } = useAIGuide();
-  const bypassAuth = true;
 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/atendimentos/novo');
+    }
+  }, [user, isAuthenticating, router]);
+  
   const osForm = useForm<OrdemServicoFormValues>({
     resolver: zodResolver(OrdemServicoFormSchema),
     defaultValues: {
@@ -142,24 +147,11 @@ export default function OrdemServicoPage() {
   const prevClienteIdRef = useRef<string | undefined>(osForm.getValues('clienteId'));
 
 
-  // Effect 1: Fetch initial data (clients, catalog, and user profile)
+  // Effect 1: Fetch initial data
   useEffect(() => {
-    // This guard prevents fetching data with a placeholder ID, which would violate Firestore rules.
-    if (bypassAuth && !user) {
-        console.warn("[OrdemServicoPage] Em modo bypass sem usuário. Pulando busca de dados do Firestore para evitar erros de permissão.");
-        setIsLoadingClients(false);
-        setIsLoadingCatalogo(false);
-        setIsLoadingUserProfile(false);
-        return;
-    }
-
-    const userIdToQuery = user?.uid;
-    if (!userIdToQuery) {
-      setIsLoadingClients(false);
-      setIsLoadingCatalogo(false);
-      setIsLoadingUserProfile(false);
-      return;
-    }
+    if (!user) return;
+    
+    const userIdToQuery = user.uid;
 
     setIsLoadingClients(true);
     setIsLoadingCatalogo(true);
@@ -181,7 +173,7 @@ export default function OrdemServicoPage() {
       setIsLoadingCatalogo(false);
       setIsLoadingUserProfile(false);
     });
-  }, [user, bypassAuth, toast]);
+  }, [user, toast]);
 
 
   // Effect 2: Prefill form from searchParams ONCE after data is loaded
@@ -346,7 +338,7 @@ export default function OrdemServicoPage() {
 
 
   async function onOsSubmit(data: OrdemServicoFormValues) {
-    if (!user) {
+    if (!user?.uid) {
       toast({ title: "Ação não permitida", description: "Você precisa estar logado para salvar uma Ordem de Serviço.", variant: "destructive" });
       return;
     }
@@ -415,13 +407,12 @@ export default function OrdemServicoPage() {
       };
       await createOrdemProducao(uid, opDataToCreate);
 
-      // Registrar lançamento financeiro para o adiantamento
       if (data.valorAdiantado && data.valorAdiantado > 0 && data.formaPagamentoAdiantamento) {
         const lancamentoAdiantamentoData: LancamentoFinanceiroCreateData = {
           titulo: `Adiantamento OS #${osDoc.numeroOS.substring(0,6)}`,
           valor: data.valorAdiantado,
           tipo: 'receita',
-          data: new Date(), // Data do adiantamento é a data atual
+          data: new Date(),
           categoria: "Adiantamento OS",
           status: 'recebido',
           descricao: `Adiantamento para OS de ${nomeClienteFinal}.`,
@@ -466,7 +457,7 @@ export default function OrdemServicoPage() {
   }
 
   async function onSaveNewClient(data: NewClientFormValues) {
-    if (!user) {
+    if (!user?.uid) {
       toast({ title: "Ação não permitida", description: "Você precisa estar logado para salvar um novo cliente.", variant: "destructive" });
       return;
     }
@@ -551,12 +542,16 @@ export default function OrdemServicoPage() {
     toast({ title: "E-mail", description: "Funcionalidade de envio por E-mail em desenvolvimento." });
   }
 
-  const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
-
-  if (isAuthLoading) { 
-     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando autenticação...</p></div>;
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
   }
   
+  const canSendActions = (!!lastSavedOsData && !!lastSavedOsData.dataEntrega) || (osForm.formState.isValid && (osForm.formState.isDirty || Object.keys(osForm.formState.touchedFields).length > 0) && !!osForm.getValues('dataEntrega'));
+
   return (
     <div className="space-y-6">
       <Card>

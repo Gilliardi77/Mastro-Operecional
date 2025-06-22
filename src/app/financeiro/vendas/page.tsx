@@ -2,30 +2,34 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ShoppingBag, AlertTriangle, Info, Calendar, User, CreditCard } from "lucide-react";
-import { useAuth } from '@/components/auth/auth-provider';
-import { useRouter } from 'next/navigation';
 import { getAllVendasByUserId } from '@/services/vendaService';
 import type { Venda, VendaStatus } from '@/schemas/vendaSchema';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 
 export default function HistoricoVendasPage() {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/financeiro/vendas');
+    }
+  }, [user, isAuthenticating, router]);
+
   const fetchVendas = useCallback(async () => {
     if (!user?.uid) {
-      if (!isAuthLoading) router.push('/login?redirect=/financeiro/vendas');
       return;
     }
     setIsLoadingData(true);
@@ -39,13 +43,13 @@ export default function HistoricoVendasPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [user, router, isAuthLoading]);
+  }, [user]);
 
   useEffect(() => {
-    if (!isAuthLoading) {
+    if (user?.uid) {
       fetchVendas();
     }
-  }, [fetchVendas, isAuthLoading]);
+  }, [user, fetchVendas]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -58,31 +62,13 @@ export default function HistoricoVendasPage() {
       default: return 'outline';
     }
   };
-
-  if (isAuthLoading || (!user && isLoadingData)) {
+  
+  if (isAuthenticating || !user) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
-  }
-  
-  if (!user && !isAuthLoading) {
-     return (
-        <Card>
-            <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-            <CardContent>
-                <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Autenticação Necessária</AlertTitle>
-                    <AlertDescription>Você precisa estar logado para ver o histórico.</AlertDescription>
-                </Alert>
-                <Button onClick={() => router.push('/login?redirect=/financeiro/vendas')} className="mt-4">
-                    Fazer Login
-                </Button>
-            </CardContent>
-        </Card>
-     );
   }
 
   return (

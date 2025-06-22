@@ -2,6 +2,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { PlusCircle, UserSearch, AlertCircle, CheckCircle, Edit2, Trash2, Loader2 } from "lucide-react";
@@ -40,8 +42,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/components/auth/auth-provider';
-import { useRouter } from 'next/navigation';
 import {
   createClient,
   getAllClientsByUserId,
@@ -53,7 +53,7 @@ import { ClientFormSchema, type Client, type ClientFormValues } from '@/schemas/
 
 export default function ClientesPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [clientes, setClientes] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,8 +61,6 @@ export default function ClientesPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-
-  const bypassAuth = true; 
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(ClientFormSchema),
@@ -79,29 +77,19 @@ export default function ClientesPage() {
     },
   });
 
-  const fetchClientes = useCallback(async () => {
-    const userIdToQuery = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-
-    if (bypassAuth && !user) {
-      console.warn("[ClientesPage] bypassAuth é true e não há usuário logado. Pulando a busca de clientes para evitar erro de permissão com 'bypass_user_placeholder'. Defina dados de teste para este placeholder ou logue com um usuário para ver os clientes.");
-      setClientes([]);
-      setIsLoadingData(false);
-      // Opcional: mostrar um toast informativo, mas pode ser verboso para um modo de desenvolvimento.
-      // toast({ title: "Modo Bypass Ativo", description: "Busca de clientes pulada (sem usuário logado).", variant: "default" });
-      return; 
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/clientes');
     }
+  }, [isAuthenticating, user, router]);
 
-    if (!userIdToQuery) {
-      setClientes([]);
-      setIsLoadingData(false);
-      if (!isAuthLoading && !user && !bypassAuth) {
-         toast({ title: "Acesso Negado", description: "Usuário não autenticado.", variant: "destructive" });
-      }
+  const fetchClientes = useCallback(async () => {
+    if (!user?.uid) {
       return;
     }
     setIsLoadingData(true);
     try {
-      const fetchedClientes = await getAllClientsByUserId(userIdToQuery);
+      const fetchedClientes = await getAllClientsByUserId(user.uid);
       setClientes(fetchedClientes);
     } catch (error: any) {
       console.error("Erro ao buscar clientes:", error);
@@ -109,13 +97,13 @@ export default function ClientesPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [user, toast, bypassAuth, isAuthLoading]); 
+  }, [user, toast]); 
 
   useEffect(() => {
-     if (!isAuthLoading) { 
+     if (user?.uid) { 
         fetchClientes();
      }
-  }, [fetchClientes, isAuthLoading]);
+  }, [fetchClientes, user]);
 
   useEffect(() => {
     if (editingClient) {
@@ -151,8 +139,7 @@ export default function ClientesPage() {
   };
 
   const handleSaveClient = async (values: ClientFormValues) => {
-    const userIdToSave = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToSave) {
+    if (!user?.uid) {
       toast({ title: "Erro de Autenticação", description: "ID do usuário não encontrado.", variant: "destructive" });
       return;
     }
@@ -165,7 +152,7 @@ export default function ClientesPage() {
         await updateClient(id, clientData);
         toast({ title: "Cliente Atualizado!", description: `Cliente ${values.nome} atualizado com sucesso.` });
       } else { 
-        await createClient(userIdToSave, clientData);
+        await createClient(user.uid, clientData);
         toast({ title: "Cliente Adicionado!", description: `Cliente ${values.nome} adicionado com sucesso.` });
       }
       await fetchClientes(); 
@@ -180,8 +167,7 @@ export default function ClientesPage() {
   };
 
   const handleDeleteClient = async (clientId: string) => {
-    const userIdRequester = user?.uid || (bypassAuth ? "bypass_user_placeholder" : null);
-     if (!userIdRequester) {
+     if (!user?.uid) {
       toast({ title: "Ação não permitida", description: "Usuário não autenticado.", variant: "destructive" });
       return;
     }
@@ -204,28 +190,12 @@ export default function ClientesPage() {
     (cliente.telefone && cliente.telefone.includes(searchTerm))
   );
 
-  const handleRedirectToLogin = () => { 
-    router.push('/login');
-  }
-
-  if (isAuthLoading) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Inicializando...</p></div>;
-  }
-
-  if (!bypassAuth && !user) { 
-     return (
-      <Card>
-        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent>
-          <p>Você precisa estar logado para acessar a lista de clientes.</p>
-          <Button onClick={handleRedirectToLogin} className="mt-4">Fazer Login</Button> 
-        </CardContent>
-      </Card>
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
     );
-  }
-  
-  if (isLoadingData && (user || bypassAuth)) {
-     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>;
   }
 
   return (
@@ -252,6 +222,9 @@ export default function ClientesPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          {isLoadingData ? (
+             <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando clientes...</p></div>
+          ) : (
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -320,6 +293,7 @@ export default function ClientesPage() {
               </TableBody>
             </Table>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -408,4 +382,3 @@ export default function ClientesPage() {
     </div>
   );
 }
-

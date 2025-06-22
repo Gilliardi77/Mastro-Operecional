@@ -2,6 +2,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ListOrdered, Search, Loader2, Settings2, Eye, CreditCard, CalendarIcon as CalendarIconLucide } from "lucide-react";
@@ -16,10 +18,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/components/auth/auth-provider';
-import { useRouter } from "next/navigation";
-import { Timestamp, collection, addDoc, type Firestore } from "firebase/firestore"; 
-import { getFirebaseInstances } from '@/lib/firebase'; // Changed import
+import { Timestamp, collection, addDoc } from "firebase/firestore"; 
+import { getFirebaseInstances } from '@/lib/firebase';
 
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -80,7 +80,7 @@ const getPaymentStatusVariant = (status?: PaymentStatus): "default" | "secondary
 
 export default function OrdensServicoPage() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [ordensServico, setOrdensServico] = useState<OrdemServicoListData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -90,7 +90,11 @@ export default function OrdensServicoPage() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<OrdemServicoListData | null>(null);
 
-  const bypassAuth = true;
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/ordens');
+    }
+  }, [user, isAuthenticating, router]);
 
   const paymentForm = useForm<PagamentoOsFormValues>({
     resolver: zodResolver(PagamentoOsSchema),
@@ -102,15 +106,14 @@ export default function OrdensServicoPage() {
   });
 
   const fetchOrdensServico = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
+    if (!user?.uid) {
       setOrdensServico([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const fetchedOrdens = await getAllOrdensServicoByUserId(userIdToQuery, 'createdAt', 'desc');
+      const fetchedOrdens = await getAllOrdensServicoByUserId(user.uid, 'createdAt', 'desc');
       
       const ordensParaLista = fetchedOrdens.map(order => {
         let servicoDescricao = "Serviço/Produto não especificado";
@@ -134,13 +137,13 @@ export default function OrdensServicoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, bypassAuth]);
+  }, [user, toast]);
 
   useEffect(() => {
-    if (user || bypassAuth) {
+    if (user) {
       fetchOrdensServico();
     }
-  }, [fetchOrdensServico, user, bypassAuth]);
+  }, [fetchOrdensServico, user]);
 
   const filteredOrdens = useMemo(() => {
     return ordensServico.filter(order => {
@@ -166,18 +169,12 @@ export default function OrdensServicoPage() {
   };
 
   const handleSavePagamento = async (data: PagamentoOsFormValues) => {
-    if (!selectedOrderForPayment || (!user && !bypassAuth)) {
+    if (!selectedOrderForPayment || !user?.uid) {
       toast({ title: "Erro", description: "Nenhuma OS selecionada ou usuário não autenticado.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
-    const userIdToSave = user ? user.uid : (bypassAuth ? "bypass_user_placeholder" : null);
-    if (!userIdToSave) {
-      toast({ title: "Erro de Autenticação", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
-    }
-
+    
     const { db: dbInstance } = getFirebaseInstances();
     if (!dbInstance) {
       toast({ title: "Erro de Firebase", description: "DB não disponível para salvar pagamento.", variant: "destructive" });
@@ -213,7 +210,7 @@ export default function OrdensServicoPage() {
         categoria: "Receita de OS",
         status: "recebido", 
         referenciaOSId: selectedOrderForPayment.id,
-        userId: userIdToSave,
+        userId: user.uid,
         createdAt: Timestamp.now(), 
         updatedAt: Timestamp.now(), 
       });
@@ -229,24 +226,12 @@ export default function OrdensServicoPage() {
     }
   };
 
-  if (isAuthLoading && !bypassAuth) {
-    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Verificando autenticação...</p></div>;
-  }
-
-  if (!user && !bypassAuth) {
-     return (
-      <Card>
-        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent>
-          <p>Você precisa estar logado para acessar as ordens de serviço.</p>
-          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
-        </CardContent>
-      </Card>
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
     );
-  }
-
-  if (isLoading && (user || bypassAuth)) {
-     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando Ordens de Serviço...</p></div>;
   }
 
   return (

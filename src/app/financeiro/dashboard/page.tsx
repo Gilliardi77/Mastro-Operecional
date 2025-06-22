@@ -1,10 +1,32 @@
 
-import { TrendingUp, Calculator, ListChecks, ExternalLink, History, ShoppingBag } from 'lucide-react';
+'use client';
+
+import React, { useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
+import { Loader2, TrendingUp, Calculator, ListChecks, ExternalLink, History, ShoppingBag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 export default function DashboardFinanceiroPage() {
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/financeiro/dashboard');
+    }
+  }, [user, isAuthenticating, router]);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <section className="text-center sm:text-left">

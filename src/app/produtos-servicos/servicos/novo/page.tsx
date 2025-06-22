@@ -1,11 +1,32 @@
 
-import { Wrench, PlusSquare, ArrowLeft } from 'lucide-react'; // Usando PlusSquare para diferenciar
+'use client';
+
+import React, { useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
+import { Wrench, PlusSquare, ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
-// Importaremos componentes de formulário do ShadCN UI aqui
 
 export default function NovoServicoPage() {
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/servicos/novo');
+    }
+  }, [user, isAuthenticating, router]);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-8">
       <section className="flex justify-between items-center">
@@ -17,7 +38,7 @@ export default function NovoServicoPage() {
                 </Link>
             </Button>
             <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl flex items-center gap-2">
-            <PlusSquare className="h-8 w-8" /> {/* Alterado de Wrench para não confundir com listagem */}
+            <PlusSquare className="h-8 w-8" />
             Novo Serviço
             </h2>
         </div>
@@ -31,7 +52,6 @@ export default function NovoServicoPage() {
         <CardContent>
           <div className="p-8 text-center border-2 border-dashed rounded-md border-muted">
             <p className="text-muted-foreground">O formulário de novo serviço será implementado aqui.</p>
-            {/* Placeholder para campos: Tipo, Tempo, Custo, etc. com ajuda da IA */}
           </div>
         </CardContent>
       </Card>

@@ -1,10 +1,32 @@
 
-import { Wrench, PlusCircle } from 'lucide-react';
+'use client';
+
+import React, { useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
+import { Wrench, PlusCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
 
 export default function ServicosPage() {
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/servicos');
+    }
+  }, [user, isAuthenticating, router]);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-8">
        <section className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -34,7 +56,6 @@ export default function ServicosPage() {
             <p className="text-muted-foreground">Nenhum serviço cadastrado ainda.</p>
             <p className="text-sm text-muted-foreground mt-2">Clique em "Novo Serviço" para começar.</p>
           </div>
-          {/* Placeholder para a tabela/lista de serviços */}
         </CardContent>
       </Card>
     </div>

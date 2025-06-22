@@ -1,10 +1,30 @@
 
-import { History, ListChecks } from 'lucide-react';
+'use client';
+
+import React, { useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
+import { History, ListChecks, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 
 export default function HistoricoEntregasPage() {
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/historico-entregas');
+    }
+  }, [user, isAuthenticating, router]);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-8">
       <section className="text-center sm:text-left">
@@ -28,7 +48,6 @@ export default function HistoricoEntregasPage() {
         <CardContent>
           <div className="p-8 text-center border-2 border-dashed rounded-md border-muted">
             <p className="text-muted-foreground">Nenhuma entrega registrada ainda ou funcionalidade em desenvolvimento.</p>
-            {/* Placeholder para a tabela/lista de entregas */}
           </div>
         </CardContent>
       </Card>

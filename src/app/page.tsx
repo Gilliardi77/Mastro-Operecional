@@ -1,11 +1,13 @@
 
-'use client'; // Necessário para hooks como useState e useEffect
+'use client';
 
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator, TrendingUp, Settings, ActivitySquare } from 'lucide-react'; // Adicionado LayoutGrid e Settings
-import React, { useState, useEffect } from 'react'; // Importar useState e useEffect
+import { FilePlus2, ShoppingCart, CalendarDays, Users, PackageSearch, LayoutGrid, Calculator, TrendingUp, Settings, ActivitySquare, Loader2 } from 'lucide-react';
 
 interface QuickAccessCardProps {
   title: string;
@@ -26,7 +28,6 @@ function QuickAccessCard({ title, description, href, icon: Icon, cta }: QuickAcc
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Pode adicionar um pequeno placeholder de conteúdo aqui se desejar no futuro */}
       </CardContent>
       <CardFooter>
         <Button asChild className="w-full">
@@ -38,7 +39,15 @@ function QuickAccessCard({ title, description, href, icon: Icon, cta }: QuickAcc
 }
 
 export default function Home() {
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
   const [greeting, setGreeting] = useState('');
+
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login');
+    }
+  }, [user, isAuthenticating, router]);
 
   useEffect(() => {
     const getCurrentGreeting = () => {
@@ -49,6 +58,14 @@ export default function Home() {
     };
     setGreeting(getCurrentGreeting());
   }, []);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const quickAccessItems: QuickAccessCardProps[] = [
     {
@@ -62,7 +79,7 @@ export default function Home() {
       title: 'Controle de Produção',
       description: 'Acompanhe e gerencie o progresso das suas ordens de produção.',
       href: '/produtos-servicos/producao',
-      icon: Settings, // Ou ActivitySquare, se preferir algo mais relacionado a processos
+      icon: Settings,
       cta: 'Acessar Produção',
     },
     {
@@ -143,4 +160,3 @@ export default function Home() {
     </div>
   );
 }
-

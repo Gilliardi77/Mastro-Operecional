@@ -1,15 +1,15 @@
 
-// Otimizado e corrigido: ProdutosServicosPage como Dashboard Operacional Diário
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format, startOfDay, endOfDay, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  collection, query, where, getDocs, Timestamp, orderBy, limit, type Firestore, type DocumentData
+  collection, query, where, getDocs, Timestamp, orderBy, limit, type DocumentData
 } from 'firebase/firestore';
-import { useAuth } from '@/components/auth/auth-provider';
 import { getFirebaseInstances } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,7 +41,8 @@ interface ResumoDiarioOperacional {
 }
 
 export default function ProdutosServicosPage() {
-  const { user } = useAuth();
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const [agendaHoje, setAgendaHoje] = useState<AgendamentoResumo[]>([]);
   const [resumoDiario, setResumoDiario] = useState<ResumoDiarioOperacional>({
@@ -53,8 +54,12 @@ export default function ProdutosServicosPage() {
     osAtrasadas: 0,
   });
   const [loading, setLoading] = useState({ agenda: true, resumo: true });
-
-  const userId = user?.uid || 'bypass_user_placeholder';
+  
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos');
+    }
+  }, [user, isAuthenticating, router]);
 
   const getStatusClass = (status: string): string => {
     const map: Record<string, string> = {
@@ -67,9 +72,10 @@ export default function ProdutosServicosPage() {
   };
 
   const fetchAgendaHoje = useCallback(async () => {
+    if (!user?.uid) return;
     setLoading(prev => ({ ...prev, agenda: true }));
     const { db: dbInstance } = getFirebaseInstances();
-    if (!dbInstance || !userId) {
+    if (!dbInstance) {
       setLoading(prev => ({ ...prev, agenda: false }));
       return;
     }
@@ -79,7 +85,7 @@ export default function ProdutosServicosPage() {
       const hojeFim = endOfDay(new Date());
       const q = query(
         collection(dbInstance, 'agendamentos'),
-        where('userId', '==', userId),
+        where('userId', '==', user.uid),
         where('dataHora', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataHora', '<=', Timestamp.fromDate(hojeFim)),
         orderBy('dataHora', 'asc'),
@@ -98,12 +104,13 @@ export default function ProdutosServicosPage() {
     } finally {
       setLoading(prev => ({ ...prev, agenda: false }));
     }
-  }, [userId, toast]);
+  }, [user, toast]);
 
   const fetchResumoDiario = useCallback(async () => {
+    if (!user?.uid) return;
     setLoading(prev => ({ ...prev, resumo: true }));
     const { db: dbInstance } = getFirebaseInstances();
-    if (!dbInstance || !userId) {
+    if (!dbInstance) {
       setLoading(prev => ({ ...prev, resumo: false }));
       return;
     }
@@ -114,10 +121,9 @@ export default function ProdutosServicosPage() {
       let novasOsHoje = 0, numeroVendasHoje = 0, osConcluidasHoje = 0, produtosVendidosHoje = 0, osAtrasadas = 0;
       const clientesAtendidosIds = new Set<string>();
 
-      // Novas OS Criadas Hoje
       const novasOsSnap = await getDocs(query(
         collection(dbInstance, 'ordensServico'),
-        where('userId', '==', userId),
+        where('userId', '==', user.uid),
         where('createdAt', '>=', Timestamp.fromDate(hojeInicio)),
         where('createdAt', '<=', Timestamp.fromDate(hojeFim))
       ));
@@ -128,10 +134,9 @@ export default function ProdutosServicosPage() {
         else if (os.clienteNome) clientesAtendidosIds.add(`avulso_${os.clienteNome.toLowerCase().trim()}`);
       });
 
-      // Número de Vendas Hoje
       const vendasSnap = await getDocs(query(
         collection(dbInstance, 'vendas'),
-        where('userId', '==', userId),
+        where('userId', '==', user.uid),
         where('dataVenda', '>=', Timestamp.fromDate(hojeInicio)),
         where('dataVenda', '<=', Timestamp.fromDate(hojeFim))
       ));
@@ -149,17 +154,15 @@ export default function ProdutosServicosPage() {
         }
       });
 
-      // OS Concluídas Hoje & Produtos Vendidos em OS
       const osConcluidasSnap = await getDocs(query(
         collection(dbInstance, 'ordensServico'),
-        where('userId', '==', userId),
+        where('userId', '==', user.uid),
         where('status', '==', 'Concluído')
       ));
       osConcluidasSnap.forEach(doc => {
         const os = doc.data() as OrdemServico;
         if (os.updatedAt instanceof Timestamp && isToday(os.updatedAt.toDate())) {
             osConcluidasHoje++;
-            // Somar produtos de OS concluídas *hoje*
             if (os.itens) {
                os.itens.forEach((item: ItemOS) => {
                 if (item.tipo === 'Produto') {
@@ -170,9 +173,8 @@ export default function ProdutosServicosPage() {
         }
       });
       
-      // OS em Atraso
       const osQueryConstraintsAtrasadas = [
-        where('userId', '==', userId),
+        where('userId', '==', user.uid),
         where('dataEntrega', '<', Timestamp.fromDate(hojeInicio)),
         where('status', 'in', ['Pendente', 'Em Andamento'])
       ];
@@ -197,14 +199,22 @@ export default function ProdutosServicosPage() {
     } finally {
       setLoading(prev => ({ ...prev, resumo: false }));
     }
-  }, [userId, toast]);
+  }, [user, toast]);
 
   useEffect(() => {
-    if (userId) { 
+    if (user) { 
         fetchAgendaHoje();
         fetchResumoDiario();
     }
-  }, [fetchAgendaHoje, fetchResumoDiario, userId]);
+  }, [user, fetchAgendaHoje, fetchResumoDiario]);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const metricCards = [
     { title: "Novas OS Hoje", value: resumoDiario.novasOsHoje, icon: FilePlus2, color: "text-blue-500" },
@@ -295,17 +305,8 @@ export default function ProdutosServicosPage() {
         </CardHeader>
         <CardContent>
             <p className="text-muted-foreground">Esta seção exibirá tabelas dinâmicas com as últimas OS, Vendas, etc.</p>
-            {/* 
-            Aqui você poderia adicionar instâncias do componente TabelaDinamica:
-            <TabelaDinamica nomeColecao="ordensServico" userId={userId} titulo="Últimas Ordens de Serviço" orderByField="createdAt" orderByDirection="desc" />
-            <TabelaDinamica nomeColecao="vendas" userId={userId} titulo="Últimas Vendas" orderByField="dataVenda" orderByDirection="desc" />
-            */}
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    
-
-    

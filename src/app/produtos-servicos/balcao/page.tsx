@@ -1,6 +1,9 @@
 
 'use client';
 
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, ShoppingCart, Trash2, Search, UserPlus, ScanLine, Edit, FileText, Loader2, PackageSearch } from "lucide-react";
@@ -9,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import Image from "next/image";
-import React, { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,10 +22,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
-import { useAuth } from '@/components/auth/auth-provider';
 import { getFirebaseInstances } from '@/lib/firebase'; 
-import { collection, addDoc, Timestamp, doc, runTransaction, type Firestore } from "firebase/firestore"; 
+import { collection, addDoc, Timestamp, doc, runTransaction } from "firebase/firestore"; 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
 import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
@@ -55,7 +55,7 @@ const paymentMethods = [
 export default function BalcaoPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>("avulso");
   const [paymentMethod, setPaymentMethod] = useState<string>(paymentMethods[0].value);
@@ -73,20 +73,22 @@ export default function BalcaoPage() {
 
   const [fetchedClients, setFetchedClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
-
-
-  const bypassAuth = true; 
+  
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/balcao');
+    }
+  }, [user, isAuthenticating, router]);
 
   const fetchAvailableProducts = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
+    if (!user?.uid) {
       setAvailableProducts([]);
       setIsLoadingProducts(false);
       return;
     }
     setIsLoadingProducts(true);
     try {
-      const fetchedItems = await getAllProductServicesByUserId(userIdToQuery, 'nome', 'asc');
+      const fetchedItems = await getAllProductServicesByUserId(user.uid, 'nome', 'asc');
       setAvailableProducts(fetchedItems);
     } catch (error) {
       console.error("Erro ao buscar produtos/serviços via service:", error);
@@ -94,18 +96,17 @@ export default function BalcaoPage() {
     } finally {
       setIsLoadingProducts(false);
     }
-  }, [user, bypassAuth, toast]);
+  }, [user, toast]);
 
   const fetchClients = useCallback(async () => {
-    const userIdToQuery = bypassAuth && !user ? "bypass_user_placeholder" : user?.uid;
-    if (!userIdToQuery) {
+    if (!user?.uid) {
       setFetchedClients([]);
       setIsLoadingClients(false);
       return;
     }
     setIsLoadingClients(true);
     try {
-      const clientsData = await getAllClientsByUserId(userIdToQuery);
+      const clientsData = await getAllClientsByUserId(user.uid);
       setFetchedClients(clientsData);
     } catch (error: any) {
       console.error("Erro ao buscar clientes via service:", error);
@@ -113,15 +114,15 @@ export default function BalcaoPage() {
     } finally {
       setIsLoadingClients(false);
     }
-  }, [user, bypassAuth, toast]);
+  }, [user, toast]);
 
 
   useEffect(() => {
-    if (user || bypassAuth) {
+    if (user) {
         fetchAvailableProducts();
         fetchClients();
     }
-  }, [fetchAvailableProducts, fetchClients, user, bypassAuth]);
+  }, [fetchAvailableProducts, fetchClients, user]);
 
 
   useEffect(() => {
@@ -191,12 +192,7 @@ export default function BalcaoPage() {
   };
 
   const handleFinalizarVenda = async () => {
-    let userIdToSave = user ? user.uid : null;
-    if (bypassAuth && !user) {
-        userIdToSave = "bypass_user_placeholder";
-    }
-
-    if (!userIdToSave) {
+    if (!user?.uid) {
       toast({ title: "Erro de Autenticação", description: "Usuário não identificado. Faça login para registrar a venda.", variant: "destructive" });
       setIsFinalizingSale(false);
       return;
@@ -225,7 +221,7 @@ export default function BalcaoPage() {
       const clienteNome = selectedClient === "avulso" ? "Cliente Avulso" : clienteSelecionado?.nome || "Não identificado";
 
       const vendaData = {
-        userId: userIdToSave,
+        userId: user.uid,
         clienteId: selectedClient === "avulso" ? null : selectedClient,
         clienteNome: clienteNome,
         itens: cartItems.map(item => ({
@@ -250,7 +246,7 @@ export default function BalcaoPage() {
 
 
       const lancamentoReceita = {
-        userId: userIdToSave,
+        userId: user.uid,
         titulo: `Venda Balcão #${vendaDocRef.id.substring(0,6)} - ${clienteNome}`,
         valor: totalVenda,
         tipo: 'receita' as 'receita' | 'despesa',
@@ -352,18 +348,13 @@ export default function BalcaoPage() {
     product.tipo.toLowerCase().includes(searchTermProducts.toLowerCase())
   );
 
-  if (!bypassAuth && !user && !isLoadingProducts && !isLoadingClients) {
+  if (isAuthenticating || !user) {
     return (
-      <Card>
-        <CardHeader><CardTitle>Acesso Negado</CardTitle></CardHeader>
-        <CardContent>
-          <p>Você precisa estar logado para acessar o balcão de vendas.</p>
-          <Button onClick={() => router.push('/login')} className="mt-4">Fazer Login</Button>
-        </CardContent>
-      </Card>
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
     );
   }
-
 
   return (
     <CashBoxGuard>

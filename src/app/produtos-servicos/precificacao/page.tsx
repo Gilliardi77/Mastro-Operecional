@@ -1,8 +1,30 @@
 
-import { Calculator, Lightbulb } from 'lucide-react';
+'use client';
+
+import React, { useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useRouter } from 'next/navigation';
+import { Calculator, Lightbulb, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function PrecificacaoPage() {
+  const { user, isAuthenticating } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticating && !user) {
+      router.push('/login?redirect=/produtos-servicos/precificacao');
+    }
+  }, [user, isAuthenticating, router]);
+
+  if (isAuthenticating || !user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <section className="text-center sm:text-left">
@@ -26,7 +48,6 @@ export default function PrecificacaoPage() {
         <CardContent>
           <div className="p-8 text-center border-2 border-dashed rounded-md border-muted">
             <p className="text-muted-foreground">O formulário de precificação e sugestões da IA serão implementados aqui.</p>
-            {/* Placeholder para campos de custo, markup, lucro, preço sugerido, histórico */}
           </div>
         </CardContent>
       </Card>
