@@ -55,22 +55,26 @@ export default function ContextualAIGuide() {
   };
   
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
-    setUserInput(''); 
+    setUserInput('');
     setSelectedActionId(actionId + JSON.stringify(payload)); // Make ID unique for loading state
-
+  
+    // A more natural query to send to the AI when a user clicks a suggestion for information.
+    // This makes the AI's task clearer.
+    const queryForAI = `O usuário clicou na ação sugerida: "${actionLabel}". Por favor, prossiga com a orientação ou a próxima etapa sobre isso.`;
+  
     try {
       switch (actionId) {
         case 'navigate_to_page':
           if (payload && typeof payload.path === 'string') {
             router.push(payload.path);
-            closeAIGuide(); 
+            closeAIGuide();
           } else {
-            toast({ title: "Erro de Navegação", description: "Caminho inválido fornecido pela IA.", variant: "destructive"});
+            toast({ title: "Erro de Navegação", description: "Caminho inválido fornecido pela IA.", variant: "destructive" });
           }
           break;
         case 'preencher_campo_formulario':
           if (payload && payload.formName && payload.fieldName && payload.value !== undefined) {
-            const event = new CustomEvent('aiFillFormEvent', { 
+            const event = new CustomEvent('aiFillFormEvent', {
               detail: {
                 formName: payload.formName,
                 fieldName: payload.fieldName,
@@ -80,9 +84,9 @@ export default function ContextualAIGuide() {
               }
             });
             window.dispatchEvent(event);
-            await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada.`);
+            // No follow-up message needed, the form change is the feedback. The toast is handled in the event listener.
           } else {
-             toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
+            toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive" });
           }
           break;
         case 'abrir_modal_novo_cliente_os':
@@ -94,17 +98,18 @@ export default function ContextualAIGuide() {
               }
             });
             window.dispatchEvent(event);
-            await sendQueryToAIGuide(`Ação: "${actionLabel}" iniciada. O modal para adicionar cliente será aberto.`);
+            // No follow-up message needed, the modal opening is the feedback.
           } else {
-            toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive"});
+            toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive" });
           }
           break;
         default:
-          await sendQueryToAIGuide(`Realizei a ação: "${actionLabel}". (Contexto da ação: ${actionId}, Payload: ${JSON.stringify(payload)})`);
+          // For other actions, send a query to the AI to get the next response, but don't show the query itself to the user.
+          await sendQueryToAIGuide(queryForAI, { asUserMessage: false });
           break;
       }
     } finally {
-       // Resetting is handled by useEffect on isAILoading
+      // Resetting is handled by useEffect on isAILoading
     }
   };
 
