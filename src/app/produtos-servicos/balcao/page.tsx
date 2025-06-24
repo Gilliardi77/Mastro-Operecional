@@ -28,7 +28,7 @@ import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
 import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
 import type { ProductService } from '@/schemas/productServiceSchema'; 
-import CashBoxGuard from "@/components/cash-box/CashBoxGuard";
+import CashBoxModalGuard from "@/components/cash-box/CashBoxModalGuard";
 
 interface CartItem {
   id: string;
@@ -357,7 +357,7 @@ export default function BalcaoPage() {
   }
 
   return (
-    <CashBoxGuard>
+    <CashBoxModalGuard>
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <Card>
@@ -598,6 +598,6 @@ export default function BalcaoPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </CashBoxGuard>
+    </CashBoxModalGuard>
   );
 }

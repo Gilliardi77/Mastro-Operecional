@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,105 +37,7 @@ import type { EntradasPorMetodo } from '@/schemas/fechamentoCaixaSchema';
 import { FechamentoCaixaFormSchema, EntradasPorMetodoSchema } from '@/schemas/fechamentoCaixaSchema';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-// --- Sub-componente para Abrir o Caixa ---
-const AbrirCaixaForm = () => {
-  const { user } = useAuth();
-  const { mutate } = useCashBox();
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [trocoSugerido, setTrocoSugerido] = useState<number>(0);
-  const [isSuggestionLoading, setIsSuggestionLoading] = useState(true);
-
-  const form = useForm({
-    resolver: zodResolver(z.object({
-      trocoInicial: z.coerce.number().nonnegative("O troco inicial não pode ser negativo."),
-    })),
-    defaultValues: {
-      trocoInicial: 0,
-    },
-  });
-
-  useEffect(() => {
-    async function fetchSuggestion() {
-      if (!user?.uid) {
-        setIsSuggestionLoading(false);
-        return;
-      }
-      try {
-        const ultimaSessao = await getUltimaSessaoFechada(user.uid);
-        const valorSugerido = ultimaSessao?.saldoFinalCalculado ?? 0;
-        setTrocoSugerido(valorSugerido);
-        form.setValue("trocoInicial", valorSugerido);
-      } catch (error) {
-        console.warn("Não foi possível sugerir troco inicial:", error);
-      } finally {
-        setIsSuggestionLoading(false);
-      }
-    }
-    fetchSuggestion();
-  }, [user, form]);
-
-  const onSubmit = async (data: { trocoInicial: number }) => {
-    if (!user?.uid) {
-      toast({ title: "Usuário não autenticado", variant: "destructive" });
-      return;
-    }
-    setIsLoading(true);
-    try {
-      await abrirSessaoCaixa(user.uid, data.trocoInicial);
-      toast({ title: "Caixa Aberto!", description: `Caixa aberto com troco inicial de R$ ${data.trocoInicial.toFixed(2)}.` });
-      mutate(); // Revalida os dados do SWR para atualizar o estado do caixa
-    } catch (error: any) {
-      toast({ title: "Erro ao Abrir Caixa", description: error.message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <Card className="w-full max-w-2xl mx-auto shadow-lg">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-2xl text-primary">
-          <Unlock className="h-7 w-7" />
-          Abrir Caixa
-        </CardTitle>
-        <CardDescription>Informe o valor inicial do troco para começar as operações do dia.</CardDescription>
-      </CardHeader>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent>
-            {isSuggestionLoading ? (
-                <div className="flex items-center gap-2"><Loader2 className="animate-spin h-4 w-4"/><span>Buscando sugestão de troco...</span></div>
-            ) : (
-                <FormField
-                  control={form.control}
-                  name="trocoInicial"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Troco Inicial (R$)</FormLabel>
-                      <FormControl><Input type="number" placeholder="0.00" {...field} step="0.01" /></FormControl>
-                      <FormDescription>
-                        Valor sugerido com base no fechamento anterior: R$ {trocoSugerido.toFixed(2)}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" className="w-full" disabled={isLoading || isSuggestionLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Abrir Caixa e Iniciar Vendas
-            </Button>
-          </CardFooter>
-        </form>
-      </Form>
-    </Card>
-  );
-};
-
+import { AbrirCaixaForm } from '@/components/cash-box/AbrirCaixaForm';
 
 // --- Sub-componente para Fechar o Caixa ---
 const FecharCaixaForm = () => {
