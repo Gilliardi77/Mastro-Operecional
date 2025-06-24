@@ -16,9 +16,10 @@ interface SuggestedActionsProps {
 export default function SuggestedActions({ actions, onActionClick, isLoading, selectedActionId }: SuggestedActionsProps) {
   return (
     <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-      {actions.map(action => {
-        const uniqueKey = action.actionId + (action.payload?.fieldName || action.payload?.suggestedClientName || Math.random().toString(36).substring(7));
-        const isCurrentActionLoading = isLoading && selectedActionId === action.actionId;
+      {actions.map((action, index) => {
+        const uniqueKey = action.actionId + JSON.stringify(action.payload) + index;
+        const isCurrentActionLoading = isLoading && selectedActionId === (action.actionId + JSON.stringify(action.payload));
+        
         return (
           <Button
             key={uniqueKey}

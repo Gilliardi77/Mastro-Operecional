@@ -56,7 +56,7 @@ export default function ContextualAIGuide() {
   
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
     setUserInput(''); 
-    setSelectedActionId(actionId); 
+    setSelectedActionId(actionId + JSON.stringify(payload)); // Make ID unique for loading state
 
     try {
       switch (actionId) {
@@ -75,12 +75,12 @@ export default function ContextualAIGuide() {
                 formName: payload.formName,
                 fieldName: payload.fieldName,
                 value: payload.value,
-                actionLabel: actionLabel 
+                actionLabel: actionLabel,
+                itemIndex: payload.itemIndex,
               }
             });
             window.dispatchEvent(event);
-            
-            await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada. O campo ${payload.fieldName} foi preenchido com ${payload.value}.`);
+            await sendQueryToAIGuide(`Ação: "${actionLabel}" aplicada.`);
           } else {
              toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive"});
           }
@@ -104,7 +104,7 @@ export default function ContextualAIGuide() {
           break;
       }
     } finally {
-       // Reset selectedActionId é feito no useEffect que observa isAILoading
+       // Resetting is handled by useEffect on isAILoading
     }
   };
 
@@ -139,10 +139,10 @@ export default function ContextualAIGuide() {
           <SheetHeader className="p-6 pb-2 border-b">
             <SheetTitle className="text-xl flex items-center gap-2">
               <Lightbulb className="h-6 w-6 text-primary" />
-              Guia Inteligente Business Maestro
+              Guia Inteligente Maestro
             </SheetTitle>
             <SheetDescription>
-              Precisa de ajuda aqui na "{currentAppContext.pageName}"? Posso te orientar com base no que você está fazendo.
+              Converse comigo para navegar, preencher formulários ou aprender sobre a página "{currentAppContext.pageName}".
             </SheetDescription>
           </SheetHeader>
           

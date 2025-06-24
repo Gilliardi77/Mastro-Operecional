@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Um Guia de IA Contextual que ajuda os usuários dentro da aplicação Maestro Operacional.
@@ -55,13 +54,13 @@ Instruções para o Guia de IA:
     -   Para NAVEGAÇÃO:
         -   actionId: 'navigate_to_page'
         -   payload: { 'path': '/caminho/da/pagina' }
-        -   Caminhos válidos: "/", "/produtos-servicos", "/produtos-servicos/agenda", "/produtos-servicos/clientes", "/produtos-servicos/produtos", "/produtos-servicos/atendimentos/novo", "/login". Certifique-se que o caminho fornecido é uma rota válida.
+        -   Caminhos válidos: "/", "/produtos-servicos", "/produtos-servicos/agenda", "/produtos-servicos/clientes", "/produtos-servicos/produtos", "/produtos-servicos/atendimentos/novo", "/login", "/financeiro/dashboard", "/financeiro/fechamento-caixa", "/financeiro/lancamentos", "/financeiro/vendas", "/produtos-servicos/producao", "/produtos-servicos/estoque". Certifique-se que o caminho fornecido é uma rota válida.
     -   Para PREENCHIMENTO DE FORMULÁRIO (Exemplo: Página "Nova Ordem de Serviço", cujo formName é "ordemServicoForm"):
         -   actionId: 'preencher_campo_formulario'
         -   payload: { "formName": "NOME_DO_FORMULARIO_ALVO", "fieldName": "NOME_DO_CAMPO_NO_ZOD_SCHEMA", "value": "VALOR_A_SER_PREENCHIDO" }
-        -   Campos válidos para "ordemServicoForm": "clienteId" (usar ID do cliente se souber, ou "avulso"), "clienteNome" (para cliente avulso), "descricao", "valorTotal" (número), "valorAdiantado" (número), "dataEntrega" (formato AAAA-MM-DD), "observacoes".
-        -   Exemplo de Label: "Preencher 'Descrição' com 'Conserto rápido'"
-        -   Se o usuário disser "OS para cliente Teste, descrição Manutenção Preventiva, valor 100", você deve gerar múltiplas suggestedActions, uma para cada campo.
+        -   Campos válidos para "ordemServicoForm": "clienteId" (usar ID do cliente se souber, ou "avulso"), "clienteNome" (para cliente avulso), "valorAdiantado" (número), "formaPagamentoAdiantamento" (dinheiro, pix, cartao_credito, etc.), "dataEntrega" (formato AAAA-MM-DD), "observacoes". Para itens, use 'itens.0.nome', 'itens.0.quantidade', 'itens.0.valorUnitario'. Adicione um novo item se o usuário pedir.
+        -   Exemplo de Label: "Preencher 'Observações' com 'Entrega urgente'"
+        -   Se o usuário disser "OS para cliente Teste, descrição Manutenção Preventiva, valor 100", você deve gerar múltiplas suggestedActions, uma para cada campo, incluindo um novo item na OS.
         -   Para o campo "dataEntrega", se o usuário disser "amanhã" ou algo relativo, peça para ele confirmar a data exata ou usar o seletor de data. Por enquanto, aceite o valor como string se o usuário fornecer diretamente.
     -   Para ABRIR MODAL DE NOVO CLIENTE (Exemplo: Página "Nova Ordem de Serviço"):
         -   Se o usuário disser "adicionar cliente X", "cadastrar cliente Y", ou similar, e estiver na página "Nova Ordem de Serviço".
@@ -69,7 +68,7 @@ Instruções para o Guia de IA:
         -   payload: { "suggestedClientName": "NOME_DO_CLIENTE_EXTRAIDO_DA_QUERY" }
         -   Exemplo de Label: "Adicionar Cliente 'NOME_DO_CLIENTE_EXTRAIDO_DA_QUERY'"
 
-4.  Se a consulta for genérica (ex: "como usar isso?"), explique a funcionalidade principal da página '{{{pageName}}}'.
+4.  Se a consulta for genérica (ex: "como usar isso?"), explique a funcionalidade principal da página '{{{pageName}}}'. Ofereça ensinar passo a passo.
 5.  Se o usuário parecer confuso ou travado (baseado na consulta ou contexto futuro), ofereça ajuda para a etapa específica.
 6.  Mantenha as respostas curtas e diretas ao ponto. Evite respostas muito longas ou tutoriais completos, a menos que explicitamente solicitado.
 7.  Se a consulta do usuário for ambígua ou não estiver clara, peça educadamente por mais detalhes ou um esclarecimento em vez de tentar adivinhar.
@@ -81,8 +80,8 @@ Exemplos de Interação:
 - User na página "/produtos-servicos/atendimentos/novo", query: "OS para cliente Maria, descrição: reparo geral, valor 250" -> AI: "Entendido! Posso preencher os campos para você. Confirma?" (suggestedActions: [
     {label: "Preencher Cliente com 'Maria' (Avulso)", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "clienteNome", value: "Maria"}},
     {label: "Selecionar Cliente Avulso", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "clienteId", value: "avulso"}},
-    {label: "Preencher Descrição com 'reparo geral'", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "descricao", value: "reparo geral"}},
-    {label: "Preencher Valor Total com 250", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "valorTotal", value: 250}}
+    {label: "Adicionar item 'reparo geral' com valor 250", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "itens.0.nome", value: "reparo geral", itemIndex: 0}},
+    {label: "Definir valor do item como 250", actionId: "preencher_campo_formulario", payload: {formName: "ordemServicoForm", fieldName: "itens.0.valorUnitario", value: 250, itemIndex: 0}}
 ])
 - User na página "/produtos-servicos/atendimentos/novo", query: "quero adicionar o cliente João da Silva" -> AI: "Ok, vamos adicionar o João da Silva." (suggestedActions: [{label: "Adicionar Cliente 'João da Silva'", actionId: "abrir_modal_novo_cliente_os", payload: { suggestedClientName: "João da Silva"}}])
 
@@ -110,4 +109,3 @@ const contextualAIGuideInternalFlow = ai.defineFlow(
     return output;
   }
 );
-

@@ -78,7 +78,7 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
 
 
   useEffect(() => {
-    setCurrentAppContext(prev => ({ ...prev, pageName: pathname || 'unknown' }));
+    setCurrentAppContext(prev => ({ ...prev, pageName: pathname || 'unknown', formSnapshotJSON: undefined, currentAction: undefined }));
     // Não limpar chatMessages aqui, pois o effect acima lida com carregar/resetar baseado em isAIGuideOpen e pathname
   }, [pathname]);
 
@@ -114,28 +114,30 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
       text: userQuery,
       timestamp: new Date(),
     };
+    
+    // Use um callback de estado para garantir que estamos usando o estado mais recente de chatMessages
     setChatMessages(prev => [...prev, newUserMessage]);
     setIsAILoading(true);
 
-    const historyForAI = chatMessages // Use o estado *antes* de adicionar a nova mensagem do usuário
-      .slice(-5) // Pega as últimas 5 mensagens (ajuste conforme necessário)
+    // Pegamos o estado atualizado para enviar à IA
+    const currentMessages = [...chatMessages, newUserMessage];
+
+    const historyForAI = currentMessages
+      .slice(-6) // Pega as últimas 6 mensagens
       .map(msg => ({
-        role: msg.sender === 'ai' ? 'model' : 'user', // Converte 'ai' para 'model'
+        role: msg.sender === 'ai' ? 'model' : 'user',
         text: msg.text,
       }));
     
-    // Adiciona a mensagem atual do usuário ao histórico que será enviado
-    const currentHistoryPlusNewQuery = [...historyForAI, { role: 'user' as const, text: userQuery }];
-
-
     try {
       const input: ContextualAIGuideInput = {
         pageName: currentAppContext.pageName,
-        userQuery: userQuery, // A consulta atual do usuário
+        userQuery: userQuery,
         currentAction: currentAppContext.currentAction,
         formSnapshotJSON: currentAppContext.formSnapshotJSON,
-        chatHistory: currentHistoryPlusNewQuery.slice(0, -1), // Envia o histórico ANTES da consulta atual
+        chatHistory: historyForAI.slice(0, -1), // Envia o histórico ANTES da consulta atual
       };
+      
       const aiResponse = await contextualAIGuideFlow(input);
       addMessage('ai', aiResponse.aiResponseText, aiResponse.suggestedActions);
     } catch (error) {

@@ -79,6 +79,11 @@ interface AIFillFormEventPayload {
   itemIndex?: number;
 }
 
+interface AIOpenNewClientModalPayload {
+  suggestedClientName?: string;
+}
+
+
 export default function OrdemServicoPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -150,7 +155,7 @@ export default function OrdemServicoPage() {
 
   // Effect 1: Fetch initial data
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
     
     const userIdToQuery = user.uid;
 
@@ -282,60 +287,57 @@ export default function OrdemServicoPage() {
   }, [formSnapshot, updateAICurrentPageContext, isInitialPrefillComplete, isLoadingClients, isLoadingCatalogo]);
 
 
-  // Effect 5: Event listener for AI form fill
+  // Effect 5: Event listeners for AI actions
   useEffect(() => {
     const handleAiFormFill = (event: Event) => {
-      const customEvent = event as CustomEvent<AIFillFormEventPayload>;
-      const { detail } = customEvent;
+        const customEvent = event as CustomEvent<AIFillFormEventPayload>;
+        const { detail } = customEvent;
 
-      if (detail.formName === "ordemServicoForm") {
-        const generalFieldNames: Array<FieldPath<OrdemServicoFormValues>> = [
-          "clienteId", "clienteNome", "valorAdiantado", "formaPagamentoAdiantamento", "dataEntrega", "observacoes", "valorTotalOS"
-        ];
+        if (detail.formName !== "ordemServicoForm") return;
 
-        if (typeof detail.fieldName === 'string' && generalFieldNames.includes(detail.fieldName as FieldPath<OrdemServicoFormValues>)) {
-          let valueToSet = detail.value;
-          if (detail.fieldName === 'dataEntrega' && typeof valueToSet === 'string') {
-            const parsedDate = new Date(valueToSet + 'T00:00:00'); 
-            if (!isNaN(parsedDate.getTime())) valueToSet = parsedDate;
-            else { toast({ title: "Erro de Data", description: "Formato de data inválido da IA.", variant: "destructive"}); return; }
-          } else if ((detail.fieldName === 'valorAdiantado' || detail.fieldName === 'valorTotalOS') && typeof valueToSet !== 'number') {
-            const numValue = parseFloat(valueToSet);
-            if (!isNaN(numValue)) valueToSet = numValue;
-            else { toast({ title: "Erro de Valor", description: `Valor de ${detail.fieldName} inválido da IA.`, variant: "destructive"}); return; }
-          }
-          osForm.setValue(detail.fieldName as FieldPath<OrdemServicoFormValues>, valueToSet, { shouldValidate: true, shouldDirty: true });
-          toast({ title: "Campo Preenchido pela IA", description: `${detail.actionLabel || `Campo ${detail.fieldName} preenchido.`}` });
-        } else if (typeof detail.fieldName === 'string' && detail.fieldName.startsWith("itens.") && detail.itemIndex !== undefined) {
-            const fieldNameParts = detail.fieldName.split('.');
-            const itemIndex = parseInt(fieldNameParts[1], 10);
-            const itemFieldName = fieldNameParts[2] as keyof Omit<ItemOSFormValues, 'idTemp' | 'tipo'>;
+        const generalFieldNames: FieldPath<OrdemServicoFormValues>[] = ["clienteId", "clienteNome", "valorAdiantado", "formaPagamentoAdiantamento", "dataEntrega", "observacoes"];
 
-            if (itemIndex >= 0 && itemIndex < fields.length && itemFieldName) {
-                let valueToSet = detail.value;
-                 if ((itemFieldName === 'quantidade' || itemFieldName === 'valorUnitario') && typeof valueToSet !== 'number') {
-                    const numValue = parseFloat(valueToSet);
-                    if (!isNaN(numValue)) valueToSet = numValue;
-                    else { 
-                        toast({ title: "Erro de Valor do Item", description: `Valor de ${itemFieldName} inválido da IA para o item ${itemIndex + 1}.`, variant: "destructive"}); 
-                        return; 
-                    }
-                }
-                update(itemIndex, { ...fields[itemIndex], [itemFieldName]: valueToSet });
-                toast({ title: "Item da OS Atualizado pela IA", description: `${detail.actionLabel || `Item ${itemIndex + 1}, campo ${itemFieldName} atualizado.`}` });
-            } else {
-                console.warn(`IA tentou preencher campo de item inválido: ${detail.fieldName}`);
-                toast({ title: "Campo de Item Inválido", variant: "destructive" });
+        if (generalFieldNames.includes(detail.fieldName as FieldPath<OrdemServicoFormValues>)) {
+            let valueToSet = detail.value;
+            if (detail.fieldName === 'dataEntrega' && typeof valueToSet === 'string') {
+                const parsedDate = new Date(valueToSet + 'T00:00:00');
+                if (!isNaN(parsedDate.getTime())) valueToSet = parsedDate;
+                else { toast({ title: "Erro de Data", description: "Formato de data inválido da IA.", variant: "destructive" }); return; }
             }
-        } else {
-          console.warn(`IA tentou preencher campo inválido: ${detail.fieldName}`);
-          toast({ title: "Campo Inválido", variant: "destructive"});
+            osForm.setValue(detail.fieldName as FieldPath<OrdemServicoFormValues>, valueToSet, { shouldValidate: true, shouldDirty: true });
+            toast({ title: "Campo Preenchido pela IA", description: `${detail.actionLabel || `Campo ${detail.fieldName} preenchido.`}` });
+        } else if (detail.fieldName.startsWith("itens.") && detail.itemIndex !== undefined) {
+            const itemIndex = detail.itemIndex;
+            const fieldName = detail.fieldName.split('.')[2] as keyof Omit<ItemOSFormValues, 'idTemp'>;
+
+            if (itemIndex < 0) return;
+
+            if (itemIndex >= fields.length) { // Adicionar novo item
+                const newItem: ItemOSFormValues = { idTemp: `item-${Date.now()}`, nome: "", quantidade: 1, valorUnitario: 0, tipo: 'Manual' };
+                append(newItem);
+                setTimeout(() => update(itemIndex, { ...newItem, [fieldName]: detail.value }), 50); // Delay to ensure append is processed
+            } else { // Atualizar item existente
+                update(itemIndex, { ...fields[itemIndex], [fieldName]: detail.value });
+            }
+            toast({ title: "Item da OS Atualizado pela IA", description: `${detail.actionLabel || `Item ${itemIndex + 1} atualizado.`}` });
         }
-      }
     };
+    
+    const handleAiOpenModal = (event: Event) => {
+        const customEvent = event as CustomEvent<AIOpenNewClientModalPayload>;
+        const { detail } = customEvent;
+        newClientForm.setValue('nome', detail.suggestedClientName || "");
+        setIsNewClientModalOpen(true);
+    };
+
     window.addEventListener('aiFillFormEvent', handleAiFormFill);
-    return () => window.removeEventListener('aiFillFormEvent', handleAiFormFill);
-  }, [osForm, toast, fields, update]);
+    window.addEventListener('aiOpenNewClientModalOSEvent', handleAiOpenModal);
+    
+    return () => {
+        window.removeEventListener('aiFillFormEvent', handleAiFormFill);
+        window.removeEventListener('aiOpenNewClientModalOSEvent', handleAiOpenModal);
+    };
+  }, [osForm, toast, fields, update, append, newClientForm]);
 
 
   async function onOsSubmit(data: OrdemServicoFormValues) {
