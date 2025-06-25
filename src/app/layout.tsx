@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [ // Para favicons
       // { url: '/favicon.ico', sizes: 'any', rel: 'icon' }, // Descomente se você tiver um favicon.ico na pasta public
-      { url: '/logo sem fundo 120x120.png', type: 'image/png', sizes: '120x120' },
+      { url: '/logo%20sem%20fundo%20120x120.png', type: 'image/png', sizes: '120x120' },
       { url: '/images/512.png', type: 'image/png', sizes: '512x512' }
     ],
     apple: [ // Para apple-touch-icon
