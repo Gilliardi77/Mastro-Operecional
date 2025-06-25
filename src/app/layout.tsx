@@ -1,4 +1,3 @@
-
 import type { Metadata } from 'next';
 import './globals.css';
 import Header from '@/components/layout/Header';
@@ -13,14 +12,8 @@ export const metadata: Metadata = {
   title: 'Maestro Operacional',
   description: 'Gerado pelo Firebase Studio para Maestro Operacional',
   icons: {
-    icon: [ // Para favicons
-      // { url: '/favicon.ico', sizes: 'any', rel: 'icon' }, // Descomente se você tiver um favicon.ico na pasta public
-      { url: '/logo%20sem%20fundo%20120x120.png', type: 'image/png', sizes: '120x120' },
-      { url: '/images/512.png', type: 'image/png', sizes: '512x512' }
-    ],
-    apple: [ // Para apple-touch-icon
-      { url: '/images/180.png', sizes: '180x180', type: 'image/png' },
-    ],
+    icon: { url: '/logo120x120.png', type: 'image/png', sizes: '120x120' },
+    apple: { url: '/logo120x120.png', sizes: '120x120', type: 'image/png' },
   },
   manifest: '/manifest.json', // Caminho para seu arquivo de manifesto PWA
 };
