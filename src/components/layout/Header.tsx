@@ -30,7 +30,6 @@ export default function Header() {
         description: "Sistema de autenticação não está pronto.",
         variant: "destructive",
       });
-      console.error("Firebase Auth não inicializado para logout");
       return;
     }
     try {
@@ -66,7 +65,7 @@ export default function Header() {
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
           <Image
-            src="/images/192.png" // Usando 192.png temporariamente como logo
+            src="/logo sem fundo 120x120.png"
             alt="Maestro Operacional Logo"
             width={36}
             height={36}
@@ -87,10 +86,10 @@ export default function Header() {
             <TrendingUp className="mr-1 h-4 w-4" /> Financeiro
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-          <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app">
-            <Link2Icon className="mr-1 h-4 w-4" /> Visão Fin.
-          </Link>
+        <Button variant="ghost" size="sm" asChild>
+            <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app">
+                <Link2Icon className="mr-1 h-4 w-4" /> Visão Fin.
+            </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
             <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank">
