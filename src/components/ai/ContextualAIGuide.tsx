@@ -13,6 +13,28 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast'; 
 import SuggestedActions from './SuggestedActions';
 
+const QuickSuggestions = ({ onSuggestionClick }: { onSuggestionClick: (query: string) => void }) => {
+  const suggestions = [
+    { label: 'Como crio uma Ordem de Serviço?', query: 'Como eu crio uma Ordem de Serviço passo a passo?' },
+    { label: 'Para que serve esta página?', query: 'Para que serve esta página?' },
+    { label: 'Me dê dicas de como atender um cliente', query: 'Me dê dicas de como atender um cliente' },
+  ];
+
+  return (
+    <div className="p-4 space-y-2 text-center border-b">
+        <p className="text-sm text-muted-foreground">Não sabe por onde começar? Tente uma das opções abaixo.</p>
+        <div className="flex flex-wrap justify-center gap-2">
+            {suggestions.map((s) => (
+                <Button key={s.label} variant="outline" size="sm" onClick={() => onSuggestionClick(s.query)}>
+                    {s.label}
+                </Button>
+            ))}
+        </div>
+    </div>
+  );
+};
+
+
 export default function ContextualAIGuide() {
   const {
     isAIGuideOpen,
@@ -39,8 +61,10 @@ export default function ContextualAIGuide() {
   useEffect(() => {
     if (isAIGuideOpen && chatMessages.length === 0 && !isAILoading) {
       const savedChat = typeof window !== 'undefined' ? sessionStorage.getItem(`chat-${currentAppContext.pageName}`) : null;
-      if (!savedChat) {
-        sendQueryToAIGuide(`Olá! Estou na página "${currentAppContext.pageName}". Poderia me dar uma breve orientação ou perguntar como posso ajudar?`);
+      if (savedChat) {
+        // Chat is loaded from storage via context, so no need for proactive message if history exists
+      } else {
+        // No proactive message by default, user will see quick suggestions
       }
     }
   }, [isAIGuideOpen, chatMessages.length, currentAppContext.pageName, sendQueryToAIGuide, isAILoading]);
@@ -54,13 +78,16 @@ export default function ContextualAIGuide() {
     await sendQueryToAIGuide(query);
   };
   
+  const handleQuickSuggestionClick = (query: string) => {
+      setUserInput(''); // Clear input in case user was typing
+      sendQueryToAIGuide(query);
+  };
+  
   const handleSuggestedAction = async (actionLabel: string, actionId: string, payload?: any) => {
     setUserInput('');
-    setSelectedActionId(actionId + JSON.stringify(payload)); // Make ID unique for loading state
+    setSelectedActionId(actionId + JSON.stringify(payload)); 
   
-    // A more natural query to send to the AI when a user clicks a suggestion for information.
-    // This makes the AI's task clearer.
-    const queryForAI = `O usuário clicou na ação sugerida: "${actionLabel}". Por favor, prossiga com a orientação ou a próxima etapa sobre isso.`;
+    const queryForAI = `O usuário clicou na ação sugerida: "${actionLabel}".`;
   
     try {
       switch (actionId) {
@@ -84,7 +111,7 @@ export default function ContextualAIGuide() {
               }
             });
             window.dispatchEvent(event);
-            // No follow-up message needed, the form change is the feedback. The toast is handled in the event listener.
+            await sendQueryToAIGuide(`O campo foi preenchido. O que mais posso fazer?`, { asUserMessage: false });
           } else {
             toast({ title: "Erro de Preenchimento", description: "Dados insuficientes da IA para preencher o campo.", variant: "destructive" });
           }
@@ -98,14 +125,13 @@ export default function ContextualAIGuide() {
               }
             });
             window.dispatchEvent(event);
-            // No follow-up message needed, the modal opening is the feedback.
+            await sendQueryToAIGuide(`O modal para adicionar o cliente '${payload.suggestedClientName}' foi aberto.`, { asUserMessage: false });
           } else {
             toast({ title: "Erro ao Abrir Modal", description: "Informações insuficientes da IA.", variant: "destructive" });
           }
           break;
         default:
-          // For other actions, send a query to the AI to get the next response, but don't show the query itself to the user.
-          await sendQueryToAIGuide(queryForAI, { asUserMessage: false });
+          await sendQueryToAIGuide(queryForAI, { asUserMessage: true });
           break;
       }
     } finally {
@@ -151,8 +177,11 @@ export default function ContextualAIGuide() {
             </SheetDescription>
           </SheetHeader>
           
-          <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
-            <div className="space-y-4 mb-4">
+          <ScrollArea className="flex-grow" ref={scrollAreaRef}>
+            {chatMessages.length === 0 && !isAILoading && (
+                <QuickSuggestions onSuggestionClick={handleQuickSuggestionClick} />
+            )}
+            <div className="space-y-4 p-4">
               {chatMessages.map((msg) => (
                 <div
                   key={msg.id}
@@ -175,7 +204,7 @@ export default function ContextualAIGuide() {
                   )}
                 </div>
               ))}
-              {isAILoading && chatMessages.length > 0 && chatMessages[chatMessages.length -1].sender === 'user' && !selectedActionId && (
+              {isAILoading && chatMessages[chatMessages.length -1]?.sender === 'user' && !selectedActionId && (
                 <div className="flex self-start bg-muted p-3 rounded-lg rounded-bl-none max-w-[85%]">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>

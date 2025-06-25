@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAIGuide } from "@/contexts/AIGuideContext";
 import CashBoxModalGuard from "@/components/cash-box/CashBoxModalGuard";
 
-import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus, CreditCard, Printer } from "lucide-react";
+import { FileText, CalendarIcon, MessageSquare, Mail, Loader2, Trash2, PlusCircle, UserPlus, CreditCard, Printer, HelpCircle } from "lucide-react";
 
 // Schemas e Tipagens
 import { OrdemServicoFormSchema, type OrdemServicoFormValues, type ItemOSFormValues, type OrdemServicoCreateData, PaymentStatusEnum } from "@/schemas/ordemServicoSchema";
@@ -89,7 +89,7 @@ export default function OrdemServicoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticating } = useAuth();
-  const { updateAICurrentPageContext } = useAIGuide();
+  const { updateAICurrentPageContext, sendQueryToAIGuide, toggleAIGuide, isAIGuideOpen } = useAIGuide();
 
   useEffect(() => {
     if (!isAuthenticating && !user) {
@@ -544,6 +544,14 @@ export default function OrdemServicoPage() {
   const handleEnviarEmail = async () => {
     toast({ title: "E-mail", description: "Funcionalidade de envio por E-mail em desenvolvimento." });
   }
+  
+  const handleFieldHelp = (fieldName: string) => {
+    if (!isAIGuideOpen) {
+        toggleAIGuide();
+    }
+    const query = `Explique o campo '${fieldName}'`;
+    sendQueryToAIGuide(query);
+  };
 
   if (isAuthenticating || !user) {
     return (
@@ -580,7 +588,10 @@ export default function OrdemServicoPage() {
                     name="clienteId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Cliente</FormLabel>
+                        <FormLabel className="flex items-center gap-1.5">
+                          Cliente
+                          <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary" onClick={() => handleFieldHelp('cliente')} />
+                        </FormLabel>
                         <div className="flex items-center gap-2">
                           <Select
                             onValueChange={(value) => {
@@ -626,7 +637,12 @@ export default function OrdemServicoPage() {
 
 
                   <Card className="pt-4">
-                    <CardHeader><CardTitle className="text-lg">Itens da Ordem de Serviço</CardTitle></CardHeader>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-1.5">
+                        Itens da Ordem de Serviço
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary" onClick={() => handleFieldHelp('Itens da Ordem de Serviço')} />
+                      </CardTitle>
+                    </CardHeader>
                     <CardContent className="space-y-4">
                       {fields.map((item, index) => {
                         const isCatalogoSelected = !!item.produtoServicoId && item.produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE;
@@ -697,7 +713,10 @@ export default function OrdemServicoPage() {
                       name="valorAdiantado"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Valor Adiantado (R$) (Opcional)</FormLabel>
+                          <FormLabel className="flex items-center gap-1.5">
+                            Valor Adiantado (R$) (Opcional)
+                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary" onClick={() => handleFieldHelp('Valor Adiantado')} />
+                          </FormLabel>
                           <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
                           <FormMessage />
                         </FormItem>
@@ -736,7 +755,10 @@ export default function OrdemServicoPage() {
                     name="dataEntrega"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Data de Entrega Prevista</FormLabel>
+                        <FormLabel className="flex items-center gap-1.5">
+                          Data de Entrega Prevista
+                          <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary" onClick={() => handleFieldHelp('Data de Entrega Prevista')} />
+                        </FormLabel>
                         <Popover>
                           <PopoverTrigger asChild>
                             <FormControl>

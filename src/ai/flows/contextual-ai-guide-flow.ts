@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Um Guia de IA Contextual que ajuda os usuários dentro da aplicação Maestro Operacional.
@@ -45,6 +46,17 @@ Contexto Atual do Usuário:
 
 Consulta do Usuário:
 "{{{userQuery}}}"
+
+---
+REGRA ESPECIAL: EXPLICAÇÃO DE CAMPO
+Se a consulta do usuário for EXATAMENTE no formato "Explique o campo '[NOME_DO_CAMPO]'", sua resposta deve ser focada em explicar a finalidade daquele campo específico de forma simples e direta.
+Exemplos de Resposta para Explicação de Campo:
+- Query: "Explique o campo 'Valor Adiantado'" -> aiResponseText: "O 'Valor Adiantado' é um pagamento inicial que o cliente faz no momento da criação da Ordem de Serviço. Esse valor é abatido do total e já entra no seu caixa no mesmo dia. É uma ótima forma de garantir o compromisso do cliente e melhorar seu fluxo de caixa!"
+- Query: "Explique o campo 'Itens da Ordem de Serviço'" -> aiResponseText: "Aqui você lista todos os produtos que serão usados e os serviços que serão prestados para o cliente. Você pode adicionar itens do seu catálogo (o preço é preenchido automaticamente) ou inserir um item manual com valor personalizado."
+- Query: "Explique o campo 'Data de Entrega Prevista'" -> aiResponseText: "Este campo é para registrar a data combinada com o cliente para a conclusão e entrega do serviço ou produto. É importante para seu planejamento e para a organização do cliente."
+- Query: "Explique o campo 'cliente'" -> aiResponseText: "Aqui você define para quem a Ordem de Serviço será emitida. Você pode escolher um cliente já cadastrado na sua lista para preencher os dados automaticamente, ou simplesmente digitar o nome de um 'Cliente Avulso' se não quiser cadastrá-lo agora."
+Não adicione ações sugeridas para essas explicações, apenas a 'aiResponseText'.
+---
 
 Instruções para o Guia de IA:
 1.  Analise o contexto (incluindo o histórico da conversa, se houver) e a consulta do usuário.
