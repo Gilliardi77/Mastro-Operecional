@@ -11,11 +11,6 @@ import ContextualAIGuide from '@/components/ai/ContextualAIGuide';
 export const metadata: Metadata = {
   title: 'Maestro Operacional',
   description: 'Gerado pelo Firebase Studio para Maestro Operacional',
-  icons: {
-    icon: { url: '/logo120x120.png', type: 'image/png', sizes: '120x120' },
-    apple: { url: '/logo120x120.png', sizes: '120x120', type: 'image/png' },
-  },
-  manifest: '/manifest.json', // Caminho para seu arquivo de manifesto PWA
 };
 
 export default function RootLayout({
