@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import Image from "next/image";
+// import Image from "next/image"; // No longer using next/image
 import { useRouter } from "next/navigation";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
@@ -64,13 +64,12 @@ export default function Header() {
         </Button>
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
-          <Image
+          <img
             src="/logo120x120.png"
             alt="Maestro Operacional Logo"
             width={36}
             height={36}
-            priority
-            data-ai-hint="company logo"
+            style={{ objectFit: 'contain' }}
           />
         </Link>
       </div>
