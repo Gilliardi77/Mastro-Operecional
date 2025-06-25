@@ -11,6 +11,11 @@ import ContextualAIGuide from '@/components/ai/ContextualAIGuide';
 export const metadata: Metadata = {
   title: 'Maestro Operacional',
   description: 'Gerado pelo Firebase Studio para Maestro Operacional',
+  icons: {
+    icon: 'https://placehold.co/120x120.png',
+    shortcut: 'https://placehold.co/120x120.png',
+    apple: 'https://placehold.co/120x120.png',
+  },
 };
 
 export default function RootLayout({

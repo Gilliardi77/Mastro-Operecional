@@ -1,8 +1,10 @@
+
 "use client";
 
 import Link from "next/link";
 import React from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
   Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase, Calculator, TrendingUp, History
@@ -63,12 +65,12 @@ export default function Header() {
         </Button>
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
-          <img
+          <Image
             src="https://placehold.co/120x120.png"
             alt="Maestro Operacional Logo"
             width={36}
             height={36}
-            style={{ objectFit: 'contain' }}
+            className="object-contain"
             data-ai-hint="logo"
           />
         </Link>
