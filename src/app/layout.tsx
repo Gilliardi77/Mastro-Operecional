@@ -13,9 +13,9 @@ export const metadata: Metadata = {
   title: 'Maestro Operacional',
   description: 'Gerado pelo Firebase Studio para Maestro Operacional',
   icons: {
-    icon: '/novalogo120x120.png',
-    shortcut: '/novalogo120x120.png',
-    apple: '/novalogo120x120.png',
+    icon: '/images/novalogo120x120.png',
+    shortcut: '/images/novalogo120x120.png',
+    apple: '/images/novalogo120x120.png',
   },
 };
 
