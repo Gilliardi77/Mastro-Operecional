@@ -4,7 +4,7 @@
 import React from 'react';
 import { useCashBox } from '@/contexts/CashBoxContext';
 import { Loader2 } from 'lucide-react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AbrirCaixaForm } from './AbrirCaixaForm';
 
 interface CashBoxModalGuardProps {
@@ -37,6 +37,12 @@ export default function CashBoxModalGuard({ children }: CashBoxModalGuardProps) 
           onEscapeKeyDown={(e) => e.preventDefault()}
           showCloseButton={false}
         >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Abrir Caixa</DialogTitle>
+            <DialogDescription>
+              É necessário abrir o caixa para realizar operações financeiras.
+            </DialogDescription>
+          </DialogHeader>
           <AbrirCaixaForm />
         </DialogContent>
       </Dialog>
