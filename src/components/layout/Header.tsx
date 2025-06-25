@@ -66,12 +66,11 @@ export default function Header() {
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
           <Image
-            src="https://placehold.co/120x120.png"
+            src="/novalogo120x120.png"
             alt="Maestro Operacional Logo"
             width={36}
             height={36}
             className="object-contain"
-            data-ai-hint="logo"
           />
         </Link>
       </div>

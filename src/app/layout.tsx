@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import Header from '@/components/layout/Header';
@@ -12,9 +13,9 @@ export const metadata: Metadata = {
   title: 'Maestro Operacional',
   description: 'Gerado pelo Firebase Studio para Maestro Operacional',
   icons: {
-    icon: 'https://placehold.co/120x120.png',
-    shortcut: 'https://placehold.co/120x120.png',
-    apple: 'https://placehold.co/120x120.png',
+    icon: '/novalogo120x120.png',
+    shortcut: '/novalogo120x120.png',
+    apple: '/novalogo120x120.png',
   },
 };
 
