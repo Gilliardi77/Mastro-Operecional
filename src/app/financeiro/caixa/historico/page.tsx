@@ -1,14 +1,15 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, History, AlertTriangle, Info } from "lucide-react";
+import { Loader2, History, AlertTriangle, Info, DollarSign, ArrowUpCircle, ArrowDownCircle, MinusCircle } from "lucide-react";
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from 'next/navigation';
 import { getAllSessoesFechadasByUserId } from '@/services/sessaoCaixaService';
-import type { SessaoCaixa } from '@/schemas/sessaoCaixaSchema';
+import type { SessaoCaixa, EntradasPorMetodo } from '@/schemas/sessaoCaixaSchema';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -85,6 +86,35 @@ export default function HistoricoCaixaPage() {
      );
   }
 
+  const renderPaymentMethods = (methods: EntradasPorMetodo | null | undefined) => {
+    if (!methods) return <p className="text-sm text-muted-foreground">Nenhum detalhe de pagamento disponível.</p>;
+    
+    const paymentDetails = [
+      { label: "Dinheiro", value: methods.dinheiro },
+      { label: "PIX", value: methods.pix },
+      { label: "Cartão de Crédito", value: methods.cartaoCredito },
+      { label: "Cartão de Débito", value: methods.cartaoDebito },
+      { label: "Boleto", value: methods.boleto },
+      { label: "Transferência", value: methods.transferenciaBancaria },
+      { label: "Outros", value: methods.outros },
+    ].filter(detail => detail.value > 0);
+
+    if (paymentDetails.length === 0) {
+      return <p className="text-sm text-muted-foreground">Nenhuma entrada registrada por métodos de pagamento.</p>;
+    }
+
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+        {paymentDetails.map(detail => (
+          <div key={detail.label} className="flex justify-between text-sm">
+            <span className="text-muted-foreground">{detail.label}:</span>
+            <span className="font-medium">{formatCurrency(detail.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       <section className="text-center sm:text-left">
@@ -103,7 +133,7 @@ export default function HistoricoCaixaPage() {
           <CardDescription>
             {isLoadingData ? "Carregando histórico..." : 
               (error ? "Erro ao carregar histórico." : 
-                (sessoes.length > 0 ? `Exibindo ${sessoes.length} sessão(ões) fechada(s).` : "Nenhuma sessão de caixa fechada encontrada.")
+                (sessoes.length > 0 ? `Exibindo ${sessoes.length} sessão(ões) fechada(s). Clique para ver detalhes.` : "Nenhuma sessão de caixa fechada encontrada.")
               )
             }
           </CardDescription>
@@ -129,34 +159,45 @@ export default function HistoricoCaixaPage() {
                 </AlertDescription>
             </Alert>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data Fechamento</TableHead>
-                    <TableHead>Responsável</TableHead>
-                    <TableHead className="text-right">Troco Inicial</TableHead>
-                    <TableHead className="text-right">Entradas</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Saídas</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Sangrias</TableHead>
-                    <TableHead className="text-right">Saldo Final</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sessoes.map((sessao) => (
-                    <TableRow key={sessao.id}>
-                      <TableCell className="font-medium">{formatDateTime(sessao.dataFechamento)}</TableCell>
-                      <TableCell>{sessao.responsavelFechamentoNome || 'N/A'}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(sessao.trocoInicial)}</TableCell>
-                      <TableCell className="text-right text-emerald-600">{formatCurrency(sessao.totalEntradasCalculado)}</TableCell>
-                      <TableCell className="text-right text-rose-600 hidden sm:table-cell">{formatCurrency(sessao.totalSaidasCalculado)}</TableCell>
-                      <TableCell className="text-right text-orange-600 hidden sm:table-cell">{formatCurrency(sessao.sangrias)}</TableCell>
-                      <TableCell className="text-right font-bold">{formatCurrency(sessao.saldoFinalCalculado)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <Accordion type="single" collapsible className="w-full">
+              {sessoes.map((sessao) => (
+                <AccordionItem value={sessao.id} key={sessao.id}>
+                  <AccordionTrigger className="hover:bg-muted/50 px-4 rounded-md">
+                    <div className="flex justify-between items-center w-full">
+                      <div className="text-left">
+                        <p className="font-semibold">{formatDateTime(sessao.dataFechamento)}</p>
+                        <p className="text-sm text-muted-foreground">Por: {sessao.responsavelFechamentoNome || 'N/A'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">{formatCurrency(sessao.saldoFinalCalculado)}</p>
+                        <p className="text-sm text-muted-foreground">Saldo Final</p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pt-3 pb-4 border-t bg-muted/20">
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-md">Detalhes da Sessão</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-muted-foreground"/><span>Troco Inicial:</span><span className="font-medium ml-auto">{formatCurrency(sessao.trocoInicial)}</span></div>
+                        <div className="flex items-center gap-2 text-green-600"><ArrowUpCircle className="h-4 w-4"/><span>Total Entradas:</span><span className="font-medium ml-auto">{formatCurrency(sessao.totalEntradasCalculado)}</span></div>
+                        <div className="flex items-center gap-2 text-red-600"><ArrowDownCircle className="h-4 w-4"/><span>Total Saídas:</span><span className="font-medium ml-auto">{formatCurrency(sessao.totalSaidasCalculado)}</span></div>
+                        <div className="flex items-center gap-2 text-orange-600"><MinusCircle className="h-4 w-4"/><span>Sangrias:</span><span className="font-medium ml-auto">{formatCurrency(sessao.sangrias)}</span></div>
+                      </div>
+                      <div className="pt-2">
+                        <h5 className="font-semibold text-sm mb-1">Entradas por Método:</h5>
+                        {renderPaymentMethods(sessao.entradasPorMetodo)}
+                      </div>
+                      {sessao.observacoes && (
+                        <div className="pt-2">
+                          <h5 className="font-semibold text-sm mb-1">Observações:</h5>
+                          <p className="text-sm text-muted-foreground italic bg-background/50 p-2 rounded-md">{sessao.observacoes}</p>
+                        </div>
+                      )}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           )}
         </CardContent>
       </Card>
