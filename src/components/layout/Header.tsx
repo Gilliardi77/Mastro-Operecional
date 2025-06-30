@@ -70,7 +70,7 @@ export default function Header() {
             alt="Maestro Operacional Logo"
             width={36}
             height={36}
-            className="object-contain"
+            className="object-contain filter brightness-0 invert"
           />
         </Link>
       </div>
