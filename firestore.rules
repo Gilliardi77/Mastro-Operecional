@@ -1,141 +1,78 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ======================= FUNÇÕES REUTILIZÁVEIS =======================
+    // ===============================================
+    // Helper Functions
+    // ===============================================
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isResourceOwner() {
-      return isSignedIn() && request.auth.uid == resource.data.userId;
-    }
-
-    function isRequestDataOwner() {
-      return isSignedIn() && request.auth.uid == request.resource.data.userId;
-    }
-
-    function docIdIsSelf(docId) {
-      return isSignedIn() && request.auth.uid == docId;
-    }
-
-    function userIdUnchanged() {
-      return request.resource.data.userId == resource.data.userId;
-    }
-
-    function isUserPrefixOfId(docId) {
-      return isSignedIn() && request.auth.uid == docId.split('_')[0];
-    }
-
-    // ======================= REGRAS POR COLEÇÃO =======================
-
-    match /usuarios/{userIdDoc} {
-      allow create: if docIdIsSelf(userIdDoc) &&
-                       (request.resource.data.userId == null || request.resource.data.userId == userIdDoc);
-      allow read, update: if docIdIsSelf(userIdDoc);
-    }
-
-    match /consultationsMetadata/{userIdDoc} {
-      allow read, write: if docIdIsSelf(userIdDoc);
-    }
-
-    match /consultations/{consultationId} {
-      allow create: if isRequestDataOwner();
-      allow read: if isResourceOwner();
-    }
-
-    match /userGoals/{goalId} {
-      allow create: if isRequestDataOwner();
-      allow read, update, delete: if isResourceOwner();
-    }
-
-    match /lancamentosFinanceiros/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /clientes/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /produtosServicos/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /vendas/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /ordensServico/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, update, delete: if isResourceOwner();
-    }
-
-    match /agendamentos/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, update, delete: if isResourceOwner();
-    }
-
-    match /ordensDeProducao/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /contasPagar/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /contasReceber/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /custos/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, delete: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-    }
-
-    match /custosFixosConfigurados/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read: if isResourceOwner();
-      allow update: if isResourceOwner() && userIdUnchanged();
-      allow delete: if isResourceOwner();
-    }
-
-    match /metasFinanceiras/{metaId} {
-      allow create: if isUserPrefixOfId(metaId) && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if isUserPrefixOfId(metaId);
-    }
-
-    match /fechamentosCaixa/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, update, delete: if isResourceOwner();
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
     
-    // Regra para a nova coleção de Sessões de Caixa
-    match /sessoesCaixa/{docId} {
-      allow create: if isRequestDataOwner();
-      allow read, update, delete: if isResourceOwner();
+    function isRequestDataOwner() {
+      return isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
 
-    // ======================= BLOQUEIO PADRÃO =======================
-    // Descomente a linha abaixo para produção para garantir que nenhuma coleção
-    // fique sem regras de segurança definidas.
-    // match /{document=**} {
-    //   allow read, write: if false;
-    // }
+    function isResourceOwner() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ===============================================
+    // Rules for Collections with userId as documentId
+    // ===============================================
+
+    match /usuarios/{userId} {
+      allow read, write: if isUser(userId);
+    }
+    
+    match /consultationsMetadata/{userId} {
+      allow read, write: if isUser(userId);
+    }
+
+    match /assinaturas/{userId} {
+      allow read: if isUser(userId);
+      allow write: if false; 
+    }
+
+    // ===============================================
+    // Default Rules for User-Owned Collections
+    // ===============================================
+
+    function userOwnedResources() {
+      return [
+        'consultations', 'userGoals', 'lancamentosFinanceiros', 'vendas',
+        'ordensServico', 'agendamentos', 'clientes', 'ordensDeProducao',
+        'produtosServicos', 'fechamentosCaixa', 'sessoesCaixa', 'contasPagar',
+        'contasReceber', 'custos', 'custosFixosConfigurados'
+      ];
+    }
+
+    match /{collection}/{docId}
+      where collection in userOwnedResources() {
+        allow create: if isRequestDataOwner();
+        allow get, update, delete: if isResourceOwner();
+        allow list: if isSignedIn();
+    }
+    
+    // ===============================================
+    // Special Rules
+    // ===============================================
+
+    match /metasFinanceiras/{docId} {
+      // ID format is userId_anoMes
+      allow create, read, update, delete: if isSignedIn() && request.auth.uid == docId.split('_')[0];
+    }
+    
+    // ========== FALLBACK DE SEGURANÇA ==========
+    // Bloqueia qualquer acesso a coleções não explicitamente permitidas acima.
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
