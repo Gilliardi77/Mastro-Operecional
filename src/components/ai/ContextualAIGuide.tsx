@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -155,14 +154,12 @@ export default function ContextualAIGuide() {
       <Button
         size="icon"
         className={cn(
-            "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50",
-            "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))]",
-            "hover:bg-[hsl(var(--success))]/90" 
+            "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50"
           )}
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"
       >
-        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Lightbulb className="h-7 w-7 text-yellow-400" />}
+        {isAIGuideOpen ? <X className="h-7 w-7" /> : <Lightbulb className="h-7 w-7" />}
       </Button>
 
       <Sheet open={isAIGuideOpen} onOpenChange={(open) => { if (!open) closeAIGuide(); else toggleAIGuide();}}>
