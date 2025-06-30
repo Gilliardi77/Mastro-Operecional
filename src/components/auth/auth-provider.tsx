@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { User as FirebaseUser, Auth as FirebaseAuthType } from 'firebase/auth';
@@ -152,9 +151,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           };
           setUser(currentUser);
           
+          // Temporary hardcoded check for VIP user
+          const isHardcodedVip = currentUser.email === 'thornegrobarbaro@gmail.com';
+          
           try {
             const profile = await getUserProfile(firebaseUser.uid);
-            const actualRole = profile?.role; // Can be 'vip', 'admin', 'user', or undefined
+            let actualRole = profile?.role;
+            if (isHardcodedVip) {
+              actualRole = 'vip';
+            }
             const isPrivileged = actualRole === 'admin' || actualRole === 'vip';
             
             setUserRole(actualRole ?? 'user');
@@ -170,9 +175,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             }
           } catch (e) {
              console.error("Error during post-auth checks:", e);
-             setUserRole('user');
-             setHasCompletedConsultation(false);
-             setSubscriptionStatus('inactive');
+             if (isHardcodedVip) {
+                setUserRole('vip');
+                setHasCompletedConsultation(true);
+                setSubscriptionStatus('active');
+             } else {
+                setUserRole('user');
+                setHasCompletedConsultation(false);
+                setSubscriptionStatus('inactive');
+             }
              setCheckingConsultationStatus(false);
              setCheckingSubscriptionStatus(false);
              toast({ title: "Erro ao carregar perfil", description: "Não foi possível verificar seus dados. O acesso pode ser limitado.", variant: "destructive" });
@@ -233,6 +244,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const loggedInUser = userCredential.user;
 
       if (loggedInUser) {
+        // Temporary hardcoded check for VIP user
+        if (loggedInUser.email === 'thornegrobarbaro@gmail.com') {
+            toast({ title: "Login Liberado (VIP)", description: "Bem-vindo(a)!" });
+            router.push('/');
+            return;
+        }
+
         const profile = await getUserProfile(loggedInUser.uid);
         const actualRole = profile?.role;
         const isPrivileged = actualRole === 'admin' || actualRole === 'vip';
