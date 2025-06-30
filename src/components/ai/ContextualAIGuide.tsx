@@ -154,7 +154,7 @@ export default function ContextualAIGuide() {
       <Button
         size="icon"
         className={cn(
-            "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50"
+            "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50 print:hidden"
           )}
         onClick={toggleAIGuide}
         aria-label="Abrir Guia de IA"

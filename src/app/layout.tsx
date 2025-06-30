@@ -32,7 +32,7 @@ export default function RootLayout({
       <body className="font-body antialiased flex flex-col min-h-screen bg-background">
         <AppProviders>
           <Header />
-          <div className="flex-1 overflow-y-auto pt-20 pb-16">
+          <div className="flex-1 overflow-y-auto pt-20 pb-16 print:hidden">
             <main className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
               {children}
             </main>
