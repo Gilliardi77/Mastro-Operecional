@@ -6,7 +6,7 @@ export const ItemOSSchema = z.object({
   produtoServicoId: z.string().nullable().optional().describe("ID do produto/serviço do catálogo, se aplicável."),
   nome: z.string().min(1, "Nome do item é obrigatório.").describe("Nome do item (produto, serviço ou manual)."),
   quantidade: z.coerce.number().positive("Quantidade deve ser positiva.").default(1).describe("Quantidade do item."),
-  valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").default(0).describe("Valor unitário do item."),
+  valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").describe("Valor unitário do item."),
   tipo: z.enum(['Produto', 'Serviço', 'Manual']).default('Manual').describe("Tipo do item (se é do catálogo ou manual)."),
 });
 export type ItemOS = z.infer<typeof ItemOSSchema>;
@@ -101,7 +101,7 @@ const itemOSFormSchema = z.object({
   produtoServicoId: z.string().optional().describe("ID do produto/serviço do catálogo, se aplicável."),
   nome: z.string().min(1, "Nome do item é obrigatório."),
   quantidade: z.coerce.number().positive("Quantidade deve ser positiva.").default(1),
-  valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").default(0),
+  valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").optional(),
   tipo: z.enum(['Produto', 'Serviço', 'Manual']).default('Manual'),
 });
 export type ItemOSFormValues = z.infer<typeof itemOSFormSchema>;
@@ -110,8 +110,8 @@ export const OrdemServicoFormSchema = z.object({
   clienteId: z.string().optional(),
   clienteNome: z.string().optional(),
   itens: z.array(itemOSFormSchema).min(1, { message: "Adicione pelo menos um item à Ordem de Serviço." }),
-  valorTotalOS: z.coerce.number().nonnegative({ message: "O valor total da OS não pode ser negativo." }).optional().default(0),
-  valorAdiantado: z.coerce.number().nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional().default(0),
+  valorTotalOS: z.coerce.number().nonnegative({ message: "O valor total da OS não pode ser negativo." }).optional(),
+  valorAdiantado: z.coerce.number().nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional(),
   formaPagamentoAdiantamento: z.string().optional(), // Novo campo para forma de pagamento do adiantamento
   dataEntrega: z.date({ required_error: "A data de entrega é obrigatória." }),
   observacoes: z.string().optional(),

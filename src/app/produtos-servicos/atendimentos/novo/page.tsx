@@ -103,8 +103,8 @@ export default function OrdemServicoPage() {
       clienteId: "avulso",
       clienteNome: "Cliente Avulso",
       itens: [],
-      valorTotalOS: 0,
-      valorAdiantado: 0,
+      valorTotalOS: undefined,
+      valorAdiantado: undefined,
       formaPagamentoAdiantamento: undefined,
       observacoes: "",
       dataEntrega: undefined,
@@ -217,7 +217,7 @@ export default function OrdemServicoPage() {
         produtoServicoId: undefined,
         nome: descricaoParam,
         quantidade: 1,
-        valorUnitario: valorUnitarioDoItem,
+        valorUnitario: valorUnitarioDoItem > 0 ? valorUnitarioDoItem : undefined,
         tipo: 'Manual',
       }];
       if (valorTotalParam && !isNaN(parseFloat(valorTotalParam))) {
@@ -313,7 +313,7 @@ export default function OrdemServicoPage() {
             if (itemIndex < 0) return;
 
             if (itemIndex >= fields.length) { // Adicionar novo item
-                const newItem: ItemOSFormValues = { idTemp: `item-${Date.now()}`, nome: "", quantidade: 1, valorUnitario: 0, tipo: 'Manual' };
+                const newItem: ItemOSFormValues = { idTemp: `item-${Date.now()}`, nome: "", quantidade: 1, valorUnitario: undefined, tipo: 'Manual' };
                 append(newItem);
                 setTimeout(() => update(itemIndex, { ...newItem, [fieldName]: detail.value }), 50); // Delay to ensure append is processed
             } else { // Atualizar item existente
@@ -355,7 +355,7 @@ export default function OrdemServicoPage() {
 
     const itensParaSalvar = data.itens.map(({ produtoServicoId, nome, quantidade, valorUnitario, tipo }) => ({
       produtoServicoId: (produtoServicoId && produtoServicoId !== MANUAL_ITEM_PLACEHOLDER_VALUE) ? produtoServicoId : null,
-      nome, quantidade, valorUnitario, tipo
+      nome, quantidade: quantidade || 1, valorUnitario: valorUnitario || 0, tipo
     }));
     
     const valorTotalFinal = itensParaSalvar.reduce(
@@ -443,8 +443,8 @@ export default function OrdemServicoPage() {
         clienteId: "avulso", 
         clienteNome: "Cliente Avulso", 
         itens: [], 
-        valorTotalOS: 0, 
-        valorAdiantado: 0, 
+        valorTotalOS: undefined, 
+        valorAdiantado: undefined, 
         formaPagamentoAdiantamento: undefined,
         observacoes: "", 
         dataEntrega: undefined 
@@ -508,7 +508,7 @@ export default function OrdemServicoPage() {
         produtoServicoId: undefined, 
         nome: "",
         quantidade: 1,
-        valorUnitario: 0,
+        valorUnitario: undefined,
         tipo: 'Manual',
     };
     append(newItem);
@@ -521,7 +521,7 @@ export default function OrdemServicoPage() {
             ...currentItem,
             produtoServicoId: undefined, 
             nome: currentItem.nome || "", 
-            valorUnitario: currentItem.valorUnitario ?? 0, 
+            valorUnitario: currentItem.valorUnitario ?? undefined, 
             tipo: 'Manual',
         });
     } else {
@@ -679,7 +679,7 @@ export default function OrdemServicoPage() {
                                     <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)} min="1" /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                    <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? ''} onChange={e => {const num = parseFloat(e.target.value); field.onChange(isNaN(num) ? undefined : num); }} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                             </div>
                             <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
@@ -717,7 +717,7 @@ export default function OrdemServicoPage() {
                             Valor Adiantado (R$) (Opcional)
                             <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary" onClick={() => handleFieldHelp('Valor Adiantado')} />
                           </FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value || 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" min="0" /></FormControl>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? ''} onChange={e => {const num = parseFloat(e.target.value); field.onChange(isNaN(num) ? undefined : num); }} step="0.01" min="0" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -923,7 +923,7 @@ export default function OrdemServicoPage() {
               </DialogPrimitiveDescription>
             </DialogHeader>
             <Form {...newClientForm}>
-              <form onSubmit={newClientForm.handleSubmit(onSaveNewClient)} className="space-y-4 py-2">
+              <form onSubmit={newClientForm.handleSubmit(onSaveNewClient)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
                 <FormField control={newClientForm.control} name="nome" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nome Completo</FormLabel>
