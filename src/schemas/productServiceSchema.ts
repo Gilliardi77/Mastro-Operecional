@@ -49,7 +49,6 @@ export type ProductServiceCreateData = z.infer<typeof ProductServiceCreateSchema
 
 /**
  * Schema Zod para os dados ao ATUALIZAR um Produto ou Serviço existente.
- * Todos os campos específicos da entidade são opcionais.
  */
 export const ProductServiceUpdateSchema = BaseUpdateSchema.extend({
   nome: z.string().min(3, { message: 'Nome deve ter pelo menos 3 caracteres.' }).optional(),
@@ -85,11 +84,23 @@ export const ProductServiceFormSchema = z.object({
   nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
   tipo: z.enum(['Produto', 'Serviço'], { required_error: "Tipo é obrigatório." }),
   descricao: z.string().optional().or(z.literal('')),
-  valorVenda: z.coerce.number().positive({ message: "Valor de venda deve ser positivo." }),
+  valorVenda: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : parseFloat(String(val))),
+    z.number({ required_error: "Valor de venda é obrigatório.", invalid_type_error: "Valor de venda deve ser um número." }).positive({ message: "Valor de venda deve ser positivo." })
+  ),
   unidade: z.string().min(1, { message: "Unidade é obrigatória (Ex: UN, KG, HR, M²)." }),
-  custoUnitario: z.coerce.number().nonnegative("Custo deve ser não-negativo.").optional(),
-  quantidadeEstoque: z.coerce.number().nonnegative("Estoque deve ser não-negativo.").optional(),
-  estoqueMinimo: z.coerce.number().nonnegative("Estoque mínimo deve ser não-negativo.").optional(),
+  custoUnitario: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : parseFloat(String(val))),
+    z.number({ invalid_type_error: "Custo deve ser um número." }).nonnegative("Custo deve ser não-negativo.").optional()
+  ),
+  quantidadeEstoque: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : parseInt(String(val), 10)),
+    z.number({ invalid_type_error: "Estoque deve ser um número." }).int("Estoque deve ser um número inteiro.").nonnegative("Estoque deve ser não-negativo.").optional()
+  ),
+  estoqueMinimo: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : parseInt(String(val), 10)),
+    z.number({ invalid_type_error: "Estoque mínimo deve ser um número." }).int("Estoque mínimo deve ser um número inteiro.").nonnegative("Estoque mínimo deve ser não-negativo.").optional()
+  ),
 }).refine(data => {
   if (data.tipo === 'Produto') {
     return data.custoUnitario !== undefined && data.custoUnitario >= 0 &&

@@ -679,7 +679,7 @@ export default function OrdemServicoPage() {
                                     <FormItem><FormLabel>Qtd.</FormLabel><FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)} min="1" /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField name={`itens.${index}.valorUnitario`} control={osForm.control} render={({ field }) => (
-                                    <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? ''} onChange={e => {const num = parseFloat(e.target.value); field.onChange(isNaN(num) ? undefined : num); }} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Val. Unit. (R$)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? ''} onChange={field.onChange} step="0.01" min="0" disabled={isCatalogoSelected} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                             </div>
                             <FormField name={`itens.${index}.tipo`} control={osForm.control} render={({ field }) => ( 
@@ -717,7 +717,7 @@ export default function OrdemServicoPage() {
                             Valor Adiantado (R$) (Opcional)
                             <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary" onClick={() => handleFieldHelp('Valor Adiantado')} />
                           </FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? ''} onChange={e => {const num = parseFloat(e.target.value); field.onChange(isNaN(num) ? undefined : num); }} step="0.01" min="0" /></FormControl>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? ''} onChange={field.onChange} step="0.01" min="0" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}

@@ -391,11 +391,8 @@ export default function ProdutosServicosPage() {
                         step="0.01"
                         min="0"
                         {...field}
-                        value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
-                        onChange={e => {
-                          const num = parseFloat(e.target.value);
-                          field.onChange(isNaN(num) ? undefined : num);
-                        }}
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
                       />
                     </FormControl>
                     <FormMessage />
@@ -429,11 +426,8 @@ export default function ProdutosServicosPage() {
                             step="0.01"
                             min="0"
                             {...field}
-                            value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
-                            onChange={e => {
-                              const num = parseFloat(e.target.value);
-                              field.onChange(isNaN(num) ? undefined : num);
-                            }}
+                            value={field.value ?? ''}
+                            onChange={field.onChange}
                           />
                         </FormControl>
                         <FormMessage />
@@ -454,11 +448,8 @@ export default function ProdutosServicosPage() {
                               step="1"
                               min="0"
                               {...field}
-                              value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
-                              onChange={e => {
-                                const num = parseInt(e.target.value, 10);
-                                field.onChange(isNaN(num) ? undefined : num);
-                              }}
+                              value={field.value ?? ''}
+                              onChange={field.onChange}
                             />
                           </FormControl>
                           <FormMessage />
@@ -478,11 +469,8 @@ export default function ProdutosServicosPage() {
                               step="1"
                               min="0"
                               {...field}
-                              value={field.value === undefined || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value}
-                              onChange={e => {
-                                const num = parseInt(e.target.value, 10);
-                                field.onChange(isNaN(num) ? undefined : num);
-                              }}
+                              value={field.value ?? ''}
+                              onChange={field.onChange}
                             />
                           </FormControl>
                           <FormMessage />

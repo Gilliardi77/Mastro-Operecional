@@ -101,7 +101,10 @@ const itemOSFormSchema = z.object({
   produtoServicoId: z.string().optional().describe("ID do produto/serviço do catálogo, se aplicável."),
   nome: z.string().min(1, "Nome do item é obrigatório."),
   quantidade: z.coerce.number().positive("Quantidade deve ser positiva.").default(1),
-  valorUnitario: z.coerce.number().nonnegative("Valor unitário não pode ser negativo.").optional(),
+  valorUnitario: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : parseFloat(String(val))),
+    z.number({ invalid_type_error: "Valor unitário deve ser um número." }).nonnegative("Valor unitário não pode ser negativo.").optional()
+  ),
   tipo: z.enum(['Produto', 'Serviço', 'Manual']).default('Manual'),
 });
 export type ItemOSFormValues = z.infer<typeof itemOSFormSchema>;
@@ -111,8 +114,11 @@ export const OrdemServicoFormSchema = z.object({
   clienteNome: z.string().optional(),
   itens: z.array(itemOSFormSchema).min(1, { message: "Adicione pelo menos um item à Ordem de Serviço." }),
   valorTotalOS: z.coerce.number().nonnegative({ message: "O valor total da OS não pode ser negativo." }).optional(),
-  valorAdiantado: z.coerce.number().nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional(),
-  formaPagamentoAdiantamento: z.string().optional(), // Novo campo para forma de pagamento do adiantamento
+  valorAdiantado: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : parseFloat(String(val))),
+    z.number({ invalid_type_error: "Valor adiantado deve ser um número." }).nonnegative({ message: "O valor adiantado não pode ser negativo." }).optional()
+  ),
+  formaPagamentoAdiantamento: z.string().optional(),
   dataEntrega: z.date({ required_error: "A data de entrega é obrigatória." }),
   observacoes: z.string().optional(),
 }).refine(data => {
@@ -137,5 +143,3 @@ export const PagamentoOsSchema = z.object({
   observacoesPagamento: z.string().optional(),
 });
 export type PagamentoOsFormValues = z.infer<typeof PagamentoOsSchema>;
-
-    
