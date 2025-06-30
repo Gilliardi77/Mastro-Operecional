@@ -1,821 +1,748 @@
+# Guia de Arquitetura de Backend - Ecossistema Gestor Maestro
+-->
 
-# Documento Técnico de Backend - Ecossistema Business Maestro
+## 1. Introdução
 
-**Versão:** 1.2
-**Data da Última Atualização:** 20 de Junho de 2025
+Este documento detalha a arquitetura de backend do ecossistema de aplicativos Gestor Maestro, que utilizam um banco de dados Firebase Firestore compartilhado. O objetivo é fornecer uma referência central para desenvolvedores e IAs, garantindo segurança, escalabilidade, consistência e compatibilidade entre todos os aplicativos.
 
-## 0. Introdução
+Os aplicativos atuais ou planejados incluem:
+*   **Diagnóstico Maestro:** Focado no diagnóstico inicial e planejamento estratégico do usuário.
+*   **Maestro Operacional:** Focado na gestão de operações diárias (vendas, serviços, clientes, etc.).
+*   **Visão Clara Financeira:** Focado na gestão financeira, metas e precificação.
 
-Este documento descreve a arquitetura de backend do Firebase/Firestore compartilhada pelos diversos aplicativos que compõem o ecossistema "Business Maestro". O objetivo é fornecer uma fonte única de verdade sobre a estrutura de dados, coleções, regras de segurança, relacionamentos e padrões de acesso, visando garantir segurança, escalabilidade, consistência e compatibilidade entre os aplicativos.
+## 2. Princípios Fundamentais
 
-**⚠️ Fonte Oficial da Verdade para Coleções e Regras do Firestore:**
+A interação com os dados segue os princípios estabelecidos no `DATA_INTERACTION_GUIDE.md`:
+1.  **Schemas são a Verdade:** Toda entidade tem seu schema definido em `src/schemas/` (do app Diagnóstico Maestro, ou equivalente nos outros apps), usando Zod. Nenhum dado é enviado ou recebido sem validação.
+2.  **Serviços são a Ponte com o Firestore:** Toda interação com o banco deve passar por serviços dedicados (ex: `src/services/[entidade]Service.ts`). Nunca interaja com o Firestore diretamente de componentes de UI ou fluxos de IA sem uma camada de serviço.
+3.  **Validação por Zod:** Sempre use `Zod` para validar, transformar e tipar os dados.
+4.  **Documentação Integrada (JSDoc):** Todos os campos e funções devem ter descrições claras.
+5.  **UserID como Chave de Particionamento**: A maioria das coleções deve conter um campo `userId` para identificar o proprietário dos dados e facilitar as regras de segurança.
 
-**Atenção:** Os arquivos `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md`, localizados na raiz deste projeto, são a **fonte oficial de verdade** para:
+## 3. Detalhamento das Coleções
 
-*   A lista definitiva de coleções do Firestore.
-*   Nomes de coleções e campos principais (implícito pelo uso).
-*   Formatos de ID de documentos.
-*   Regras de segurança do Firebase Firestore.
-
-Embora este documento (`DETAILED_BACKEND_ARCHITECTURE.md`) forneça um detalhamento extensivo das coleções, seus campos e operações conforme entendidos durante sua criação, os arquivos `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` devem ser considerados a referência canônica. Utilize-os para validar ou atualizar os detalhes específicos das coleções, especialmente nomes de coleções, regras de segurança, e formatos de ID. O `docs/BACKEND_GUIDE.md` complementa com o raciocínio arquitetural e padrões de implementação.
-
-**Princípios Fundamentais do Backend:**
-
-1.  **Schemas são a Verdade:** Toda entidade tem seu schema Zod definido em `src/schemas/` (dentro de cada app relevante ou em uma biblioteca compartilhada). Nenhuma interação com o Firestore ocorre sem validação prévia por esses schemas.
-2.  **Serviços são a Ponte com o Firestore:** Toda interação com o banco de dados deve ser encapsulada em serviços (`src/services/[entidade]Service.ts`), que por sua vez utilizam um serviço genérico (`firestoreService.ts`) para as operações CRUD básicas. A interação direta com o SDK do Firestore fora dessa camada de serviço é desencorajada.
-3.  **Segurança por Regras:** As regras de segurança do Firestore são a principal linha de defesa para proteger os dados.
-4.  **Consistência de Dados:** Entidades compartilhadas (como `usuarios`) devem ter uma única fonte da verdade para evitar duplicidade e inconsistência.
-5.  **Documentação JSDoc:** Todos os schemas, tipos e funções de serviço devem ser bem documentados usando JSDoc para facilitar a compreensão e o uso por desenvolvedores e IAs.
+A seguir, a lista de coleções utilizadas no Firestore, seus propósitos, campos, operações e considerações.
 
 ---
 
-## 1. Visão Geral das Coleções
+### 3.1. `usuarios`
 
-A seguir, uma lista das principais coleções de dados no Firestore utilizadas pelo ecossistema Business Maestro (consulte `DATA_SYNC_CONFIG.json` para a lista canônica e regras):
-
-*   **`usuarios`**: Perfis de usuários e dados da empresa.
-*   **`consultationsMetadata`**: Metadados sobre o status da consulta de diagnóstico inicial do usuário.
-*   **`userGoals`**: Planejamento estratégico e metas geradas pela IA para o usuário.
-*   **`consultations`**: Histórico detalhado das sessões de consulta de diagnóstico.
-*   **`clientes`**: Cadastro de clientes dos usuários do Business Maestro.
-*   **`produtosServicos`**: Catálogo de produtos e serviços oferecidos pelos usuários.
-*   **`agendamentos`**: Agendamentos de serviços/compromissos.
-*   **`ordensServico`**: Ordens de serviço geradas para clientes.
-*   **`ordensDeProducao`**: Ordens de produção internas, geralmente vinculadas a `ordensServico` ou `agendamentos`.
-*   **`vendas`**: Registros de vendas realizadas (ex: Balcão PDV).
-*   **`lancamentosFinanceiros`**: Entradas e saídas financeiras, incluindo aquelas geradas por vendas e OS.
-*   **`fechamentosCaixa`**: Registros diários de fechamento de caixa.
-*   **`faturas`**: Faturas emitidas para clientes (principalmente para o app Financeiro).
-*   **`metasFinanceiras`**: Metas financeiras específicas definidas pelo usuário (principalmente para o app Financeiro).
-*   *(Outras coleções podem estar definidas em `DATA_SYNC_CONFIG.json`)*
-
----
-
-## 2. Detalhamento das Coleções
-
-*(Esta seção fornece detalhes sobre a estrutura e uso das coleções. Para a lista canônica de coleções e suas regras de segurança exatas, consulte `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md`.)*
-
-### 2.1. Coleção: `usuarios`
-
-*   **Propósito:** Armazenar informações de perfil do usuário e dados da empresa associada à conta do usuário. É a fonte da verdade para dados adicionais ao Firebase Authentication.
-*   **ID do Documento:** `uid` do usuário do Firebase Authentication (conforme `DATA_SYNC_CONFIG.json`).
-*   **Campos:**
-    *   `companyName` (String): [Opcional] Nome da empresa. Ex: "Maestro Soluções LTDA".
-    *   `companyCnpj` (String): [Opcional] CNPJ da empresa. Ex: "00.000.000/0001-00".
-    *   `businessType` (String): [Opcional] Ramo/tipo de negócio. Ex: "Consultoria em TI".
-    *   `companyPhone` (String): [Opcional] Telefone comercial. Ex: "(11) 99999-8888".
-    *   `companyEmail` (String): [Opcional] Email comercial. Ex: "contato@maestrosolucoes.com".
-    *   `personalPhoneNumber` (String): [Opcional] Telefone pessoal do usuário (se diferente do comercial e não o do Firebase Auth). Ex: "(11) 98888-7777".
-    *   `createdAt` (Timestamp): [Obrigatório] Data de criação do perfil. Gerenciado automaticamente pelo `userProfileService` (usando `serverTimestamp` ou `firestoreService` indiretamente).
-    *   `updatedAt` (Timestamp): [Obrigatório] Data da última atualização. Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE (Upsert):**
-        *   **Quem executa:** Usuário final (implicitamente no primeiro login ou ao completar o perfil), Sistema (ao criar a conta).
-        *   **Apps que utilizam:** Todos os apps do ecossistema (para garantir que o perfil exista), "Diagnóstico Maestro" (pode solicitar preenchimento inicial), "Maestro Operacional" (ao acessar pela primeira vez).
+*   **Propósito:** Armazenar informações de perfil da empresa e dados pessoais complementares do usuário, além do que já existe no Firebase Authentication. O ID do documento é o `uid` do usuário do Firebase Auth.
+*   **Campos Principais:**
+    *   `companyName` (string, opcional): Nome da empresa. Ex: "ACME Soluções Criativas".
+    *   `companyCnpj` (string, opcional): CNPJ da empresa. Ex: "00.000.000/0001-00".
+    *   `businessType` (string, opcional): Tipo/segmento do negócio. Ex: "Consultoria em TI".
+    *   `companyPhone` (string, opcional): Telefone comercial. Ex: "(11) 99999-8888".
+    *   `companyEmail` (string, opcional): Email comercial. Ex: "contato@acme.com".
+    *   `personalPhoneNumber` (string, opcional): Telefone pessoal/WhatsApp do usuário. Ex: "(11) 98888-7777".
+    *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema): Data de criação do perfil.
+    *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema): Data da última atualização.
+*   **Operações e Atores:**
+    *   **CREATE:**
+        *   **Ator:** Usuário (via `AuthContext` no app Diagnóstico Maestro durante o `signUp`).
+        *   **Descrição:** Criação inicial do perfil (pode ser um documento vazio ou com poucos campos).
     *   **READ:**
-        *   **Quem executa:** Usuário final (para ver seu perfil), Todos os apps (para obter dados da empresa, personalizar a experiência), IA (para contexto).
-        *   **Apps que utilizam:** Todos os apps do ecossistema.
-    *   **UPDATE (Upsert):**
-        *   **Quem executa:** Usuário final (ao editar seu perfil), Sistema (raramente, para sincronizações).
-        *   **Apps que utilizam:** App de Perfil/Configurações (se houver um centralizado), "Diagnóstico Maestro", "Maestro Operacional" (qualquer app que permita edição do perfil).
+        *   **Ator:** Usuário (em todos os apps para exibir informações de perfil).
+        *   **Descrição:** Ler os dados do próprio perfil.
+    *   **UPDATE:**
+        *   **Ator:** Usuário (via página de Perfil no app Diagnóstico Maestro, e potencialmente em outros apps).
+        *   **Descrição:** Atualizar informações da empresa ou pessoais.
     *   **DELETE:**
-        *   **Quem executa:** Geralmente não é permitido diretamente pelo usuário final. Exclusão de conta pode ser um processo de admin ou automação que limpa dados relacionados.
-        *   **Apps que utilizam:** Módulo de Administração (se houver).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `usuarios.regras`)
+        *   **Ator:** Geralmente não permitido pelo usuário final; pode ser uma operação administrativa.
+        *   **Descrição:** Remoção do perfil (requer cuidado devido a dependências).
+*   **Aplicativos que Utilizam:**
+    *   Diagnóstico Maestro (principalmente para criação/atualização inicial)
+    *   Maestro Operacional (leitura para exibir dados da empresa)
+    *   Visão Clara Financeira (leitura para exibir dados da empresa)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
     ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /usuarios/{docId} { // Onde docId é o userId
-    //   allow read, write: if request.auth.uid == docId;
-    //   allow delete: if false; // Ou conforme política de admin
-    // }
-
-    // Regras detalhadas do documento original:
-    match /usuarios/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
-      allow delete: if false; // Ou: if isAdmin(request.auth.uid);
+    match /usuarios/{userIdDoc} {
+      // REQUER: ID do documento ser o UID do usuário
+      allow create: if docIdIsSelf(userIdDoc) &&
+                       (request.resource.data.userId == null || request.resource.data.userId == userIdDoc); // userId no corpo opcional e deve ser o mesmo
+      allow read: if isSignedIn() && request.auth.uid == userIdDoc;
+      allow update: if docIdIsSelf(userIdDoc);
+      // allow delete: if docIdIsSelf(userIdDoc); // Descomentar com cautela
     }
     ```
-*   **Indexação e Performance:**
-    *   O acesso é primariamente pelo ID do documento (`userId`), que é altamente eficiente.
-    *   Não são esperadas consultas complexas nesta coleção que exijam índices compostos, a menos que haja busca por `companyEmail` ou `companyCnpj` por administradores.
 
 ---
 
-### 2.2. Coleção: `consultationsMetadata`
+### 3.2. `consultationsMetadata`
 
-*   **Propósito:** Rastrear o status da consulta de diagnóstico inicial do usuário no "Diagnóstico Maestro".
-*   **ID do Documento:** `uid` do usuário do Firebase Authentication (conforme `DATA_SYNC_CONFIG.json`).
-*   **Campos:**
-    *   `completed` (Boolean): [Obrigatório] Indica se o diagnóstico foi concluído. Ex: `true`.
-    *   `completedAt` (Timestamp): [Opcional] Data e hora da conclusão. Ex: `FieldValue.serverTimestamp()`.
-    *   `createdAt` (Timestamp): [Obrigatório] Data de criação do registro. Ex: `FieldValue.serverTimestamp()`.
-*   **Operações (CRUD):**
+*   **Propósito:** Rastrear o status da consulta de diagnóstico inicial do usuário no app Diagnóstico Maestro. O ID do documento é o `uid` do usuário.
+*   **Campos Principais:**
+    *   `completed` (boolean, obrigatório): `true` se o diagnóstico foi concluído, `false` caso contrário.
+    *   `completedAt` (timestamp, opcional): Data e hora da conclusão.
+    *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema): Data de criação do registro.
+*   **Operações e Atores:**
     *   **CREATE:**
-        *   **Quem executa:** Sistema/Backend do "Diagnóstico Maestro" (quando o usuário se registra ou inicia a primeira interação).
-        *   **Apps que utilizam:** "Diagnóstico Maestro".
+        *   **Ator:** Usuário (via `AuthContext` no app Diagnóstico Maestro durante o `signUp`, com `completed: false`).
     *   **READ:**
-        *   **Quem executa:** "Diagnóstico Maestro" (para verificar status), Outros apps ("Maestro Operacional", "Visão Clara Financeira") para personalizar a experiência.
-        *   **Apps que utilizam:** "Diagnóstico Maestro", "Maestro Operacional", "Visão Clara Financeira".
+        *   **Ator:** Usuário (app Diagnóstico Maestro para verificar status; outros apps para personalizar experiência).
     *   **UPDATE:**
-        *   **Quem executa:** Sistema/Backend do "Diagnóstico Maestro" (quando o diagnóstico é concluído).
-        *   **Apps que utilizam:** "Diagnóstico Maestro".
-    *   **DELETE:**
-        *   **Quem executa:** Geralmente não aplicável.
-        *   **Apps que utilizam:** N/A.
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `consultationsMetadata.regras`)
+        *   **Ator:** Usuário (indiretamente via `ConsultationContext` no app Diagnóstico Maestro ao finalizar a consulta).
+*   **Aplicativos que Utilizam:**
+    *   Diagnóstico Maestro (criação, leitura, atualização)
+    *   Maestro Operacional (leitura para onboarding)
+    *   Visão Clara Financeira (leitura para onboarding)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
     ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /consultationsMetadata/{docId} { // Onde docId é o userId
-    //   allow read, write: if request.auth.uid == docId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /consultationsMetadata/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+    match /consultationsMetadata/{userIdDoc} {
+      // REQUER: ID do documento ser o UID do usuário
+      allow read, write: if docIdIsSelf(userIdDoc);
     }
     ```
-*   **Indexação e Performance:**
-    *   Acesso primário por ID do documento (`userId`).
 
 ---
 
-### 2.3. Coleção: `userGoals`
+### 3.3. `userGoals`
 
-*   **Propósito:** Armazenar os resultados da análise estratégica e planejamento de metas gerados pela IA na página `/goals` do "Diagnóstico Maestro".
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Campos detalhados no `BACKEND_GUIDE.md` existente, seção "Planejamento Estratégico e Metas do Usuário (`userGoals`)")
-    *   `userId` (String): [Obrigatório] UID do usuário.
-    *   `createdAt` (Timestamp): [Obrigatório] Data de criação.
-    *   `inputData` (Object): [Obrigatório] Dados fornecidos pelo usuário (receita, despesas, metas, etc.).
-        *   `currentRevenue` (Number), `currentExpenses` (Number), `targetRevenueGoal` (Number), `userQuestion` (String), etc.
-    *   `analysisResult` (Object): [Obrigatório] Resposta da IA.
-        *   `currentProfit` (Number), `targetProfit` (Number), `businessDiagnosis` (String), `actionPlan` (Array<String>), etc.
-    *   `status` (String): [Opcional] Ex: "active", "archived". Default: "active".
-    *   `type` (String): [Opcional] Ex: "strategic_planning". Default: "strategic_planning".
-*   **Operações (CRUD):**
+*   **Propósito:** Armazenar os resultados da análise estratégica gerada pela IA na página `/goals` do app Diagnóstico Maestro, incluindo dados financeiros fornecidos pelo usuário, suas metas e o plano de ação sugerido.
+*   **Campos Principais:**
+    *   `userId` (string, obrigatório): UID do usuário proprietário.
+    *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema): Data de criação.
+    *   `inputData` (objeto, obrigatório): Dados fornecidos pelo usuário.
+        *   `currentRevenue` (number)
+        *   `currentExpenses` (number)
+        *   `targetRevenueGoal` (number)
+        *   `userQuestion` (string) - *Nota: No form é `userScenario`, mas no fluxo/armazenamento é `userQuestion`.*
+        *   ... (outros campos opcionais do formulário de metas)
+    *   `analysisResult` (objeto, obrigatório): Resposta da IA.
+        *   `currentProfit` (number)
+        *   `targetProfit` (number)
+        *   `revenueGap` (number)
+        *   `businessDiagnosis` (string)
+        *   `aiConsultantResponse` (string)
+        *   `suggestions` (array de strings)
+        *   `actionPlan` (array de strings)
+        *   `preventiveAlerts` (array de strings, opcional)
+    *   `status` (string, opcional): Ex: 'active'.
+    *   `type` (string, opcional): Ex: 'strategic_planning'.
+*   **Operações e Atores:**
     *   **CREATE:**
-        *   **Quem executa:** Usuário final (ao submeter o formulário na página `/goals` do "Diagnóstico Maestro").
-        *   **Apps que utilizam:** "Diagnóstico Maestro".
+        *   **Ator:** Usuário (via página `/goals` no app Diagnóstico Maestro).
     *   **READ:**
-        *   **Quem executa:** "Diagnóstico Maestro" (para exibir histórico), Outros apps ("Maestro Operacional", "Visão Clara Financeira") para contexto e personalização.
-        *   **Apps que utilizam:** "Diagnóstico Maestro", "Maestro Operacional", "Visão Clara Financeira".
+        *   **Ator:** Usuário (app Diagnóstico Maestro para exibir; Maestro Operacional e Visão Clara Financeira para contextualização e planejamento).
     *   **UPDATE:**
-        *   **Quem executa:** Usuário final (ex: para arquivar um plano) ou Sistema (raro).
-        *   **Apps que utilizam:** "Diagnóstico Maestro".
+        *   **Ator:** Usuário (potencialmente para marcar itens do plano de ação como concluídos em outros apps).
     *   **DELETE:**
-        *   **Quem executa:** Usuário final (ex: para excluir um plano antigo).
-        *   **Apps que utilizam:** "Diagnóstico Maestro".
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `userGoals.regras`)
+        *   **Ator:** Usuário (se permitido para arquivar/excluir planejamentos).
+*   **Aplicativos que Utilizam:**
+    *   Diagnóstico Maestro (criação, leitura)
+    *   Maestro Operacional (leitura)
+    *   Visão Clara Financeira (leitura)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
     ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /userGoals/{goalId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-    
-    // Regras detalhadas do documento original:
     match /userGoals/{goalId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      // REQUER: userId no documento para validação de segurança
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner();
     }
     ```
-*   **Indexação e Performance:**
-    *   **Obrigatório:** Índice composto em `userId` (ASC) e `createdAt` (DESC) para buscar o plano mais recente do usuário.
-      ```json
-      {
-        "collectionGroup": "userGoals",
-        "queryScope": "COLLECTION",
-        "fields": [
-          { "fieldPath": "userId", "order": "ASCENDING" },
-          { "fieldPath": "createdAt", "order": "DESCENDING" }
-        ]
-      }
-      ```
+*   **Indexação:**
+    *   `(userId ASC, createdAt DESC)` (definido em `firestore.indexes.json`)
 
 ---
 
-### 2.4. Coleção: `consultations`
+### 3.4. `consultations`
 
-*   **Propósito:** Armazenar os detalhes completos de cada sessão de diagnóstico interativa do "Diagnóstico Maestro".
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Campos detalhados no `BACKEND_GUIDE.md` existente, seção "Detalhes da Consulta de Diagnóstico (`consultations`)")
-    *   `userId` (String): [Obrigatório] UID do usuário.
-    *   `consultationCompletedAt` (Timestamp): [Obrigatório] Quando a consulta foi concluída.
-    *   `initialFormData` (Object): [Obrigatório] Dados do formulário inicial.
-    *   `userAnswers` (Object): [Obrigatório] Perguntas e respostas do usuário.
-    *   `aiFeedbacks` (Object): [Obrigatório] Perguntas e feedbacks da IA.
-    *   `finalDiagnosisParts` (Array<Object>): [Obrigatório] Partes do diagnóstico final.
-    *   `createdAt` (Timestamp): [Obrigatório] Data de criação.
-    *   `updatedAt` (Timestamp): [Obrigatório] Data da última atualização.
-*   **Operações (CRUD):**
+*   **Propósito:** Armazenar os detalhes completos de cada sessão de diagnóstico interativa do app Diagnóstico Maestro.
+*   **Campos Principais:**
+    *   `userId` (string, obrigatório): UID do usuário.
+    *   `initialFormData` (objeto, obrigatório): Dados do formulário inicial.
+    *   `userAnswers` (objeto, obrigatório): Perguntas e respostas.
+    *   `aiFeedbacks` (objeto, obrigatório): Perguntas e feedbacks da IA.
+    *   `finalDiagnosisParts` (array de objetos, obrigatório): Partes do diagnóstico final.
+    *   `consultationCompletedAt` (timestamp, obrigatório): Data de conclusão da consulta.
+*   **Operações e Atores:**
     *   **CREATE:**
-        *   **Quem executa:** Sistema/Backend do "Diagnóstico Maestro" (ao final de uma sessão de consulta).
-        *   **Apps que utilizam:** "Diagnóstico Maestro".
+        *   **Ator:** Usuário (via `ConsultationContext` no app Diagnóstico Maestro ao finalizar a consulta).
     *   **READ:**
-        *   **Quem executa:** "Diagnóstico Maestro" (para exibir histórico). Outros apps podem ter acesso limitado para contexto profundo se necessário.
-        *   **Apps que utilizam:** "Diagnóstico Maestro", potencialmente outros com permissões restritas.
-    *   **UPDATE:**
-        *   **Quem executa:** Geralmente não aplicável para consultas históricas.
-        *   **Apps que utilizam:** N/A.
-    *   **DELETE:**
-        *   **Quem executa:** Usuário final (se permitido) ou Admin.
-        *   **Apps que utilizam:** "Diagnóstico Maestro" (se houver funcionalidade de exclusão).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `consultations.regras`)
+        *   **Ator:** Usuário (app Diagnóstico Maestro para histórico; outros apps se necessitarem de detalhes profundos).
+    *   **UPDATE/DELETE:**
+        *   **Ator:** Geralmente não permitido pelo usuário final para manter histórico.
+*   **Aplicativos que Utilizam:**
+    *   Diagnóstico Maestro (criação, leitura)
+    *   Outros apps (leitura, se necessário)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
     ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /consultations/{consultationId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
     match /consultations/{consultationId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid; // Ou mais restrito
+      // REQUER: userId no documento para validação de segurança
+      allow create: if isRequestDataOwner();
+      allow read: if isResourceOwner();
+      // update, delete geralmente não são expostos
     }
     ```
-*   **Indexação e Performance:**
-    *   **Obrigatório:** Índice composto em `userId` (ASC) e `consultationCompletedAt` (DESC) para buscar a consulta mais recente.
-      ```json
-      {
-        "collectionGroup": "consultations",
-        "queryScope": "COLLECTION",
-        "fields": [
-          { "fieldPath": "userId", "order": "ASCENDING" },
-          { "fieldPath": "consultationCompletedAt", "order": "DESCENDING" }
-        ]
+*   **Indexação:**
+    *   `(userId ASC, consultationCompletedAt DESC)` (definido em `firestore.indexes.json`)
+
+---
+
+### 3.5. `lancamentosFinanceiros`
+
+*   **Propósito:** Registrar todas as transações financeiras (receitas e despesas) da empresa.
+*   **Campos Principais (Baseado em `lancamentoFinanceiroSchema.ts`):**
+    *   `userId` (string, obrigatório): UID do usuário proprietário.
+    *   `descricao` (string, obrigatório): Descrição do lançamento. Ex: "Venda Produto X", "Pagamento Aluguel".
+    *   `valor` (number, obrigatório): Valor monetário. Ex: 150.75.
+    *   `data` (timestamp, obrigatório): Data do lançamento.
+    *   `tipo` (enum: "RECEITA" | "DESPESA", obrigatório): Tipo da transação.
+    *   `pago` (boolean, obrigatório, default: `true`): Indica se foi efetivado.
+    *   `categoria` (string, opcional): Categoria. Ex: "Vendas", "Material de Escritório".
+    *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema).
+    *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema).
+    *   `contaBancariaId` (string, opcional): ID da conta associada (a ser detalhado).
+    *   `faturaId` (string, opcional): ID da fatura associada (a ser detalhado).
+*   **Operações e Atores:**
+    *   **CREATE:**
+        *   **Ator:** Usuário (principalmente via app Visão Clara Financeira; potencialmente via Maestro Operacional ao registrar vendas).
+    *   **READ:**
+        *   **Ator:** Usuário (Visão Clara Financeira para relatórios; Diagnóstico Maestro para importar resumo mensal; Maestro Operacional para conciliação).
+    *   **UPDATE:**
+        *   **Ator:** Usuário (Visão Clara Financeira para correções).
+    *   **DELETE:**
+        *   **Ator:** Usuário (Visão Clara Financeira para remoção).
+*   **Aplicativos que Utilizam:**
+    *   Visão Clara Financeira (CRUD principal)
+    *   Diagnóstico Maestro (leitura para `/goals`)
+    *   Maestro Operacional (leitura para conciliação, potencialmente criação ao registrar vendas)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
+    ```firestore
+    match /lancamentosFinanceiros/{docId} {
+      // REQUER: userId no documento para validação de segurança
+      allow create: if isRequestDataOwner();
+      allow read, delete: if isResourceOwner();
+      allow update: if isResourceOwner() && userIdUnchanged();
+    }
+    ```
+*   **Indexação:**
+    *   `(userId ASC, data ASC)` (definido em `firestore.indexes.json`)
+    *   `(userId ASC, data DESC)` (definido em `firestore.indexes.json`)
+
+---
+
+### 3.6. `clientes`
+
+*   **Propósito:** Armazenar informações sobre os clientes da empresa.
+*   **Campos Principais (Baseado em `clientSchema.ts`):**
+    *   `userId` (string, obrigatório): UID do usuário proprietário.
+    *   `nome` (string, obrigatório): Nome do cliente. Ex: "João Silva".
+    *   `email` (string, opcional): Email. Ex: "joao.silva@example.com".
+    *   `telefone` (string, opcional): Telefone. Ex: "(11) 97777-6666".
+    *   `endereco` (string, opcional): Endereço.
+    *   `cpfCnpj` (string, opcional): CPF ou CNPJ.
+    *   `dataNascimento` (string, opcional): Data de nascimento.
+    *   `observacoes` (string, opcional): Observações.
+    *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema).
+    *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema).
+*   **Operações e Atores:**
+    *   **CREATE, READ, UPDATE, DELETE:**
+        *   **Ator:** Usuário (principalmente via app Maestro Operacional).
+*   **Aplicativos que Utilizam:**
+    *   Maestro Operacional (CRUD principal)
+    *   Visão Clara Financeira (leitura para associar a lançamentos/faturas)
+    *   Diagnóstico Maestro (potencialmente leitura para entender perfil de cliente, se aplicável)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
+    ```firestore
+    match /clientes/{docId} {
+      // REQUER: userId no documento para validação de segurança
+      allow create: if isRequestDataOwner();
+      allow read, delete: if isResourceOwner();
+      allow update: if isResourceOwner() && userIdUnchanged();
+    }
+    ```
+*   **Indexação:**
+    *   `(userId ASC, nome ASC)` (definido em `firestore.indexes.json`)
+
+---
+
+### 3.7. `produtosServicos`
+
+*   **Propósito:** Catálogo de produtos e serviços oferecidos pela empresa.
+*   **Campos Principais (Baseado em `productServiceSchema.ts`):**
+    *   `userId` (string, obrigatório): UID do usuário proprietário.
+    *   `nome` (string, obrigatório): Nome do item. Ex: "Consultoria SEO", "Camiseta Premium".
+    *   `descricao` (string, opcional): Descrição.
+    *   `tipo` (enum: "PRODUTO" | "SERVICO", obrigatório): Tipo do item.
+    *   `precoVenda` (number, obrigatório): Preço de venda.
+    *   `precoCusto` (number, opcional): Preço de custo.
+    *   `unidadeMedida` (string, opcional): Ex: "un", "h".
+    *   `estoqueAtual` (number, opcional, para PRODUTO).
+    *   `ativo` (boolean, obrigatório, default: `true`).
+    *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema).
+    *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema).
+*   **Operações e Atores:**
+    *   **CREATE, READ, UPDATE, DELETE:**
+        *   **Ator:** Usuário (principalmente via app Maestro Operacional; Visão Clara Financeira pode ler para precificação).
+*   **Aplicativos que Utilizam:**
+    *   Maestro Operacional (CRUD principal)
+    *   Visão Clara Financeira (leitura para análise de precificação e rentabilidade)
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
+    ```firestore
+    match /produtosServicos/{docId} {
+      // REQUER: userId no documento para validação de segurança
+      allow create: if isRequestDataOwner();
+      allow read, delete: if isResourceOwner();
+      allow update: if isResourceOwner() && userIdUnchanged();
+    }
+    ```
+*   **Indexação:**
+    *   `(userId ASC, nome ASC)` (definido em `firestore.indexes.json`)
+    *   `(tipo ASC, userId ASC, nome ASC)` (definido em `firestore.indexes.json`)
+
+---
+### 3.8. `vendas`
+
+*   **Propósito:** Registrar as vendas realizadas. Pode ser uma venda de balcão simples ou o resultado de uma Ordem de Serviço.
+*   **Campos Principais (Exemplo):**
+    *   `userId` (string, obrigatório)
+    *   `dataVenda` (timestamp, obrigatório)
+    *   `clienteId` (string, opcional): Referência à coleção `clientes`.
+    *   `nomeCliente` (string, opcional): Denormalizado para exibição rápida.
+    *   `itens` (array de objetos, obrigatório):
+        *   `produtoServicoId` (string): Referência à `produtosServicos`.
+        *   `nomeItem` (string): Denormalizado.
+        *   `quantidade` (number)
+        *   `precoUnitario` (number)
+        *   `precoTotalItem` (number)
+    *   `valorTotalVenda` (number, obrigatório)
+    *   `metodoPagamento` (string, opcional): Ex: "Cartão de Crédito", "Pix".
+    *   `statusPagamento` (string, opcional): Ex: "Pago", "Pendente".
+    *   `observacoes` (string, opcional)
+    *   `ordemServicoId` (string, opcional): Se originada de uma OS.
+    *   `createdAt` (timestamp, obrigatório)
+    *   `updatedAt` (timestamp, obrigatório)
+*   **Operações e Atores:**
+    *   **CREATE:** Usuário (via Maestro Operacional)
+    *   **READ:** Usuário (Maestro Operacional, Visão Clara Financeira)
+    *   **UPDATE:** Usuário (Maestro Operacional, para status de pagamento, por exemplo)
+    *   **DELETE:** Usuário (com restrições, talvez apenas cancelamento)
+*   **Aplicativos que Utilizam:** Maestro Operacional, Visão Clara Financeira
+*   **Regras de Segurança:**
+    ```firestore
+    match /vendas/{docId} {
+      // REQUER: userId no documento
+      allow create: if isRequestDataOwner();
+      allow read, delete: if isResourceOwner(); // Delete pode ser restrito
+      allow update: if isResourceOwner() && userIdUnchanged();
+    }
+    ```
+*   **Indexação:** `(userId ASC, dataVenda ASC)` (definido em `firestore.indexes.json`)
+
+---
+
+### 3.9. `ordensServico`
+
+*   **Propósito:** Gerenciar ordens de serviço para trabalhos a serem realizados.
+*   **Campos Principais (Exemplo):**
+    *   `userId` (string, obrigatório)
+    *   `clienteId` (string, obrigatório): Referência à `clientes`.
+    *   `nomeCliente` (string, obrigatório): Denormalizado.
+    *   `descricaoServico` (string, obrigatório)
+    *   `dataAbertura` (timestamp, obrigatório)
+    *   `dataPrevisaoEntrega` (timestamp, opcional)
+    *   `dataConclusao` (timestamp, opcional)
+    *   `status` (string, obrigatório): Ex: "Aberta", "Em Andamento", "Concluída", "Cancelada".
+    *   `itensServico` (array de objetos, opcional): Produtos/peças usadas.
+        *   `produtoServicoId` (string)
+        *   `quantidade` (number)
+        *   `precoUnitario` (number)
+    *   `valorTotalEstimado` (number, opcional)
+    *   `valorTotalFinal` (number, opcional)
+    *   `tecnicoResponsavel` (string, opcional)
+    *   `createdAt` (timestamp, obrigatório)
+    *   `updatedAt` (timestamp, obrigatório)
+*   **Operações e Atores:** CRUD pelo Usuário (via Maestro Operacional).
+*   **Aplicativos que Utilizam:** Maestro Operacional.
+*   **Regras de Segurança:**
+    ```firestore
+    match /ordensServico/{docId} {
+      // REQUER: userId no documento
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner(); // Delete pode ser restrito
+    }
+    ```
+*   **Indexação:** `(userId ASC, criadoEm DESC)` (definido como `criadoEm` no `firestore.indexes.json`, idealmente seria `dataAbertura` ou `status`).
+
+---
+
+### 3.10. `agendamentos`
+
+*   **Propósito:** Gerenciar agendamentos de serviços, compromissos, etc.
+*   **Campos Principais (Exemplo):**
+    *   `userId` (string, obrigatório)
+    *   `titulo` (string, obrigatório)
+    *   `dataHoraInicio` (timestamp, obrigatório)
+    *   `dataHoraFim` (timestamp, obrigatório)
+    *   `clienteId` (string, opcional)
+    *   `produtoServicoId` (string, opcional)
+    *   `descricao` (string, opcional)
+    *   `status` (string, opcional): Ex: "Confirmado", "Pendente", "Cancelado".
+    *   `createdAt` (timestamp, obrigatório)
+    *   `updatedAt` (timestamp, obrigatório)
+*   **Operações e Atores:** CRUD pelo Usuário (via Maestro Operacional).
+*   **Aplicativos que Utilizam:** Maestro Operacional.
+*   **Regras de Segurança:**
+    ```firestore
+    match /agendamentos/{docId} {
+      // REQUER: userId no documento
+      allow create: if isRequestDataOwner();
+      allow read, update, delete: if isResourceOwner();
+    }
+    ```
+*   **Indexação:** `(userId ASC, dataHora ASC)` (definido como `dataHora` no `firestore.indexes.json`, idealmente seria `dataHoraInicio`).
+
+---
+
+### 3.11. `metasFinanceiras`
+*   **Propósito:** Armazenar metas financeiras definidas pelo usuário (ex: meta de lucro mensal, meta de economia).
+*   **Campos Principais (Exemplo):**
+    *   `userId` (string, obrigatório)
+    *   `descricaoMeta` (string, obrigatório): Ex: "Atingir R$ 5.000 de lucro líquido".
+    *   `valorAlvo` (number, obrigatório)
+    *   `dataAlvo` (timestamp, opcional): Prazo para atingir a meta.
+    *   `tipoMeta` (string, opcional): Ex: "Lucro", "Receita", "Redução de Custo".
+    *   `progressoAtual` (number, opcional): Calculado ou inserido manualmente.
+    *   `status` (string, opcional): Ex: "Ativa", "Concluída", "Cancelada".
+    *   `createdAt` (timestamp, obrigatório)
+    *   `updatedAt` (timestamp, obrigatório)
+*   **Operações e Atores:** CRUD pelo Usuário (via Visão Clara Financeira).
+*   **Aplicativos que Utilizam:** Visão Clara Financeira.
+*   **Regras de Segurança:**
+    ```firestore
+    match /metasFinanceiras/{docId} {
+        // REQUER: userId no documento para validação de segurança.
+        // REQUER: ID do documento no formato "userId_anoMes" para validação de segurança.
+        allow create: if isRequestDataOwner() && request.auth.uid == docId.split('_')[0];
+        allow read, update, delete: if isSignedIn() && request.auth.uid == docId.split('_')[0];
+                                     // Para update, adicionar && userIdUnchanged() se userId estiver no corpo.
+    }
+    ```
+
+---
+
+### 3.12. Outras Coleções Potenciais (Exemplos)
+Estas coleções são mencionadas no `DATA_INTERACTION_GUIDE.md` ou no `firestore.rules` como exemplos ou parte de outros módulos. Seus schemas e operações detalhadas precisariam ser definidos conforme esses módulos são construídos.
+
+*   **`fornecedores`** (Maestro Operacional)
+    *   Propósito: Gerenciar dados de fornecedores.
+    *   Regras: Semelhante a `clientes`.
+*   **`entregas`** (Maestro Operacional)
+    *   Propósito: Rastrear entregas de produtos/serviços.
+    *   Regras: Semelhante a `ordensServico`.
+*   **`faturas`** (Visão Clara Financeira)
+    *   Propósito: Gerenciar faturas emitidas e recebidas.
+    *   Regras: Semelhante a `lancamentosFinanceiros`.
+*   **`pagamentos`, `recebimentos`, `transferencias`, `cartoes`** (Visão Clara Financeira)
+    *   Propósito: Detalhar diferentes aspectos da gestão financeira.
+    *   Regras: Semelhante a `lancamentosFinanceiros`.
+*   **`ordensDeProducao`** (Maestro Operacional)
+    *   Propósito: Detalhar o fluxo de produção. Poderia ser uma subcoleção de `ordensServico` ou uma coleção separada.
+    *   Regras: Semelhante a `ordensServico`.
+*   **`contasPagar`, `contasReceber`** (Visão Clara Financeira)
+    *   Propósito: Controle de contas a pagar e a receber.
+    *   Regras: Semelhante a `lancamentosFinanceiros`.
+*   **`custos`** (Visão Clara Financeira)
+    *   Propósito: Detalhamento de custos variáveis ou específicos.
+    *   Regras: Semelhante a `lancamentosFinanceiros`.
+*   **`custosFixosConfigurados`** (Visão Clara Financeira)
+    *   Propósito: Configuração de custos fixos recorrentes para cálculos.
+    *   Regras (Ajustada para `isResourceOwner` na leitura, como discutido):
+        ```firestore
+        match /custosFixosConfigurados/{docId} {
+          // REQUER: userId no documento para validação de segurança
+          allow create: if isRequestDataOwner();
+          allow read: if isResourceOwner(); // Somente o proprietário pode ler suas configurações
+          allow update: if isResourceOwner() && userIdUnchanged();
+          allow delete: if isResourceOwner();
+        }
+        ```
+
+---
+
+### 3.13. `assinaturas`
+
+*   **Propósito:** Armazenar informações sobre a assinatura do usuário (status, plano, data de expiração), geralmente atualizadas por webhooks de plataformas de pagamento como Hotmart. O ID do documento é o `uid` do usuário.
+*   **Campos Principais:**
+    *   `userId` (string, obrigatório): UID do usuário. Redundante com o ID do documento, mas útil para consistência.
+    *   `status` (enum: "ativa" | "inativa", obrigatório): Status atual da assinatura.
+    *   `plano` (string, obrigatório): Nome do plano assinado (ex: "mensal", "anual").
+    *   `expiracao` (timestamp, obrigatório): Data em que a assinatura expira.
+    *   `atualizadoEm` (timestamp, obrigatório, gerenciado pelo sistema): Data da última atualização.
+*   **Operações e Atores:**
+    *   **CREATE/UPDATE (Upsert):**
+        *   **Ator:** Sistema (via webhook da Hotmart na rota `/api/webhooks/hotmart`).
+        *   **Descrição:** Cria ou atualiza a assinatura do usuário com base em eventos de pagamento.
+    *   **READ:**
+        *   **Ator:** Sistema (em todos os apps para verificar o acesso a funcionalidades pagas).
+        *   **Descrição:** Ler os dados da assinatura do próprio usuário.
+*   **Aplicativos que Utilizam:**
+    *   Todos os aplicativos para controle de acesso a funcionalidades premium.
+*   **Regras de Segurança (Exemplo `firestore.rules`):**
+    ```firestore
+    match /assinaturas/{userIdDoc} {
+      // Ninguém pode escrever diretamente. Apenas o backend via Admin SDK.
+      allow write: if false; 
+      // O usuário pode ler sua própria assinatura.
+      allow read: if isSignedIn() && request.auth.uid == userIdDoc;
+    }
+    ```
+---
+
+## 4. Relacionamentos Entre Coleções (Exemplos)
+
+*   **`vendas` -> `clientes`**: Uma venda (`vendas`) pode ter um `clienteId` referenciando um documento na coleção `clientes`.
+*   **`vendas` -> `produtosServicos`**: Cada item em uma venda (`vendas.itens[].produtoServicoId`) referencia um documento em `produtosServicos`.
+*   **`ordensServico` -> `clientes`**: Uma OS (`ordensServico`) tem um `clienteId`.
+*   **`ordensServico` -> `produtosServicos`**: Itens em uma OS (`ordensServico.itensServico[].produtoServicoId`) referenciam `produtosServicos`.
+*   **`lancamentosFinanceiros` -> `faturas` / `clientes` / `fornecedores`**: Lançamentos podem estar ligados a faturas, clientes ou fornecedores através de IDs.
+*   **`agendamentos` -> `clientes` / `produtosServicos`**: Agendamentos podem estar ligados a um cliente e/
+    ou a um serviço específico.
+
+**Consideração sobre Denormalização:** Para otimizar leituras e evitar múltiplas consultas, campos como `nomeCliente` ou `nomeItem` são frequentemente denormalizados (copiados) para documentos em outras coleções (ex: `vendas`, `ordensServico`). Isso requer uma estratégia de atualização caso o dado original mude (ex: nome do cliente atualizado em `clientes` deve refletir nas vendas).
+
+## 5. Indexação e Performance
+
+*   **Índices Existentes:** O arquivo `firestore.indexes.json` já define vários índices compostos essenciais para as consultas realizadas pelos aplicativos. É crucial que este arquivo seja mantido atualizado e que os índices sejam deployados e construídos no Firebase.
+*   **Consultas Comuns:**
+    *   Filtrar por `userId` e ordenar por um campo de data (ex: `createdAt`, `dataVenda`) é uma operação comum.
+    *   Filtrar por `userId` e outro campo específico (ex: `tipo` em `produtosServicos`).
+*   **Sugestões de Performance:**
+    *   **Limitar Dados:** Use `limit()` em consultas que podem retornar muitos documentos.
+    *   **Paginação:** Implemente paginação para listas longas.
+    *   **Denormalização Seletiva:** Conforme mencionado acima, denormalizar dados pode reduzir a necessidade de joins complexos no lado do cliente, mas adiciona complexidade na escrita/atualização.
+    *   **Listeners com Cautela:** Evite `onSnapshot` em grandes conjuntos de dados sem filtros adequados, pois pode consumir muita banda e recursos.
+    *   **Otimizar Estrutura de Dados:** Para dados hierárquicos ou altamente relacionais, considere subcoleções ou estruturas de dados aninhadas, mas avalie o impacto nas regras de segurança e na complexidade das consultas.
+    *   **Monitorar Firestore Usage:** Use o console do Firebase para monitorar leituras, escritas, e documentos armazenados para identificar gargalos.
+
+## 6. Fluxo de Dados por Aplicativo (Como Consultam e Escrevem)
+
+### 6.1. Diagnóstico Maestro
+
+*   **Consultas Principais:**
+    *   `usuarios/{userId}`: Para carregar/exibir dados do perfil da empresa.
+    *   `consultationsMetadata/{userId}`: Para verificar se o diagnóstico inicial foi concluído.
+    *   `consultations`: Query por `userId` e `consultationCompletedAt` para exibir histórico.
+    *   `userGoals`: Query por `userId` e `createdAt` para planejamentos anteriores (potencialmente).
+    *   `lancamentosFinanceiros`: Query por `userId` e `data` (mês atual) para pré-preencher formulário de metas (`/goals`).
+*   **Escritas Principais:**
+    *   `usuarios/{userId}`: Criação (no registro) e atualização (página de perfil).
+    *   `consultationsMetadata/{userId}`: Criação (no registro) e atualização (ao concluir consulta).
+    *   `consultations`: Criação de um novo documento ao final da consulta interativa.
+    *   `userGoals`: Criação de um novo documento após análise da IA na página `/goals`.
+*   **Referência Detalhada:** `src/DIAGNOSTICO_MAESTRO_DATA_OPERATIONS.md`.
+
+### 6.2. Maestro Operacional (Exemplo/Planejado)
+
+*   **Consultas Principais:**
+    *   `usuarios/{userId}`: Ler dados da empresa.
+    *   `clientes`: CRUD, listar por `userId`.
+    *   `produtosServicos`: CRUD, listar por `userId`, filtrar por `tipo`.
+    *   `vendas`: CRUD, listar por `userId` e `dataVenda`.
+    *   `ordensServico`: CRUD, listar por `userId` e status/data.
+    *   `agendamentos`: CRUD, listar por `userId` e `dataHoraInicio`.
+    *   `userGoals` (leitura): Para entender contexto estratégico do usuário.
+    *   `consultationsMetadata` (leitura): Para onboarding.
+*   **Escritas Principais:**
+    *   `clientes`, `produtosServicos`, `vendas`, `ordensServico`, `agendamentos` (CRUD).
+    *   Potencialmente, criação de `lancamentosFinanceiros` ao finalizar uma venda.
+
+### 6.3. Visão Clara Financeira (Exemplo/Planejado)
+
+*   **Consultas Principais:**
+    *   `usuarios/{userId}`: Ler dados da empresa.
+    *   `lancamentosFinanceiros`: CRUD, listar/filtrar por `userId`, `data`, `tipo`, `categoria`.
+    *   `metasFinanceiras`: CRUD, listar por `userId` e formato de ID `userId_anoMes`.
+    *   `produtosServicos` (leitura): Para análise de precificação.
+    *   `vendas` (leitura): Para dashboards e relatórios financeiros.
+    *   `userGoals` (leitura): Para dashboards e comparação com metas.
+    *   `consultationsMetadata` (leitura): Para onboarding.
+    *   `contasPagar`, `contasReceber`, `custos`, `custosFixosConfigurados`.
+*   **Escritas Principais:**
+    *   `lancamentosFinanceiros`, `metasFinanceiras` (CRUD).
+    *   `contasPagar`, `contasReceber`, `custos`, `custosFixosConfigurados`.
+
+## 7. Possíveis Conflitos, Duplicidades ou Inconsistências
+
+*   **Denormalização de Dados:**
+    *   **Problema:** Campos como `nomeCliente` em `vendas` ou `userGoals.inputData` (que duplica informações financeiras que podem estar em `lancamentosFinanceiros`). Se o dado original mudar (ex: nome do cliente em `clientes`), os dados denormalizados ficam desatualizados.
+    *   **Mitigação:**
+        *   Usar Cloud Functions para propagar atualizações (complexo).
+        *   Aceitar que alguns dados denormalizados são "snapshots" e podem não ser sempre 100% atuais, focando na leitura da fonte da verdade quando necessário.
+        *   Minimizar a denormalização ou usá-la apenas para campos raramente alterados.
+*   **Consistência de Schemas entre Apps:**
+    *   **Problema:** Se cada app definir seus próprios schemas para coleções compartilhadas (ex: `usuarios`), pode haver divergências.
+    *   **Mitigação:** Manter este guia e o `DATA_INTERACTION_GUIDE.md` como fontes da verdade. Idealmente, ter um pacote de schemas compartilhado se os apps forem monorepo ou tiverem código comum.
+*   **Lógica de Negócios Duplicada:**
+    *   **Problema:** Diferentes apps podem implementar lógicas de cálculo financeiro ou de status de forma ligeiramente diferente.
+    *   **Mitigação:** Centralizar lógica de negócios complexa em Cloud Functions ou serviços backend compartilhados, se possível, ou garantir que os serviços de frontend em cada app sigam rigorosamente as definições deste guia.
+*   **Gestão de IDs:**
+    *   **Problema:** Confusão entre IDs gerados pelo Firestore e IDs de referência (ex: `clienteId`).
+    *   **Mitigação:** Padronizar nomes de campos de ID (ex: sempre `entidadeId`). Garantir que os IDs referenciados sejam válidos. Especial atenção ao formato `userId_anoMes` para `metasFinanceiras`.
+*   **Operações Concorrentes:**
+    *   **Problema:** Múltiplos apps ou usuários atualizando o mesmo documento podem levar a condições de corrida.
+    *   **Mitigação:** Usar transações do Firestore para operações críticas. Implementar lógica de "optimistic locking" se necessário.
+*   **Migração de Dados e Schema:**
+    *   **Problema:** À medida que os apps evoluem, os schemas podem mudar, exigindo migração de dados.
+    *   **Mitigação:** Planejar migrações com cuidado. Usar scripts de migração. Versionar schemas ou adicionar campos de forma não destrutiva.
+
+## 8. Guia de Integração de Autenticação e Assinaturas (Hotmart)
+
+Esta seção destina-se a outros aplicativos do ecossistema ("Maestro Operacional", "Visão Clara Financeira") que precisam verificar se um usuário possui uma assinatura ativa para conceder acesso.
+
+### 8.1. Visão Geral do Fluxo
+1.  O **Diagnóstico Maestro** é o ponto de entrada principal, onde o usuário cria sua conta no Firebase Authentication.
+2.  Um webhook (ex: Hotmart) chama uma API no **Diagnóstico Maestro** (`/api/webhooks/hotmart`) quando uma assinatura é criada ou atualizada.
+3.  Essa API salva ou atualiza um documento na coleção `assinaturas` no Firestore. O ID do documento é o UID do usuário.
+4.  Os **outros aplicativos** do ecossistema **NÃO** precisam de um webhook. Eles apenas precisam **LER** da coleção `assinaturas` para verificar o status do usuário logado.
+
+### 8.2. Checklist de Implementação para Outros Apps
+Para implementar a verificação de assinatura em seu aplicativo, siga estes passos:
+
+**Passo 1: Copiar o Schema de Assinatura**
+- Copie o arquivo `src/schemas/assinaturaSchema.ts` do projeto Diagnóstico Maestro para o seu projeto. Isso garante que você possa validar e tipar os dados lidos do Firestore corretamente.
+
+**Passo 2: Implementar a Lógica de Verificação no Cliente**
+- Em seu provedor de autenticação (ex: `AuthContext.tsx`), você precisará de uma função para verificar o status da assinatura do usuário.
+- Esta função deve ser chamada sempre que o estado de autenticação mudar (um usuário fizer login ou a página for carregada com um usuário já logado).
+
+**Exemplo de Função de Verificação (para seu `AuthContext`):**
+```typescript
+// Dentro do seu AuthContext.tsx ou equivalente
+
+// Função auxiliar para verificar usuários privilegiados (opcional, mas recomendado)
+const isPrivilegedUser = (uid: string): boolean => {
+  const adminUids = process.env.NEXT_PUBLIC_ADMIN_UIDS?.split(',') || [];
+  const vipUids = process.env.NEXT_PUBLIC_VIP_UIDS?.split(',') || [];
+  return !!uid && (adminUids.includes(uid) || vipUids.includes(uid));
+};
+
+// Função principal de verificação
+const checkSubscriptionStatus = useCallback(async (uid: string) => {
+  setCheckingSubscriptionStatus(true); // Para exibir um loader
+
+  // 1. Conceder acesso imediato a usuários privilegiados
+  if (isPrivilegedUser(uid)) {
+    setSubscriptionStatus('active');
+    setCheckingSubscriptionStatus(false);
+    return;
+  }
+
+  // 2. Acessar o Firestore
+  if (!db) { // db importado da sua configuração do Firebase
+    setSubscriptionStatus('inactive');
+    setCheckingSubscriptionStatus(false);
+    return;
+  }
+
+  try {
+    // 3. Ler o documento da assinatura
+    const subRef = doc(db, "assinaturas", uid);
+    const subSnap = await getDoc(subRef);
+
+    if (subSnap.exists()) {
+      const subData = subSnap.data() as Assinatura; // Use o tipo do schema copiado
+      const expiracao = (subData.expiracao as Timestamp).toDate();
+
+      // 4. Validar o status e a data de expiração
+      if (subData.status === 'ativa' && expiracao >= new Date()) {
+        setSubscriptionStatus('active');
+      } else {
+        setSubscriptionStatus('inactive');
       }
-      ```
-
----
-
-### 2.5. Coleção: `clientes`
-
-*   **Propósito:** Armazenar os dados dos clientes dos usuários do Business Maestro.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Baseado em `clientSchema.ts`)
-    *   `userId` (String): [Obrigatório] ID do usuário Business Maestro proprietário deste cliente.
-    *   `nome` (String): [Obrigatório] Nome do cliente. Ex: "Empresa Exemplo Ltda".
-    *   `email` (String): [Opcional] Email do cliente. Ex: "contato@empresaexemplo.com".
-    *   `telefone` (String): [Opcional] Telefone do cliente. Ex: "(XX) XXXXX-XXXX".
-    *   `endereco` (String): [Opcional] Endereço do cliente. Ex: "Rua Exemplo, 123, Bairro, Cidade - UF".
-    *   `cpfCnpj` (String): [Opcional] CPF ou CNPJ do cliente.
-    *   `dataNascimento` (String): [Opcional] Data de nascimento (formato AAAA-MM-DD).
-    *   `observacoes` (String): [Opcional] Observações sobre o cliente.
-    *   `temDebitos` (Boolean): [Obrigatório] Indica se o cliente possui débitos. Default: `false`.
-    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE:**
-        *   **Quem executa:** Usuário final (via UI do "Maestro Operacional").
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **READ:**
-        *   **Quem executa:** Usuário final (para listar, selecionar em OS, etc.), IA (para contexto em OS).
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **UPDATE:**
-        *   **Quem executa:** Usuário final (ao editar dados do cliente).
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **DELETE:**
-        *   **Quem executa:** Usuário final.
-        *   **Apps que utilizam:** "Maestro Operacional".
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `clientes.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /clientes/{clienteId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /clientes/{clienteId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    } else {
+      // 5. Se não há documento, não há assinatura
+      setSubscriptionStatus('inactive');
     }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `nome` (ASC) para listagem ordenada por nome.
-    *   Considerar índices adicionais se houver buscas frequentes por `email` ou `cpfCnpj` dentro do escopo do `userId`.
-
----
-
-### 2.6. Coleção: `produtosServicos`
-
-*   **Propósito:** Catálogo de produtos e serviços oferecidos pelos usuários do Business Maestro.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Baseado em `productServiceSchema.ts`)
-    *   `userId` (String): [Obrigatório] ID do usuário Business Maestro proprietário.
-    *   `nome` (String): [Obrigatório] Nome do produto/serviço. Ex: "Consultoria Estratégica".
-    *   `tipo` (String): [Obrigatório] "Produto" ou "Serviço".
-    *   `descricao` (String): [Opcional] Descrição.
-    *   `valorVenda` (Number): [Obrigatório] Preço de venda. Ex: `250.00`.
-    *   `unidade` (String): [Obrigatório] Unidade (UN, KG, HR, M², Peça). Ex: "HR".
-    *   `custoUnitario` (Number): [Opcional, Obrigatório para tipo "Produto"] Custo. Ex: `100.00`.
-    *   `quantidadeEstoque` (Number): [Opcional, Obrigatório para tipo "Produto"] Estoque atual. Ex: `10`.
-    *   `estoqueMinimo` (Number): [Opcional, Obrigatório para tipo "Produto"] Estoque mínimo. Ex: `5`.
-    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE, READ, UPDATE, DELETE:**
-        *   **Quem executa:** Usuário final (via UI do "Maestro Operacional").
-        *   **Apps que utilizam:** "Maestro Operacional" (cadastro, seleção em OS/Vendas, controle de estoque).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `produtosServicos.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /produtosServicos/{itemId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-    
-    // Regras detalhadas do documento original:
-    match /produtosServicos/{itemId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `nome` (ASC).
-    *   Índice em `userId` (ASC) e `tipo` (ASC) para filtrar por tipo.
-
----
-
-### 2.7. Coleção: `agendamentos`
-
-*   **Propósito:** Gerenciar agendamentos de serviços e compromissos dos usuários.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Baseado em `appointmentSchema.ts`)
-    *   `userId` (String): [Obrigatório] ID do usuário proprietário.
-    *   `clienteId` (String): [Obrigatório] ID do cliente (pode ser 'manual_cliente_...' ou ID da coleção `clientes`).
-    *   `clienteNome` (String): [Obrigatório] Nome do cliente.
-    *   `servicoId` (String): [Obrigatório] ID do serviço/produto (pode ser 'manual_servico_...' ou ID da coleção `produtosServicos`).
-    *   `servicoNome` (String): [Obrigatório] Nome do serviço/produto.
-    *   `dataHora` (Timestamp): [Obrigatório] Data e hora do agendamento.
-    *   `observacoes` (String): [Opcional].
-    *   `status` (String): [Obrigatório] "Pendente", "Em Andamento", "Concluído", "Cancelado". Default: "Pendente".
-    *   `geraOrdemProducao` (Boolean): [Obrigatório] Se gera OP. Default: `false`.
-    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE, READ, UPDATE, DELETE:**
-        *   **Quem executa:** Usuário final (via UI do "Maestro Operacional").
-        *   **Apps que utilizam:** "Maestro Operacional" (principalmente módulo de Agenda).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `agendamentos.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /agendamentos/{agendamentoId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /agendamentos/{agendamentoId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `dataHora` (ASC/DESC) para visualização em calendário/lista.
-
----
-
-### 2.8. Coleção: `ordensServico`
-
-*   **Propósito:** Gerenciar ordens de serviço (OS) para clientes.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore (usado como `numeroOS` também).
-*   **Campos:** (Baseado em `ordemServicoSchema.ts`)
-    *   `userId` (String): [Obrigatório] ID do usuário proprietário.
-    *   `numeroOS` (String): [Obrigatório] ID do documento.
-    *   `clienteId` (String): [Opcional] ID do cliente da coleção `clientes`.
-    *   `clienteNome` (String): [Obrigatório] Nome do cliente.
-    *   `itens` (Array<Object>): [Obrigatório] Lista de itens da OS. Cada item: `{ produtoServicoId?, nome, quantidade, valorUnitario, tipo }`.
-    *   `valorTotal` (Number): [Obrigatório] Valor total da OS.
-    *   `valorAdiantado` (Number): [Opcional] Default: `0`. Registra o valor pago no momento da criação da OS.
-    *   `dataEntrega` (Timestamp): [Obrigatório] Data prevista de entrega.
-    *   `observacoes` (String): [Opcional].
-    *   `status` (String): [Obrigatório] "Pendente", "Em Andamento", "Concluído", "Cancelado". Default: "Pendente".
-    *   `statusPagamento` (String): [Obrigatório] "Pendente", "Pago Parcial", "Pago Total". Default: "Pendente". Inicializado com base no `valorAdiantado`.
-    *   `valorPagoTotal` (Number): [Opcional] Default: `0`. Soma de todos os pagamentos recebidos para esta OS, inicializado com `valorAdiantado`.
-    *   `dataPrimeiroPagamento` (Timestamp): [Opcional, Nullable] Data do adiantamento, se houver.
-    *   `formaPrimeiroPagamento` (String): [Opcional, Nullable] Forma de pagamento do adiantamento, se houver.
-    *   `dataUltimoPagamento` (Timestamp): [Opcional, Nullable] Data do último pagamento subsequente (não o adiantamento).
-    *   `formaUltimoPagamento` (String): [Opcional, Nullable] Forma do último pagamento subsequente.
-    *   `observacoesPagamento` (String): [Opcional].
-    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE:**
-        *   **Quem executa:** Usuário final (via UI "Maestro Operacional", ex: Nova OS, ou transformação de Venda Balcão em OS). Automação (se um Agendamento com `geraOrdemProducao` for `true` também gerar uma OS base).
-        *   **Observação:** Se `valorAdiantado` > 0, um `lancamentoFinanceiro` do tipo "receita" é criado automaticamente com a `formaPrimeiroPagamento`.
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **READ, UPDATE, DELETE:**
-        *   **Quem executa:** Usuário final (via UI "Maestro Operacional").
-        *   **Observação UPDATE:** Ao registrar pagamentos subsequentes, os campos `valorPagoTotal`, `statusPagamento`, `dataUltimoPagamento`, `formaUltimoPagamento`, `observacoesPagamento` são atualizados, e um `lancamentoFinanceiro` é gerado.
-        *   **Apps que utilizam:** "Maestro Operacional".
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `ordensServico.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /ordensServico/{osId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /ordensServico/{osId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `createdAt` (DESC) para listagem das OS mais recentes.
-    *   Índice em `userId` (ASC) e `dataEntrega` (ASC) para OS com entrega próxima.
-    *   Índice em `userId` (ASC) e `status` (ASC) para filtrar por status.
-
----
-
-### 2.9. Coleção: `ordensDeProducao`
-
-*   **Propósito:** Gerenciar o fluxo de produção interno, geralmente vinculado a `ordensServico` ou `agendamentos`.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Baseado em `ordemProducaoSchema.ts`)
-    *   `userId` (String): [Obrigatório] ID do usuário proprietário.
-    *   `agendamentoId` (String): [Obrigatório] ID da `ordensServico` ou `agendamentos` original.
-    *   `clienteId` (String): [Opcional].
-    *   `clienteNome` (String): [Obrigatório].
-    *   `servicoNome` (String): [Obrigatório] Descrição do serviço/produto principal.
-    *   `dataAgendamento` (Timestamp): [Obrigatório] Data herdada.
-    *   `status` (String): [Obrigatório] "Pendente", "Em Andamento", "Concluído", "Cancelado". Default: "Pendente".
-    *   `progresso` (Number): [Opcional] Percentual (0-100). Default: `0`.
-    *   `observacoesAgendamento` (String): [Opcional] Observações da OS/Agendamento.
-    *   `observacoesProducao` (String): [Opcional] Observações da equipe de produção.
-    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE:**
-        *   **Quem executa:** Automação/Sistema (quando uma OS é criada ou um Agendamento com `geraOrdemProducao=true` é salvo).
-        *   **Apps que utilizam:** "Maestro Operacional" (indiretamente).
-    *   **READ, UPDATE:**
-        *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" - Módulo de Produção).
-        *   **Observação UPDATE:** Ao atualizar o status para "Concluído" (progresso 100%), o sistema verifica o `statusPagamento` da `ordensServico` original. Se houver saldo pendente, um modal para registrar o pagamento final é apresentado. Somente após o pagamento (se necessário) ou se já estiver pago, a OP e a OS são efetivamente marcadas como "Concluído" e a baixa de estoque é realizada.
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **DELETE:**
-        *   **Quem executa:** Geralmente não aplicável, exceto por Admin ou se a OS original for cancelada.
-        *   **Apps que utilizam:** "Maestro Operacional" (condicionalmente).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `ordensDeProducao.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /ordensDeProducao/{opId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /ordensDeProducao/{opId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid; // Ou mais restrito
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `dataAgendamento` (DESC).
-    *   Índice em `userId` (ASC) e `status` (ASC).
-    *   Índice em `userId` (ASC) e `agendamentoId` (ASC) para encontrar OPs de uma OS específica.
-
----
-
-### 2.10. Coleção: `vendas`
-
-*   **Propósito:** Registrar vendas diretas, como as realizadas no Balcão PDV.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:**
-    *   `userId` (String): [Obrigatório] ID do usuário proprietário.
-    *   `clienteId` (String): [Opcional] ID do cliente da coleção `clientes`.
-    *   `clienteNome` (String): [Obrigatório] Nome do cliente (pode ser "Cliente Avulso").
-    *   `itens` (Array<Object>): [Obrigatório] Lista de itens da venda. Cada item: `{ productId?, nome, quantidade, valorUnitario, valorTotal, manual?, productType? }`.
-    *   `totalVenda` (Number): [Obrigatório] Valor total da venda.
-    *   `formaPagamento` (String): [Obrigatório] Ex: "dinheiro", "pix", "cartao_credito".
-    *   `dataVenda` (Timestamp): [Obrigatório] Data e hora da venda.
-    *   `status` (String): [Obrigatório] Ex: "Concluída", "Cancelada". Default: "Concluída".
-    *   `criadoEm` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `atualizadoEm` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE:**
-        *   **Quem executa:** Usuário final (via UI do Balcão PDV no "Maestro Operacional").
-        *   **Observação:** Ao criar, um `lancamentoFinanceiro` do tipo "receita" é gerado automaticamente.
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **READ:**
-        *   **Quem executa:** Usuário final (para histórico, relatórios), IA (para análise financeira).
-        *   **Apps que utilizam:** "Maestro Operacional", "Visão Clara Financeira".
-    *   **UPDATE:**
-        *   **Quem executa:** Usuário final (ex: para cancelar uma venda, se permitido).
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **DELETE:**
-        *   **Quem executa:** Geralmente restrito a Admin ou para correções.
-        *   **Apps que utilizam:** Módulo de Administração (se houver).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `vendas.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /vendas/{vendaId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /vendas/{vendaId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow delete: if false; // Ou: if isAdmin(request.auth.uid) && resource.data.userId == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `dataVenda` (DESC) para histórico.
-
----
-
-### 2.11. Coleção: `lancamentosFinanceiros`
-
-*   **Propósito:** Registrar todas as transações financeiras (receitas e despesas).
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:**
-    *   `userId` (String): [Obrigatório] ID do usuário proprietário.
-    *   `titulo` (String): [Obrigatório] Descrição breve. Ex: "Venda Balcão #123", "Pagamento OS #456", "Adiantamento OS #789".
-    *   `valor` (Number): [Obrigatório] Valor da transação (sempre positivo, `tipo` define natureza).
-    *   `tipo` (String): [Obrigatório] "receita" ou "despesa".
-    *   `data` (Timestamp): [Obrigatório] Data da transação/competência.
-    *   `categoria` (String): [Obrigatório] Ex: "Venda Balcão", "Receita de OS", "Adiantamento OS", "Aluguel", "Fornecedor".
-    *   `status` (String): [Obrigatório] "pago", "recebido", "pendente".
-    *   `formaPagamento` (String): [Opcional, Nullable] Forma de pagamento utilizada (ex: "dinheiro", "pix").
-    *   `descricao` (String): [Opcional] Detalhes adicionais.
-    *   `vendaId` (String): [Opcional] ID da venda relacionada (da coleção `vendas`).
-    *   `referenciaOSId` (String): [Opcional] ID da OS relacionada (da coleção `ordensServico`).
-    *   `criadoEm` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `atualizadoEm` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE:**
-        *   **Quem executa:** Automação/Sistema (ao finalizar uma `venda`, registrar adiantamento ou pagamento de `ordensServico`), Usuário final (ao registrar despesas ou receitas manuais no "Visão Clara Financeira").
-        *   **Apps que utilizam:** "Maestro Operacional" (indiretamente), "Visão Clara Financeira".
-    *   **READ:**
-        *   **Quem executa:** Usuário final (para extratos, relatórios), IA (para análises).
-        *   **Apps que utilizam:** "Visão Clara Financeira", "Maestro Operacional" (para exibir pagamentos de OS).
-    *   **UPDATE, DELETE:**
-        *   **Quem executa:** Usuário final (para corrigir ou excluir lançamentos manuais). Lançamentos automáticos geralmente não são editados diretamente.
-        *   **Apps que utilizam:** "Visão Clara Financeira".
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `lancamentosFinanceiros.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /lancamentosFinanceiros/{lancamentoId} {
-    //   allow read, write: if request.auth.uid == resource.data.userId;
-    // }
-
-    // Regras detalhadas do documento original:
-    match /lancamentosFinanceiros/{lancamentoId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `data` (DESC) para extratos.
-    *   Índice em `userId` (ASC), `tipo` (ASC), `data` (DESC) para filtrar por tipo e data.
-    *   Índice em `userId` (ASC) e `categoria` (ASC) para filtrar por categoria.
-
----
-
-### 2.12. Coleção: `metasFinanceiras`
-
-*   **Propósito:** Permitir que o usuário defina e acompanhe metas financeiras. Poderia ser usado pelo app "Visão Clara Financeira".
-*   **ID do Documento:** Formato `userId_anoMes` (conforme `DATA_SYNC_CONFIG.json`).
-*   **Campos (Sugestão, pois não está totalmente definido no schema):**
-    *   `userId` (String): [Obrigatório, parte do ID].
-    *   `anoMes` (String): [Obrigatório, parte do ID] Ex: "2024_07".
-    *   `metaReceita` (Number): [Opcional] Meta de receita para o mês.
-    *   `metaLucro` (Number): [Opcional] Meta de lucro para o mês.
-    *   `metaDespesaMaxima` (Number): [Opcional] Limite de despesa para o mês.
-    *   `descricao` (String): [Opcional] Descrição da meta.
-    *   `createdAt` (Timestamp): [Obrigatório].
-    *   `updatedAt` (Timestamp): [Obrigatório].
-*   **Operações (CRUD):**
-    *   **CREATE, READ, UPDATE, DELETE:**
-        *   **Quem executa:** Usuário final (via UI do "Visão Clara Financeira").
-        *   **Apps que utilizam:** "Visão Clara Financeira".
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `metasFinanceiras.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /metasFinanceiras/{docId} { // Onde docId é userId_anoMes
-    //   allow read, write: if request.auth.uid == docId.split('_')[0];
-    // }
-
-    // Regras detalhadas do documento original (exemplo):
-    match /metasFinanceiras/{metaId} { // Supondo que metaId seja o formato userId_anoMes
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && metaId.split('_')[0] == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid && metaId.split('_')[0] == request.auth.uid;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Acesso primário pelo ID do documento (`userId_anoMes`). Se for buscar por `userId` apenas para listar todas as metas de um usuário, um índice em `userId` seria necessário se o ID do documento não for suficiente para a consulta.
-
----
-
-### 2.13. Coleção: `fechamentosCaixa`
-
-*   **Propósito:** Armazenar os registros diários de fechamento de caixa, incluindo totais de entradas, saídas, saldo final, sangrias, troco inicial e detalhamento de entradas por método de pagamento.
-*   **ID do Documento:** Gerado automaticamente pelo Firestore.
-*   **Campos:** (Baseado em `fechamentoCaixaSchema.ts`)
-    *   `userId` (String): [Obrigatório] ID do usuário Business Maestro proprietário deste fechamento.
-    *   `dataFechamento` (Timestamp): [Obrigatório] Data e hora em que o fechamento foi realizado.
-    *   `totalEntradasCalculado` (Number): [Obrigatório] Somatório de todas as entradas (receitas efetivadas no dia, considerando `lancamentosFinanceiros` e `vendas` que não geraram lançamentos).
-    *   `totalSaidasCalculado` (Number): [Obrigatório] Somatório de todas as saídas (despesas pagas) do dia, calculado pelo sistema com base nos `lancamentosFinanceiros`.
-    *   `trocoInicial` (Number): [Opcional, Default: 0] Valor do troco inicial no caixa, informado manualmente. Sugerido com base no saldo final do último fechamento.
-    *   `sangrias` (Number): [Opcional, Default: 0] Total de retiradas manuais (sangrias) do caixa durante o dia, informado manualmente.
-    *   `saldoFinalCalculado` (Number): [Obrigatório] Saldo final do caixa calculado: `(totalEntradasCalculado + trocoInicial) - totalSaidasCalculado - sangrias`.
-    *   `entradasPorMetodo` (Object): [Obrigatório] Detalhamento das entradas por método de pagamento, baseado nas `vendas` e `lancamentosFinanceiros` (receitas) do dia. Contém:
-        *   `dinheiro` (Number)
-        *   `pix` (Number)
-        *   `cartaoCredito` (Number)
-        *   `cartaoDebito` (Number)
-        *   `cartao` (Number) - Soma de `cartaoCredito` e `cartaoDebito`.
-        *   `boleto` (Number)
-        *   `transferenciaBancaria` (Number)
-        *   `outros` (Number)
-    *   `responsavelNome` (String): [Obrigatório] Nome do usuário responsável pelo fechamento (preferencialmente `displayName`, fallback para `email`).
-    *   `responsavelId` (String): [Obrigatório] ID do usuário responsável pelo fechamento.
-    *   `observacoes` (String): [Opcional] Observações adicionais sobre o fechamento.
-    *   `createdAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-    *   `updatedAt` (Timestamp): [Obrigatório] Gerenciado automaticamente.
-*   **Operações (CRUD):**
-    *   **CREATE:**
-        *   **Quem executa:** Usuário final (via UI do "Maestro Operacional" na página de Fechamento de Caixa).
-        *   **Observação:** Múltiplos fechamentos no mesmo dia são permitidos (ex: para correções). Um diálogo de confirmação é apresentado antes de salvar.
-        *   **Apps que utilizam:** "Maestro Operacional".
-    *   **READ:**
-        *   **Quem executa:** Usuário final (para histórico de fechamentos), "Visão Clara Financeira" (para análises e relatórios), "Diagnóstico Maestro" (IA pode usar para entender fluxo de caixa).
-        *   **Apps que utilizam:** "Maestro Operacional", "Visão Clara Financeira", "Diagnóstico Maestro".
-    *   **UPDATE:**
-        *   **Quem executa:** Geralmente não se atualiza um fechamento de caixa. Se necessário, um estorno ou ajuste seria um novo lançamento/registro. Pode ser permitido para Admin corrigir observações.
-        *   **Apps que utilizam:** Módulo de Administração (se houver).
-    *   **DELETE:**
-        *   **Quem executa:** Restrito a Admin para correções ou por política de retenção de dados.
-        *   **Apps que utilizam:** Módulo de Administração (se houver).
-*   **Regras de Segurança (Firestore Rules):** (Referência: `DATA_SYNC_CONFIG.json` -> `fechamentosCaixa.regras`)
-    ```firestore
-    // Exemplo baseado no DATA_SYNC_CONFIG.json:
-    // match /fechamentosCaixa/{docId} {
-    //   allow create: if request.auth.uid == request.resource.data.userId; // isRequestDataOwner()
-    //   allow read, update, delete: if request.auth.uid == resource.data.userId; // isResourceOwner()
-    // }
-    match /fechamentosCaixa/{docId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      // Update e Delete podem ser mais restritos (ex: permitir apenas para Admin ou não permitir)
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid; // Ou if false;
-    }
-    ```
-*   **Indexação e Performance:**
-    *   Índice em `userId` (ASC) e `dataFechamento` (DESC) para buscar o histórico de fechamentos do usuário, ordenado do mais recente para o mais antigo.
-      ```json
-      {
-        "collectionGroup": "fechamentosCaixa",
-        "queryScope": "COLLECTION",
-        "fields": [
-          { "fieldPath": "userId", "order": "ASCENDING" },
-          { "fieldPath": "dataFechamento", "order": "DESCENDING" }
-        ]
-      }
-      ```
-
----
-
-### 2.14. Outras Coleções do `DATA_SYNC_CONFIG.json`
-
-O arquivo `DATA_SYNC_CONFIG.json` lista outras coleções como:
-*   `contasPagar`
-*   `contasReceber`
-*   `custos`
-*   `custosFixosConfigurados`
-
-Estas coleções provavelmente pertencem ao app "Visão Clara Financeira" ou são compartilhadas. Para cada uma delas, seguiríamos o mesmo padrão de detalhamento: propósito, campos, operações, quem executa, apps que utilizam, e regras de segurança conforme definido no `DATA_SYNC_CONFIG.json`.
-
-**Exemplo para `contasPagar`:**
-*   **Propósito:** Gerenciar contas a pagar da empresa.
-*   **ID do Documento:** Gerado automaticamente.
-*   **Campos (Suposição):** `userId`, `descricao`, `valor`, `dataVencimento`, `dataPagamento`, `fornecedorId`, `status ("pendente", "paga", "atrasada")`, `createdAt`, `updatedAt`.
-*   **Operações:** CRUD pelo usuário no app "Visão Clara Financeira".
-*   **Regras:** `request.auth.uid == resource.data.userId`.
-
----
-
-## 3. Relacionamentos entre Coleções
-
-*   **`ordensServico`**
-    *   Referencia `clientes` (opcionalmente, via `clienteId`).
-    *   Referencia `produtosServicos` (nos `itens`, via `produtoServicoId`).
-    *   Gera `lancamentosFinanceiros` (para adiantamentos e pagamentos subsequentes).
-*   **`ordensDeProducao`**
-    *   Referencia `ordensServico` ou `agendamentos` (via `agendamentoId`).
-    *   Pode referenciar `clientes` (via `clienteId`, herdado).
-    *   Ao ser concluída, pode acionar a atualização de status e pagamentos na `ordensServico` vinculada.
-*   **`agendamentos`**
-    *   Referencia `clientes` (via `clienteId`).
-    *   Referencia `produtosServicos` (via `servicoId`).
-*   **`vendas`**
-    *   Referencia `clientes` (opcionalmente, via `clienteId`).
-    *   Referencia `produtosServicos` (nos `itens`, via `productId`).
-    *   Gera `lancamentosFinanceiros`.
-*   **`lancamentosFinanceiros`**
-    *   Pode referenciar `vendas` (via `vendaId`).
-    *   Pode referenciar `ordensServico` (via `referenciaOSId` para adiantamentos e pagamentos).
-    *   Pode referenciar `contasPagar` ou `contasReceber` (via campos de referência, ex: `contaPagarId`).
-    *   São a fonte primária para os cálculos de `totalEntradasCalculado` e `totalSaidasCalculado` em `fechamentosCaixa`.
-*   **`fechamentosCaixa`**
-    *   Agrega dados de `lancamentosFinanceiros` e `vendas` (que também geram `lancamentosFinanceiros`) para um `userId` em uma `dataFechamento`.
-*   **`userGoals`**
-    *   Pertence a um usuário (via `userId`), mas não referencia diretamente outras coleções de dados operacionais, pois é mais estratégico.
-*   **`consultationsMetadata`** e **`consultations`**
-    *   Vinculadas ao `usuarios` pelo ID do documento ser o `userId`.
-
-**Visualização (Simplificada):**
-```
-usuarios --1:N-- clientes
-usuarios --1:N-- produtosServicos
-usuarios --1:N-- agendamentos
-usuarios --1:N-- ordensServico
-usuarios --1:N-- ordensDeProducao
-usuarios --1:N-- vendas
-usuarios --1:N-- lancamentosFinanceiros
-usuarios --1:N-- fechamentosCaixa
-usuarios --1:N-- userGoals
-usuarios --1:1-- consultationsMetadata (ID do doc é o userId)
-usuarios --1:N-- consultations
-
-clientes --1:N-- agendamentos
-clientes --1:N-- ordensServico
-clientes --1:N-- vendas
-
-produtosServicos --M:N-- ordensServico (via tabela de itens)
-produtosServicos --M:N-- agendamentos
-produtosServicos --M:N-- vendas (via tabela de itens)
-
-ordensServico --1:N-- ordensDeProducao (via agendamentoId, que aqui seria o osId)
-agendamentos --1:N-- ordensDeProducao (via agendamentoId)
-
-ordensServico --1:N-- lancamentosFinanceiros (para adiantamentos e pagamentos)
-vendas --1:N-- lancamentosFinanceiros
+  } catch (error) {
+    console.error("Erro ao verificar status da assinatura:", error);
+    setSubscriptionStatus('inactive');
+  } finally {
+    setCheckingSubscriptionStatus(false);
+  }
+}, []);
 ```
 
+**Passo 3: Proteger a Rota de Login**
+- É crucial verificar a assinatura do usuário **no momento do login**. Se o usuário não tiver uma assinatura ativa, o login deve ser interrompido e o usuário não deve conseguir acessar o aplicativo.
+
+**Exemplo de Lógica na Função `signIn`:**
+```typescript
+// Dentro do seu AuthContext.tsx ou equivalente
+
+const signIn = useCallback(async (email: string, pass: string) => {
+  if (!authInstance) throw new Error("Firebase Auth não inicializado.");
+  
+  try {
+    const userCredential = await signInWithEmailAndPassword(authInstance, email, pass);
+    const user = userCredential.user;
+
+    if (user) {
+      // Verifica se é privilegiado
+      if (isPrivilegedUser(user.uid)) {
+        router.push('/dashboard'); // Ou sua página principal
+        return;
+      }
+      
+      // Verifica a assinatura
+      const hasAccess = await checkUserHasActiveSubscription(user.uid); // Função auxiliar que faz a mesma lógica de `checkSubscriptionStatus` mas retorna um booleano
+      
+      if (hasAccess) {
+        // Login bem-sucedido, redireciona para o app
+        router.push('/dashboard');
+      } else {
+        // Acesso negado, desloga o usuário e mostra um erro
+        await signOut(authInstance);
+        toast({ 
+          title: "Acesso Negado", 
+          description: "Você não possui uma assinatura ativa.", 
+          variant: "destructive"
+        });
+      }
+    }
+  } catch (error) {
+    // Tratar erros de login (senha errada, etc.)
+  }
+}, [/* dependências */]);
+```
+
+**Passo 4: Configurar Variáveis de Ambiente e Regras do Firestore**
+- **Variáveis de Ambiente:** Adicione `NEXT_PUBLIC_ADMIN_UIDS` e `NEXT_PUBLIC_VIP_UIDS` ao seu arquivo `.env.local` (ou às configurações do seu ambiente de produção) para gerenciar usuários com acesso privilegiado.
+- **Regras do Firestore:** Garanta que suas `firestore.rules` permitam que os usuários leiam seus próprios documentos de assinatura:
+    ```firestore
+    match /assinaturas/{userIdDoc} {
+      // Apenas o backend (via Admin SDK) pode escrever.
+      allow write: if false; 
+      // O usuário logado pode ler sua própria assinatura.
+      allow read: if isSignedIn() && request.auth.uid == userIdDoc;
+    }
+    ```
+
+Seguindo estes passos, qualquer aplicativo do ecossistema poderá verificar de forma segura e consistente se um usuário tem permissão para usar as funcionalidades pagas.
+
+
+## 9. Regras de Segurança Globais (Fallback)
+
+Para auxiliar na depuração e garantir que nenhuma coleção seja acidentalmente exposta, a seguinte regra de fallback deve estar no final do arquivo `firestore.rules`:
+
+```firestore
+    // ========== FALLBACK DE SEGURANÇA ==========
+    // Bloqueia qualquer acesso a coleções não explicitamente permitidas acima.
+    // Útil para desenvolvimento para identificar caminhos não cobertos.
+    // NUNCA permita acesso genérico em produção.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+```
+
+## 10. Conclusão
+
+Este guia serve como um pilar para o desenvolvimento coeso do backend do ecossistema Gestor Maestro. Ele deve ser um documento vivo, atualizado conforme novas funcionalidades são adicionadas e os aplicativos evoluem. A colaboração entre as equipes (ou IAs) responsáveis por cada aplicativo é fundamental para manter a integridade e eficiência do sistema de dados compartilhado.
+
 ---
-
-## 4. Considerações de Performance e Indexação
-
-*   **Índices Padrão:** O Firestore cria automaticamente índices de campo único.
-*   **Índices Compostos:**
-    *   Essenciais para consultas que filtram por múltiplos campos ou ordenam por um campo e filtram por outro.
-    *   O Firebase Console sugere índices. Planeje-os com base nas consultas mais frequentes de cada app.
-    *   Exemplos já listados nas seções de cada coleção (ex: `userGoals`, `consultations`, `fechamentosCaixa`).
-*   **Limitar Dados Lidos:**
-    *   Use `limit()` para paginar resultados.
-*   **Denormalização:**
-    *   Considere para leituras frequentes de dados relacionados (ex: `clienteNome` em `ordensServico`). Já utilizado.
-*   **Estrutura de Dados:**
-    *   Evite documentos > 1MB ou arrays muito longos. Use subcoleções se necessário.
-
----
-
-## 5. Padrões de Acesso aos Dados (Consulta e Escrita)
-
-*   **Camada de Serviço:**
-    *   **`firestoreService.ts`**: Funções genéricas (`createDocument`, `getDocumentById`, etc.).
-        *   Responsável por: Adicionar/atualizar `userId`, `createdAt`, `updatedAt`; Converter `Date` <> `Timestamp`; Validação de schemas Zod.
-    *   **`[entidade]Service.ts`** (ex: `clientService.ts`):
-        *   Funções específicas da entidade. Invoca `firestoreService.ts`. Encapsula lógica de negócios.
-*   **Consultas no Frontend:**
-    *   Para listagens dinâmicas, o frontend pode construir consultas Firebase SDK e usar funções dos serviços de entidade.
-    *   Hook `useRealtimeCollection` para escutar mudanças em tempo real.
-*   **Operações de Escrita:**
-    *   Sempre validadas por schemas Zod na camada de serviço.
-    *   Dados de entrada usam `Date`; conversão para `Timestamp` no `firestoreService`.
-
----
-
-## 6. Possíveis Conflitos, Duplicidades ou Inconsistências (e Como Mitigar)
-
-*   **Perfil de Usuário (`usuarios`) vs. Firebase Auth:**
-    *   **Mitigação:** Firebase Auth é fonte para dados básicos de auth. `usuarios` para adicionais. Sincronização pode ser necessária.
-*   **Denormalização de Nomes (ex: `clienteNome` em `ordensServico`):**
-    *   **Mitigação:** Aceitar para histórico ou atualizar em cascata (complexo). Preferível: mostrar nome da OS, link para perfil atual.
-*   **Duplicação de Produtos/Serviços em Itens de OS/Venda:**
-    *   **Mitigação:** Comportamento desejado. Preços de transações passadas não mudam.
-*   **Consistência de Estoque (`produtosServicos`.`quantidadeEstoque`):**
-    *   **Mitigação:** Usar **transações do Firestore** para operações que leem e escrevem estoque (vendas, saídas manuais, conclusão de OP).
-*   **Geração de `lancamentosFinanceiros`:**
-    *   **Mitigação:** Idealmente, criação da Venda/OS e do `lancamentoFinanceiro` em transação Firestore ou uma Cloud Function para garantir atomicidade. Atualmente, são operações sequenciais no cliente/serviço, o que pode gerar inconsistência se uma falhar. O `firestoreService` lida com a criação de um único documento atomicamente.
-*   **`userGoals` (Diagnóstico) vs. `metasFinanceiras` (Financeiro):**
-    *   **Mitigação:** `userGoals`: estratégico, gerado por IA. `metasFinanceiras`: operacional/tático, granular, criado pelo usuário no app Financeiro, pode ser inspirado por `userGoals`.
-*   **Sincronia entre `fechamentosCaixa`, `lancamentosFinanceiros` e `vendas`:**
-    *   **Mitigação:** O `fechamentosCaixa` é um snapshot. Se um lançamento ou venda for alterado *após* o fechamento do dia correspondente, o `fechamentosCaixa` não será automaticamente atualizado. Isso é geralmente aceitável, pois o fechamento representa o estado *no momento do fechamento*. Relatórios financeiros mais abrangentes devem sempre consultar as fontes primárias (`lancamentosFinanceiros`, `vendas`). A lógica de `fechamentosCaixa` deve ser robusta para evitar dupla contagem, idealmente baseando-se apenas em `lancamentosFinanceiros` se estes forem a fonte única da verdade para todas as receitas.
-
----
-
-## 7. Notas Adicionais
-
-*   **Firebase Emulators:** Usar durante desenvolvimento.
-*   **Backup e Restore:** Definir estratégia.
-*   **Monitoramento e Alertas:** Configurar no Firebase.
-*   **Evolução do Schema:** Manter este documento atualizado.
-*   **Validação de `userId`:** Serviços devem validar `userId` não nulo.
-
----
-
-Este documento serve como um guia técnico detalhado e deve ser mantido atualizado à medida que o ecossistema Business Maestro evolui. Sempre consulte `DATA_SYNC_CONFIG.json` e `DATA_SYNC_SUMMARY.md` para as especificações canônicas de coleções e regras.
-
+**Próximos Passos Recomendados:**
+1.  Validar este documento com as equipes/IAs de cada aplicativo.
+2.  Detalhar os schemas e operações para coleções marcadas como "Exemplo" ou "A ser detalhado".
+3.  Revisar e atualizar `firestore.rules` e `firestore.indexes.json` com base neste guia consolidado e no `DATA_SYNC_CONFIG.json`.
+4.  Considerar a criação de testes automatizados para as regras de segurança.

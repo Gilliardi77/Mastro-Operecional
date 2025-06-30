@@ -93,3 +93,9 @@
 - **Leitura**: Sim
 - **Escrita**: Sim
 - **Regra**: `request.auth.uid == resource.data.userId`
+
+## Coleção: `assinaturas`
+- **Leitura**: Sim
+- **Escrita**: Não
+- **Regra**: `request.auth.uid == docId`
+- **ID baseado em**: auth.uid
