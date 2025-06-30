@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Calendar as CalendarIconLucide, ListFilter, Edit2, CheckCircle, Settings2, Eye, Loader2 } from "lucide-react";
+import { PlusCircle, Calendar as CalendarIconLucide, ListFilter, Edit2, CheckCircle, Settings2, Eye, Loader2, Link as LinkIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,7 +24,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,10 +37,9 @@ import { z } from "zod";
 import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { getFirebaseInstances } from '@/lib/firebase'; 
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
-import { collection, addDoc, Timestamp, type Firestore } from "firebase/firestore";
+import { type Firestore } from "firebase/firestore";
 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
@@ -59,9 +58,22 @@ import {
   type AppointmentCreateData,
   type AppointmentUpdateData
 } from '@/schemas/appointmentSchema';
+import { createOrdemServico, PaymentStatusEnum, type OrdemServicoCreateData } from '@/services/ordemServicoService';
+import { createOrdemProducao, type OrdemProducaoCreateData, type OrdemProducaoStatus } from '@/services/ordemProducaoService';
+import { createLancamentoFinanceiro, type LancamentoFinanceiroCreateData } from '@/services/lancamentoFinanceiroService';
 
 
 type ProductionOrderStatusAgenda = "Pendente" | "Em Andamento" | "Concluído" | "Cancelado";
+
+const paymentMethods = [
+    { value: "dinheiro", label: "Dinheiro" },
+    { value: "pix", label: "PIX" },
+    { value: "cartao_credito", label: "Cartão de Crédito" },
+    { value: "cartao_debito", label: "Cartão de Débito" },
+    { value: "boleto", label: "Boleto" },
+    { value: "transferencia_bancaria", label: "Transferência Bancária" },
+    { value: "outro", label: "Outro" },
+];
 
 
 export default function AgendaPage() {
@@ -105,6 +117,9 @@ export default function AgendaPage() {
       observacoes: "",
       status: "Pendente",
       geraOrdemProducao: false,
+      valorServico: undefined,
+      valorAdiantado: undefined,
+      formaPagamentoAdiantamento: undefined,
     },
   });
   
@@ -194,6 +209,9 @@ export default function AgendaPage() {
         observacoes: editingAppointment.observacoes || "",
         status: editingAppointment.status,
         geraOrdemProducao: editingAppointment.geraOrdemProducao || false,
+        valorServico: editingAppointment.valorServico ?? undefined,
+        valorAdiantado: editingAppointment.valorAdiantado ?? undefined,
+        formaPagamentoAdiantamento: editingAppointment.formaPagamentoAdiantamento ?? undefined,
       });
     } else {
       form.reset({
@@ -207,6 +225,9 @@ export default function AgendaPage() {
         observacoes: "",
         status: "Pendente",
         geraOrdemProducao: false,
+        valorServico: undefined,
+        valorAdiantado: undefined,
+        formaPagamentoAdiantamento: undefined,
       });
     }
   }, [editingAppointment, isAppointmentModalOpen, form, selectedCalendarDate]);
@@ -326,6 +347,9 @@ export default function AgendaPage() {
       observacoes: values.observacoes || "",
       status: values.status,
       geraOrdemProducao: values.geraOrdemProducao,
+      valorServico: values.valorServico,
+      valorAdiantado: values.valorAdiantado,
+      formaPagamentoAdiantamento: values.formaPagamentoAdiantamento,
     };
 
     try {
@@ -340,29 +364,68 @@ export default function AgendaPage() {
         toast({ title: "Agendamento Criado!", description: `Novo agendamento para ${finalServicoNome} criado.` });
       }
 
-      if (values.geraOrdemProducao && savedAppointment.id && userIdToSave) {
-        const { db: dbInstance } = getFirebaseInstances();
-        if (!dbInstance) {
-          toast({ title: "Erro de Firebase", description: "DB não disponível para criar OP.", variant: "destructive" });
-          setIsSubmitting(false);
-          return;
+      if (values.geraOrdemProducao && !savedAppointment.ordemServicoId && savedAppointment.id && userIdToSave) {
+        toast({ title: "Processando Ordem de Serviço...", description: "Aguarde um momento." });
+
+        const valorTotalFinal = values.valorServico || 0;
+        const adiantamento = values.valorAdiantado || 0;
+
+        let statusPagamentoFinal: PaymentStatusEnum = PaymentStatusEnum.Enum.Pendente;
+        if (adiantamento > 0) {
+            statusPagamentoFinal = adiantamento >= valorTotalFinal ? PaymentStatusEnum.Enum['Pago Total'] : PaymentStatusEnum.Enum['Pago Parcial'];
         }
-        const productionOrderData = {
-          agendamentoId: savedAppointment.id,
-          clienteId: finalClienteId,
-          clienteNome: finalClienteNome,
-          servicoId: finalServicoId, 
-          servicoNome: finalServicoNome,
-          dataAgendamento: Timestamp.fromDate(dataHoraCombined), 
-          status: "Pendente" as ProductionOrderStatusAgenda,
-          progresso: 0,
-          observacoesAgendamento: values.observacoes || "",
-          userId: userIdToSave,
-          criadoEm: Timestamp.now(),
-          atualizadoEm: Timestamp.now(),
+
+        const osDataToCreate: OrdemServicoCreateData = {
+            clienteId: finalClienteId,
+            clienteNome: finalClienteNome,
+            itens: [{
+                nome: finalServicoNome,
+                quantidade: 1,
+                valorUnitario: valorTotalFinal,
+                tipo: 'Manual',
+            }],
+            valorTotal: valorTotalFinal,
+            valorAdiantado: adiantamento,
+            dataEntrega: dataHoraCombined,
+            observacoes: `OS gerada a partir do agendamento #${savedAppointment.id.substring(0, 6)}... ${values.observacoes || ''}`.trim(),
+            statusPagamento: statusPagamentoFinal,
+            valorPagoTotal: adiantamento,
+            dataPrimeiroPagamento: adiantamento > 0 ? new Date() : null,
+            formaPrimeiroPagamento: adiantamento > 0 ? values.formaPagamentoAdiantamento : null,
         };
-        await addDoc(collection(dbInstance, "ordensDeProducao"), productionOrderData);
-        toast({ title: "Ordem de Produção Iniciada!", description: `Uma ordem de produção para ${finalServicoNome} foi criada.` });
+
+        const osDoc = await createOrdemServico(userIdToSave, osDataToCreate);
+        toast({ title: "Ordem de Serviço Criada", description: `OS #${osDoc.numeroOS.substring(0,6)}... foi gerada.` });
+
+        await updateAppointment(savedAppointment.id, { ordemServicoId: osDoc.id });
+
+        const opDataToCreate: OrdemProducaoCreateData = {
+            agendamentoId: osDoc.id,
+            clienteId: osDoc.clienteId,
+            clienteNome: osDoc.clienteNome,
+            servicoNome: finalServicoNome,
+            dataAgendamento: dataHoraCombined,
+            status: "Pendente" as OrdemProducaoStatus,
+            progresso: 0,
+            observacoesAgendamento: values.observacoes || "",
+        };
+        await createOrdemProducao(userIdToSave, opDataToCreate);
+        toast({ title: "Ordem de Produção Iniciada", description: "Uma O.P. foi criada e vinculada à nova O.S." });
+
+        if (adiantamento > 0 && values.formaPagamentoAdiantamento) {
+            const lancamentoAdiantamentoData: LancamentoFinanceiroCreateData = {
+                titulo: `Adiantamento Agendamento/OS #${osDoc.numeroOS.substring(0,6)}`,
+                valor: adiantamento,
+                tipo: 'receita',
+                data: new Date(),
+                categoria: "Adiantamento Agendamento",
+                status: 'recebido',
+                referenciaOSId: osDoc.id,
+                formaPagamento: values.formaPagamentoAdiantamento,
+            };
+            await createLancamentoFinanceiro(userIdToSave, lancamentoAdiantamentoData);
+            toast({ title: "Adiantamento Registrado", description: `Lançamento financeiro de R$ ${adiantamento.toFixed(2)} criado.` });
+        }
       }
 
       await fetchInitialData();
@@ -395,10 +458,10 @@ export default function AgendaPage() {
 
   const handleGoToProduction = (appointmentId: string) => {
     const app = appointments.find(a => a.id === appointmentId);
-    if (app && app.geraOrdemProducao) {
-      router.push(`/produtos-servicos/producao?agendamentoId=${appointmentId}`); 
+    if (app && app.geraOrdemProducao && app.ordemServicoId) {
+      router.push(`/produtos-servicos/producao?agendamentoId=${app.ordemServicoId}`); 
     } else {
-      toast({ title: "Ação Indisponível", description: `Este agendamento não gerou uma ordem de produção.`, variant: "default" });
+      toast({ title: "Ação Indisponível", description: `Este agendamento não gerou uma ordem de produção ou o link está quebrado.`, variant: "default" });
     }
   };
 
@@ -409,6 +472,9 @@ export default function AgendaPage() {
   if (isLoading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados da agenda...</p></div>;
   }
+
+  const { geraOrdemProducao, valorAdiantado } = form.watch();
+  const opJaGerada = !!editingAppointment?.ordemServicoId;
 
 
   return (
@@ -506,7 +572,10 @@ export default function AgendaPage() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end sm:items-center gap-2 mt-2 sm:mt-0 shrink-0 self-start sm:self-center">
-                        <Badge variant="outline" className={`${getStatusColorClasses(appointment.status)} text-xs`}>{appointment.status}</Badge>
+                        <div className="flex items-center gap-2">
+                          {appointment.ordemServicoId && <LinkIcon className="h-4 w-4 text-muted-foreground" title="O.S. Gerada" />}
+                          <Badge variant="outline" className={`${getStatusColorClasses(appointment.status)} text-xs`}>{appointment.status}</Badge>
+                        </div>
                         <div className="flex gap-1 mt-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenViewModal(appointment)} title="Visualizar" disabled={isSubmitting}><Eye className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenModal(appointment)} title="Editar" disabled={isSubmitting}><Edit2 className="h-4 w-4" /></Button>
@@ -688,14 +757,75 @@ export default function AgendaPage() {
                 name="geraOrdemProducao"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-muted/30">
-                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={opJaGerada} /></FormControl>
                     <div className="space-y-1 leading-none">
-                      <FormLabel className="text-sm">Gerar Ordem de Produção automaticamente?</FormLabel>
-                      <p className="text-xs text-muted-foreground">Se marcado, uma O.P. será criada para este agendamento.</p>
+                      <FormLabel className="text-sm">Gerar Ordem de Serviço/Produção?</FormLabel>
+                      <FormDescription className="text-xs">{opJaGerada ? "Uma O.S. já foi gerada para este agendamento." : "Se marcado, uma O.S./O.P. será criada."}</FormDescription>
                     </div>
                   </FormItem>
                 )}
               />
+
+              {(geraOrdemProducao || opJaGerada) && (
+                <div className="space-y-4 pt-4 border-t">
+                  <p className="text-sm font-medium text-primary">Detalhes Financeiros da Ordem de Serviço</p>
+                  <FormField
+                    control={form.control}
+                    name="valorServico"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor Total do Serviço (R$)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number" placeholder="150,00" step="0.01" min="0" {...field}
+                            value={field.value ?? ''}
+                            onChange={e => field.onChange(parseFloat(e.target.value) || undefined)}
+                            disabled={opJaGerada}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="valorAdiantado"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor Adiantado (R$) (Opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number" placeholder="50,00" step="0.01" min="0" {...field}
+                            value={field.value ?? ''}
+                            onChange={e => field.onChange(parseFloat(e.target.value) || undefined)}
+                            disabled={opJaGerada}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {(valorAdiantado ?? 0) > 0 && (
+                    <FormField
+                      control={form.control}
+                      name="formaPagamentoAdiantamento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Forma de Pagamento (Adiantamento)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={opJaGerada}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {paymentMethods.map(method => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              )}
+
               <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={isSubmitting}>
@@ -721,7 +851,10 @@ export default function AgendaPage() {
                     <p><strong>Data e Hora:</strong> {format(viewingAppointment.dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                     <div><strong>Status:</strong> <Badge variant="outline" className={getStatusColorClasses(viewingAppointment.status)}>{viewingAppointment.status}</Badge></div>
                     {viewingAppointment.observacoes && <p><strong>Observações:</strong> {viewingAppointment.observacoes}</p>}
-                    <p><strong>Gerar O.P. Automática:</strong> {viewingAppointment.geraOrdemProducao ? "Sim" : "Não"}</p>
+                    <p><strong>Gerar O.S./O.P. Automática:</strong> {viewingAppointment.geraOrdemProducao ? "Sim" : "Não"}</p>
+                    {viewingAppointment.ordemServicoId && <p><strong>O.S. Vinculada:</strong> <span className="font-mono text-xs">{viewingAppointment.ordemServicoId.substring(0,10)}...</span></p>}
+                    {viewingAppointment.valorServico && <p><strong>Valor do Serviço:</strong> R$ {viewingAppointment.valorServico.toFixed(2)}</p>}
+                    {viewingAppointment.valorAdiantado && <p><strong>Valor Adiantado:</strong> R$ {viewingAppointment.valorAdiantado.toFixed(2)} ({viewingAppointment.formaPagamentoAdiantamento})</p>}
                 </div>
             )}
             <DialogFooter>

@@ -17,6 +17,10 @@ export const AppointmentSchema = BaseSchema.extend({
   observacoes: z.string().optional().or(z.literal('')).describe("Observações adicionais sobre o agendamento."),
   status: AppointmentStatusEnum.default("Pendente").describe("Status atual do agendamento."),
   geraOrdemProducao: z.boolean().default(false).describe("Indica se este agendamento deve gerar uma ordem de produção."),
+  valorServico: z.coerce.number().nullable().optional().describe("Valor total do serviço/produto agendado."),
+  valorAdiantado: z.coerce.number().nullable().optional().describe("Valor adiantado pelo cliente para este agendamento."),
+  formaPagamentoAdiantamento: z.string().nullable().optional().describe("Forma de pagamento do adiantamento."),
+  ordemServicoId: z.string().nullable().optional().describe("ID da Ordem de Serviço gerada a partir deste agendamento."),
 });
 export type Appointment = z.infer<typeof AppointmentSchema>;
 
@@ -33,6 +37,10 @@ export const AppointmentCreateSchema = BaseCreateSchema.extend({
   observacoes: z.string().optional().or(z.literal('')),
   status: AppointmentStatusEnum.optional().default("Pendente"),
   geraOrdemProducao: z.boolean().optional().default(false),
+  valorServico: z.coerce.number().nullable().optional(),
+  valorAdiantado: z.coerce.number().nullable().optional(),
+  formaPagamentoAdiantamento: z.string().nullable().optional(),
+  ordemServicoId: z.string().nullable().optional(),
 });
 export type AppointmentCreateData = z.infer<typeof AppointmentCreateSchema>;
 
@@ -48,6 +56,10 @@ export const AppointmentUpdateSchema = BaseUpdateSchema.extend({
   observacoes: z.string().optional().or(z.literal('')),
   status: AppointmentStatusEnum.optional(),
   geraOrdemProducao: z.boolean().optional(),
+  valorServico: z.coerce.number().nullable().optional(),
+  valorAdiantado: z.coerce.number().nullable().optional(),
+  formaPagamentoAdiantamento: z.string().nullable().optional(),
+  ordemServicoId: z.string().nullable().optional(),
 });
 export type AppointmentUpdateData = z.infer<typeof AppointmentUpdateSchema>;
 
@@ -67,6 +79,9 @@ export const AppointmentFormSchema = z.object({
   observacoes: z.string().optional().or(z.literal('')),
   status: AppointmentStatusEnum,
   geraOrdemProducao: z.boolean().optional().default(false),
+  valorServico: z.coerce.number().optional(),
+  valorAdiantado: z.coerce.number().optional(),
+  formaPagamentoAdiantamento: z.string().optional(),
 }).refine(data => {
   // Validação: ou um clienteId de catálogo é selecionado, ou um nome manual é fornecido
   return (data.clienteId && data.clienteId.trim() !== "" && data.clienteId !== "__placeholder_cliente__") || 
@@ -81,5 +96,31 @@ export const AppointmentFormSchema = z.object({
 }, {
   message: "Selecione um serviço/produto ou informe o nome manualmente.",
   path: ["servicoId"], // Ou servicoNomeInput
+}).superRefine((data, ctx) => {
+    if (data.geraOrdemProducao) {
+      if (!data.valorServico || data.valorServico <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "O valor do serviço é obrigatório e deve ser maior que zero para gerar uma O.S.",
+          path: ["valorServico"],
+        });
+      }
+    }
+    if (data.valorAdiantado && data.valorAdiantado > 0) {
+       if (!data.formaPagamentoAdiantamento || data.formaPagamentoAdiantamento.trim() === "") {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "A forma de pagamento é obrigatória quando há um adiantamento.",
+              path: ["formaPagamentoAdiantamento"],
+            });
+       }
+    }
+    if (data.valorAdiantado && data.valorServico && data.valorAdiantado > data.valorServico) {
+       ctx.addIssue({
+           code: z.ZodIssueCode.custom,
+           message: "O adiantamento não pode ser maior que o valor do serviço.",
+           path: ["valorAdiantado"],
+       });
+    }
 });
 export type AppointmentFormValues = z.infer<typeof AppointmentFormSchema>;
