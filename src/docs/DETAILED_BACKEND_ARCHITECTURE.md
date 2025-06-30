@@ -40,8 +40,8 @@ A seguir, a lista de coleções utilizadas no Firestore, seus propósitos, campo
     *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema): Data da última atualização.
 *   **Operações e Atores:**
     *   **CREATE:**
-        *   **Ator:** Usuário (via `AuthContext` no app Diagnóstico Maestro durante o `signUp`).
-        *   **Descrição:** Criação inicial do perfil, com `role: 'user'` por padrão.
+        *   **Ator:** Sistema (via Módulo Consultor/Diagnóstico Maestro).
+        *   **Descrição:** A criação de usuários e perfis iniciais é realizada no aplicativo de onboarding (Módulo Consultor/Diagnóstico Maestro). Este aplicativo (Maestro Operacional) apenas consome os dados de usuários existentes.
     *   **READ:**
         *   **Ator:** Usuário (em todos os apps para exibir informações de perfil e verificar permissões).
     *   **UPDATE:**
@@ -596,7 +596,7 @@ Esta seção destina-se a outros aplicativos do ecossistema ("Maestro Operaciona
     *   **Acesso Padrão (`assinaturas`)**: Se o usuário não for privilegiado, o sistema consulta a coleção `assinaturas`. Um documento com ID igual ao UID do usuário deve existir, ter `status: "ativa"`, e a data em `expiracao` não deve ter passado.
 2.  **Entrada de Dados**:
     *   O campo `role` na coleção `usuarios` deve ser gerenciado por um aplicativo administrativo (ex: "Módulo Consultor") ou diretamente no console do Firestore por um administrador humano. **O usuário não pode alterar seu próprio `role`**.
-    *   Os dados na coleção `assinaturas` são gerenciados por um sistema externo (ex: Hotmart) através de webhooks que chamam uma API no aplicativo principal (ex: "Diagnóstico Maestro"). Os outros apps apenas leem esses dados.
+    *   Os dados na coleção `assinaturas` são gerenciados por um sistema externo (ex: Hotmart) através de webhooks que chamam uma API no seu aplicativo principal (ex: "Diagnóstico Maestro"). Os outros apps apenas leem esses dados.
 3.  **Lógica de Verificação (Centralizada no `AuthContext`)**:
     *   Quando um usuário tenta fazer login, a função `signIn` primeiro o autentica no Firebase.
     *   O `onAuthStateChanged` (um listener de autenticação) é acionado. Ele executa uma função centralizada `performAccessCheck`.

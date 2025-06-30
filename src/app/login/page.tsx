@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/contexts/auth-provider';
 import Link from 'next/link';
 
 const loginSchema = z.object({
@@ -123,17 +123,7 @@ export default function LoginPage() {
           </form>
         </Form>
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Não tem uma conta?{' '}
-          <Link href="#" className="font-medium text-primary hover:underline">
-            Registre-se
-          </Link>
-          {' (Funcionalidade de registro a ser implementada)'}
-        </p>
-         <p className="mt-2 text-center text-sm text-muted-foreground">
-          <Link href="#" className="font-medium text-primary hover:underline">
-            Esqueceu sua senha?
-          </Link>
-           {' (Funcionalidade a ser implementada)'}
+          Para criar uma conta ou recuperar sua senha, utilize o Módulo Consultor.
         </p>
       </CardContent>
     </Card>

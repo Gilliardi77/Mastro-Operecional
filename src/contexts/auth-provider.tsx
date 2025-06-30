@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { User as FirebaseUser } from 'firebase/auth';
@@ -5,14 +6,12 @@ import React, { createContext, useState, useEffect, ReactNode, useCallback, useC
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
   signOut,
-  updateProfile
 } from 'firebase/auth';
 import { getFirebaseInstances } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, getDoc, Timestamp } from "firebase/firestore";
 import type { Assinatura } from '@/schemas/assinaturaSchema';
 import { getUserProfile } from "@/services/userProfileService";
 import { Loader2 } from 'lucide-react';
@@ -30,7 +29,6 @@ interface AuthContextType {
   user: User | null;
   isAuthenticating: boolean;
   signIn: (email: string, pass: string) => Promise<void>;
-  signUp: (name: string, email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   subscriptionStatus: SubscriptionStatus;
 }
@@ -155,35 +153,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, [authInstance, toast]);
 
-  const signUp = useCallback(async (name: string, email: string, pass: string) => {
-    if (!authInstance || !db) throw new Error("Firebase Auth ou Firestore não inicializado.");
-    try {
-      const userCredential = await createUserWithEmailAndPassword(authInstance, email, pass);
-      const newUser = userCredential.user;
-      if (newUser) {
-        await updateProfile(newUser, { displayName: name });
-        
-        const timestamp = serverTimestamp();
-        await setDoc(doc(db, "usuarios", newUser.uid), { createdAt: timestamp, updatedAt: timestamp, role: 'user' }, { merge: true });
-        await setDoc(doc(db, "consultationsMetadata", newUser.uid), { completed: false, createdAt: timestamp });
-        
-        await signOut(authInstance); // Force sign out
-        toast({ title: "Conta Criada!", description: "Faça login para acessar o sistema e verificar sua assinatura." });
-        router.push('/login');
-      }
-    } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') {
-        throw new Error("Este email já está cadastrado. Tente fazer login.");
-      }
-      throw new Error("Ocorreu um erro desconhecido durante o registro.");
-    }
-  }, [authInstance, db, router, toast]);
-
   const value = {
     user,
     isAuthenticating,
     signIn,
-    signUp,
     logout,
     subscriptionStatus
   };
