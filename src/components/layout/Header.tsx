@@ -16,9 +16,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from '@/components/auth/auth-provider';
 import { getFirebaseInstances, signOut as firebaseSignOutUtil } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "./ThemeToggle";
 
 export default function Header() {
-  const { user, isLoading, isAuthenticating } = useAuth();
+  const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const { auth: firebaseAuthInstance } = getFirebaseInstances();
   const { toast } = useToast();
@@ -90,8 +91,10 @@ export default function Header() {
                 <Wand2 className="mr-1 h-4 w-4" /> Modulo Consultor
             </Link>
         </Button>
+        
+        <ThemeToggle />
 
-        {(isLoading || isAuthenticating) ? (
+        {isAuthenticating ? (
           <Button variant="ghost" size="icon" disabled>
             <Loader2 className="h-5 w-5 animate-spin" />
           </Button>
