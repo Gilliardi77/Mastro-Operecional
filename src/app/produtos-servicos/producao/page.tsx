@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, CreditCard, CalendarIcon as CalendarIconLucide } from "lucide-react";
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, CreditCard, CalendarIcon as CalendarIconLucide, Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -60,6 +61,7 @@ import {
   updateOrdemServico,
 } from '@/services/ordemServicoService';
 import { createLancamentoFinanceiro } from '@/services/lancamentoFinanceiroService';
+import { getUserProfile, type UserProfileData } from '@/services/userProfileService';
 
 import {
   type ItemOS,
@@ -158,6 +160,12 @@ export default function ProducaoPage() {
   });
   const [searchTerm, setSearchTerm] = useState("");
 
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [osForPrinting, setOsForPrinting] = useState<OrdemServicoOriginal | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
+  const [isLoadingPrintData, setIsLoadingPrintData] = useState(false);
+
+
   const finalPaymentForm = useForm<PagamentoOsFormValues>({
     resolver: zodResolver(PagamentoOsSchema),
     defaultValues: {
@@ -230,8 +238,13 @@ export default function ProducaoPage() {
   useEffect(() => {
     if (!isAuthenticating && user) {
         fetchProductionOrders();
+        getUserProfile(user.uid).then(setUserProfile).catch(err => {
+            console.error("Failed to fetch user profile for printing:", err);
+            toast({ title: "Erro ao buscar dados da empresa", description: "Não foi possível carregar os dados da sua empresa para a impressão.", variant: "destructive" });
+        });
     }
-  }, [fetchProductionOrders, user, isAuthenticating]);
+  }, [fetchProductionOrders, user, isAuthenticating, toast]);
+
 
   useEffect(() => {
     const agendamentoIdFromParams = searchParams.get('agendamentoId');
@@ -518,6 +531,28 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     toast({ title: "E-mail", description: `Simulando envio de e-mail de status da OS #${viewingOrder.agendamentoId.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
   };
 
+  const handleOpenPrintModal = async (osId: string) => {
+    if (!osId) {
+        toast({ title: "Erro", description: "ID da Ordem de Serviço não encontrado.", variant: "destructive" });
+        return;
+    }
+    setIsLoadingPrintData(true);
+    setIsPrintModalOpen(true);
+    try {
+        const osData = await getOrdemServicoById(osId);
+        if (!osData) {
+            throw new Error("Ordem de Serviço não encontrada.");
+        }
+        setOsForPrinting(osData);
+    } catch (error: any) {
+        toast({ title: "Erro ao buscar OS para impressão", description: error.message, variant: "destructive" });
+        setIsPrintModalOpen(false);
+    } finally {
+        setIsLoadingPrintData(false);
+    }
+  };
+
+
   const filteredOrders = useMemo(() => {
     return productionOrders.filter(order => {
       const statusMatch = statusFilters[order.status];
@@ -686,13 +721,117 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
               </div>
             </div>
           )}
-          <DialogFooter className="mt-4">
-            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Fechar</Button></DialogClose>
-            <Button onClick={handleSaveProductionDetails} disabled={isSubmitting || !editingOrderDetails}>
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Salvar Alterações
+          <DialogFooter className="mt-4 sm:justify-between sm:items-center">
+            <Button variant="outline" onClick={() => viewingOrder && handleOpenPrintModal(viewingOrder.agendamentoId)} disabled={isSubmitting || !viewingOrder}>
+              <Printer className="mr-2 h-4 w-4" /> Ver / Imprimir OS
             </Button>
+            <div className="flex gap-2 justify-end mt-2 sm:mt-0">
+                <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Fechar</Button></DialogClose>
+                <Button onClick={handleSaveProductionDetails} disabled={isSubmitting || !editingOrderDetails}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Salvar Alterações
+                </Button>
+            </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}>
+        <DialogContent className="max-w-3xl print:max-w-full print:shadow-none print:border-0">
+            <DialogHeader className="print:hidden">
+                <DialogTitle>Visualizar Ordem de Serviço</DialogTitle>
+                <DialogPrimitiveDescription>
+                    Use esta tela para imprimir ou compartilhar a OS com o cliente.
+                </DialogPrimitiveDescription>
+            </DialogHeader>
+            {isLoadingPrintData ? (
+                <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Carregando dados da OS...</p></div>
+            ) : osForPrinting ? (
+            <div id="printable-os" className="space-y-6 p-2 print:p-0">
+                 <div className="flex justify-between items-start pb-4 border-b">
+                      <div>
+                          <h2 className="text-2xl font-bold text-primary">{userProfile?.companyName || 'Sua Empresa Aqui'}</h2>
+                          <p className="text-xs text-muted-foreground">{userProfile?.businessType || 'Ramo de Atividade'}</p>
+                          <p className="text-xs text-muted-foreground">
+                              {userProfile?.companyEmail || 'seuemail@empresa.com'}
+                              {userProfile?.companyPhone && ` | ${userProfile.companyPhone}`}
+                          </p>
+                      </div>
+                      <div className="text-right">
+                          <h3 className="text-lg font-bold">ORDEM DE SERVIÇO</h3>
+                          <p className="text-sm">Nº: <span className="font-mono">{osForPrinting.numeroOS.substring(0, 8)}...</span></p>
+                          <p className="text-sm">Data: <span className="font-mono">{format(osForPrinting.createdAt || new Date(), "dd/MM/yyyy")}</span></p>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                          <h4 className="font-semibold text-muted-foreground">CLIENTE:</h4>
+                          <p className="font-bold">{osForPrinting.clienteNome}</p>
+                      </div>
+                      <div className="text-right">
+                          <h4 className="font-semibold text-muted-foreground">DATA DE ENTREGA PREVISTA:</h4>
+                          <p className="font-bold">{format(osForPrinting.dataEntrega || new Date(), "dd/MM/yyyy")}</p>
+                      </div>
+                  </div>
+                  
+                  <div className="border rounded-lg">
+                      <Table>
+                          <TableHeader>
+                              <TableRow>
+                                  <TableHead className="w-[60%]">Descrição do Item/Serviço</TableHead>
+                                  <TableHead className="text-center">Qtd.</TableHead>
+                                  <TableHead className="text-right">Preço Unit.</TableHead>
+                                  <TableHead className="text-right">Total</TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {osForPrinting.itens.map((item, index) => (
+                                  <TableRow key={index}>
+                                      <TableCell className="font-medium">{item.nome}</TableCell>
+                                      <TableCell className="text-center">{item.quantidade}</TableCell>
+                                      <TableCell className="text-right">R$ {item.valorUnitario.toFixed(2)}</TableCell>
+                                      <TableCell className="text-right">R$ {(item.quantidade * item.valorUnitario).toFixed(2)}</TableCell>
+                                  </TableRow>
+                              ))}
+                          </TableBody>
+                      </Table>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                      <div className="w-full max-w-sm space-y-2">
+                          <div className="flex justify-between">
+                              <span className="text-muted-foreground">Subtotal</span>
+                              <span className="font-medium">R$ {osForPrinting.valorTotal.toFixed(2)}</span>
+                          </div>
+                          {osForPrinting.valorAdiantado > 0 && (
+                          <div className="flex justify-between">
+                              <span className="text-muted-foreground">Adiantamento</span>
+                              <span className="font-medium">- R$ {osForPrinting.valorAdiantado.toFixed(2)}</span>
+                          </div>
+                          )}
+                          <Separator />
+                          <div className="flex justify-between text-lg font-bold">
+                              <span>Valor a Pagar</span>
+                              <span>R$ {(osForPrinting.valorTotal - (osForPrinting.valorAdiantado || 0)).toFixed(2)}</span>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  {osForPrinting.observacoes && (
+                  <div className="pt-4 border-t">
+                      <h4 className="font-semibold text-muted-foreground">Observações:</h4>
+                      <p className="text-sm whitespace-pre-wrap">{osForPrinting.observacoes}</p>
+                  </div>
+                  )}
+            </div>
+            ) : (
+                <p>Ordem de Serviço não encontrada.</p>
+            )}
+            <DialogFooter className="print:hidden">
+                <Button variant="outline" onClick={() => setIsPrintModalOpen(false)}>Fechar</Button>
+                <Button onClick={() => window.print()} disabled={isLoadingPrintData || !osForPrinting}><Printer className="mr-2 h-4 w-4" /> Imprimir / Salvar PDF</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -782,3 +921,4 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     </div>
   );
 }
+
