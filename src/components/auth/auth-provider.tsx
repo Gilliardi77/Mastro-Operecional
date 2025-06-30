@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import type { Assinatura } from '@/schemas/assinaturaSchema';
+import { getUserProfile } from "@/services/userProfileService";
 import { Loader2 } from 'lucide-react';
 
 interface User {
@@ -45,16 +46,9 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Helper function to check for privileged users (Admins or VIPs)
-const isPrivilegedUser = (uid: string): boolean => {
-  const adminUids = process.env.NEXT_PUBLIC_ADMIN_UIDS?.split(',').filter(id => id) || [];
-  const vipUids = process.env.NEXT_PUBLIC_VIP_UIDS?.split(',').filter(id => id) || [];
-  return !!uid && (adminUids.includes(uid) || vipUids.includes(uid));
-};
-
-
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<'user' | 'admin' | 'vip' | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [hasCompletedConsultation, setHasCompletedConsultation] = useState<boolean | null>(null);
   const [checkingConsultationStatus, setCheckingConsultationStatus] = useState(true);
@@ -66,14 +60,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const { auth: authInstance, db } = getFirebaseInstances();
 
   const checkConsultationStatus = useCallback(async (uid: string) => {
-    if (isPrivilegedUser(uid)) {
-      setHasCompletedConsultation(true);
-      setCheckingConsultationStatus(false);
-      return;
-    }
-
     if (!db) {
-      console.warn("[AuthContext] Firestore (db) não está disponível. Não é possível verificar o status da consulta.");
       setHasCompletedConsultation(false); 
       setCheckingConsultationStatus(false);
       return;
@@ -94,15 +81,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const checkSubscriptionStatus = useCallback(async (uid: string) => {
     setCheckingSubscriptionStatus(true);
-
-    if (isPrivilegedUser(uid)) {
-        setSubscriptionStatus('active');
-        setCheckingSubscriptionStatus(false);
-        return;
-    }
-
     if (!db) {
-      console.warn("[AuthContext] Firestore (db) não está disponível. Não é possível verificar o status da assinatura.");
       setSubscriptionStatus('inactive');
       setCheckingSubscriptionStatus(false);
       return;
@@ -134,43 +113,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [toast, db]);
 
   const setAuthConsultationCompleted = useCallback(async (status: boolean) => {
-    if (!user || !user.uid || !db) {
-      console.warn("[AuthContext] Usuário não logado ou Firestore não disponível. Não é possível atualizar o status da consulta.");
-      return;
-    }
+    if (!user || !user.uid || !db) return;
     try {
       const consultationDocRef = doc(db, "consultationsMetadata", user.uid);
       await setDoc(consultationDocRef, { completed: status, completedAt: serverTimestamp() }, { merge: true });
       setHasCompletedConsultation(status);
     } catch (error) {
-      console.error("Erro ao atualizar status da consulta no AuthContext:", error);
+      console.error("Erro ao atualizar status da consulta:", error);
       toast({ title: "Erro ao atualizar dados", description: "Não foi possível registrar a conclusão da sua consulta.", variant: "destructive" });
     }
   }, [user, toast, db]);
 
   const logout = useCallback(async () => {
-    if (!authInstance) throw new Error("Firebase Auth não inicializado.");
+    if (!authInstance) return;
     try {
       await signOut(authInstance);
-      // O onAuthStateChanged vai lidar com o reset dos estados
+      router.push('/login');
     } catch (error: any) {
       console.error("Erro no logout:", error);
       toast({ title: "Erro no Logout", description: error.message || "Ocorreu um erro.", variant: "destructive" });
     }
-  }, [authInstance, toast]);
-
+  }, [authInstance, router, toast]);
 
   useEffect(() => {
     if (!authInstance) {
       setIsAuthenticating(false);
-      setCheckingConsultationStatus(false);
-      setCheckingSubscriptionStatus(false);
-      console.warn("[AuthContext] Firebase Auth não inicializado.");
       return () => {}; 
     }
 
     const unsubscribe = onAuthStateChanged(authInstance, (firebaseUser: FirebaseUser | null) => {
       const processAuthState = async () => {
+        setIsAuthenticating(true);
         if (firebaseUser) {
           const currentUser = {
             uid: firebaseUser.uid,
@@ -178,29 +151,51 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             displayName: firebaseUser.displayName,
           };
           setUser(currentUser);
-          await checkConsultationStatus(firebaseUser.uid); 
-          await checkSubscriptionStatus(firebaseUser.uid);
+          
+          try {
+            const profile = await getUserProfile(firebaseUser.uid);
+            const role = profile?.role ?? 'user';
+            setUserRole(role);
+            const isPrivileged = role === 'admin' || role === 'vip';
+
+            if (isPrivileged) {
+              setHasCompletedConsultation(true);
+              setSubscriptionStatus('active');
+              setCheckingConsultationStatus(false);
+              setCheckingSubscriptionStatus(false);
+            } else {
+              await checkConsultationStatus(firebaseUser.uid); 
+              await checkSubscriptionStatus(firebaseUser.uid);
+            }
+          } catch (e) {
+             console.error("Error during post-auth checks:", e);
+             setUserRole('user');
+             setHasCompletedConsultation(false);
+             setSubscriptionStatus('inactive');
+             setCheckingConsultationStatus(false);
+             setCheckingSubscriptionStatus(false);
+             toast({ title: "Erro ao carregar perfil", description: "Não foi possível verificar seus dados. O acesso pode ser limitado.", variant: "destructive" });
+          }
         } else {
           setUser(null);
+          setUserRole(null);
           setHasCompletedConsultation(null);
-          setCheckingConsultationStatus(false);
           setSubscriptionStatus('inactive');
+          setCheckingConsultationStatus(false);
           setCheckingSubscriptionStatus(false);
-          router.push('/login'); // Garante redirecionamento no logout
+          if (router) router.push('/login');
         }
         setIsAuthenticating(false);
       };
-
       processAuthState();
     });
-
     return () => unsubscribe();
-  }, [authInstance, checkConsultationStatus, checkSubscriptionStatus, router]);
+  }, [authInstance, checkConsultationStatus, checkSubscriptionStatus, router, toast]);
   
-  // Efeito para forçar logout se a assinatura se tornar inativa
   useEffect(() => {
     if (!isAuthenticating && user && subscriptionStatus === 'inactive') {
-      if (isPrivilegedUser(user.uid)) {
+      const isPrivileged = userRole === 'admin' || userRole === 'vip';
+      if (isPrivileged) {
         return;
       }
       
@@ -212,14 +207,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
       logout();
     }
-  }, [subscriptionStatus, user, isAuthenticating, logout, toast]);
-
+  }, [subscriptionStatus, user, userRole, isAuthenticating, logout, toast]);
 
   const checkUserHasActiveSubscription = useCallback(async (uid: string): Promise<boolean> => {
-    if (!db) {
-      console.warn("[AuthContext] Firestore (db) não está disponível.");
-      return false;
-    }
+    if (!db) return false;
     try {
       const subRef = doc(db, "assinaturas", uid);
       const subSnap = await getDoc(subRef);
@@ -230,7 +221,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       return false;
     } catch (error) {
-      console.error("Erro ao verificar status da assinatura no login:", error);
       return false;
     }
   }, [db]);
@@ -242,7 +232,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const loggedInUser = userCredential.user;
 
       if (loggedInUser) {
-        if (isPrivilegedUser(loggedInUser.uid)) {
+        const profile = await getUserProfile(loggedInUser.uid);
+        const role = profile?.role ?? 'user';
+        const isPrivileged = role === 'admin' || role === 'vip';
+
+        if (isPrivileged) {
           toast({ title: "Login Liberado", description: "Bem-vindo(a)!" });
           router.push('/'); 
           return;
@@ -257,7 +251,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           await signOut(authInstance);
           toast({ 
             title: "Acesso Negado", 
-            description: "Você não possui uma assinatura ativa. Por favor, verifique seu plano ou entre em contato com o suporte.", 
+            description: "Você não possui uma assinatura ativa.", 
             variant: "destructive",
             duration: 7000,
           });
@@ -267,43 +261,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     } catch (error: any) {
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
-        toast({ 
-          title: "Credenciais Inválidas", 
-          description: "Email ou senha incorretos.", 
-          variant: "destructive" 
-        });
+        toast({ title: "Credenciais Inválidas", description: "Email ou senha incorretos.", variant: "destructive" });
       } else {
-        console.error("Erro no login:", error); 
         toast({ title: "Erro no Login", description: "Ocorreu um erro desconhecido.", variant: "destructive" });
       }
     }
   }, [authInstance, router, toast, checkUserHasActiveSubscription]);
 
   const signUp = useCallback(async (name: string, email: string, pass: string) => {
-    if (!authInstance) throw new Error("Firebase Auth não inicializado.");
+    if (!authInstance || !db) throw new Error("Firebase Auth ou Firestore não inicializado.");
     try {
       const userCredential = await createUserWithEmailAndPassword(authInstance, email, pass);
-      if (userCredential.user) {
-        await updateProfile(userCredential.user, { displayName: name });
+      const newUser = userCredential.user;
+      if (newUser) {
+        await updateProfile(newUser, { displayName: name });
         
-        if (db) {
-             const consultationDocRef = doc(db, "consultationsMetadata", userCredential.user.uid);
-             await setDoc(consultationDocRef, { completed: false, createdAt: serverTimestamp() });
-        }
+        const timestamp = serverTimestamp();
+        await setDoc(doc(db, "consultationsMetadata", newUser.uid), { completed: false, createdAt: timestamp });
+        await setDoc(doc(db, "usuarios", newUser.uid), { createdAt: timestamp, updatedAt: timestamp, role: 'user' }, { merge: true });
         
-        setUser({
-          uid: userCredential.user.uid,
-          email: userCredential.user.email,
-          displayName: name,
-        });
-        setHasCompletedConsultation(false); 
-        
-        toast({ title: "Registro bem-sucedido!", description: "Sua conta foi criada. Verifique seu plano de assinatura para ter acesso." });
         router.push('/'); 
       }
     } catch (error: any) {
-      console.error("Erro no registro:", error);
-      let description = "Ocorreu um erro desconhecido. Tente novamente.";
+      let description = "Ocorreu um erro desconhecido.";
       if (error.code === 'auth/email-already-in-use') {
         description = "Este email já está cadastrado. Tente fazer login.";
       }
@@ -313,7 +293,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const updateUserDisplayName = useCallback(async (newName: string) => {
     if (!authInstance || !authInstance.currentUser) {
-      toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" });
       throw new Error("Usuário não autenticado.");
     }
     try {
@@ -321,7 +300,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setUser(prevUser => prevUser ? { ...prevUser, displayName: newName } : null);
       toast({ title: "Sucesso!", description: "Seu nome foi atualizado." });
     } catch (error: any) {
-      console.error("Erro ao atualizar nome de exibição:", error);
       toast({ title: "Erro ao atualizar nome", description: "Não foi possível atualizar seu nome.", variant: "destructive" });
       throw error;
     }

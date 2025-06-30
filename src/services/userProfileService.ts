@@ -43,10 +43,9 @@ export async function getUserProfile(userId: string): Promise<UserProfileData | 
     if (docSnap.exists()) {
       const rawData = docSnap.data();
       // Adicionar id e userId (que é o mesmo que id) explicitamente para validação pelo BaseSchema
-      const dataWithIds = { ...rawData, id: userId, userId: userId };
+      let dataWithIds = { ...rawData, id: userId, userId: userId };
       
       // Assegurar que createdAt e updatedAt existam como Timestamps ou sejam adicionados como Dates
-      // antes de convertê-los e validá-los.
       if (!(dataWithIds.createdAt instanceof Timestamp)) {
         console.warn(`UserProfile for ${userId} missing Firestore Timestamp for createdAt, defaulting.`);
         dataWithIds.createdAt = new Date(0); // Default to epoch if not a Firestore Timestamp
@@ -56,6 +55,7 @@ export async function getUserProfile(userId: string): Promise<UserProfileData | 
         dataWithIds.updatedAt = new Date(0); // Default to epoch
       }
       
+      // O schema Zod com .default('user') para 'role' cuidará de usuários existentes sem o campo.
       const dataWithDates = convertDocTimestampsToDates(dataWithIds);
       return UserProfileDataSchema.parse(dataWithDates);
     }
@@ -94,12 +94,13 @@ export async function upsertUserProfile(userId: string, data: UserProfileUpsertD
     }
     dataToSet.updatedAt = serverTime;
 
+    // Se um 'role' não for explicitamente fornecido, não o defina (deixe o Firestore manter o valor existente ou use o padrão do schema na leitura).
+    // O schema já lida com o upsert opcional.
+
     await setDoc(docRef, dataToSet, { merge: true });
 
     const fetchedProfile = await getUserProfile(userId);
     if (!fetchedProfile) {
-      // This case implies getUserProfile failed after a successful setDoc,
-      // or the data written was somehow invalid for UserProfileDataSchema.
       throw new Error('Failed to retrieve profile after upsert, or data structure mismatch.');
     }
     return fetchedProfile;

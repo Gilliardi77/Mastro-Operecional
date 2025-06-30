@@ -12,6 +12,8 @@ export const UserProfileDataSchema = BaseSchema.extend({
   companyPhone: z.string().optional().or(z.literal('')).nullable(),
   companyEmail: z.string().email().optional().or(z.literal('')).nullable(),
   personalPhoneNumber: z.string().optional().or(z.literal('')).nullable(),
+  // Adicionando o campo de role para controle de acesso centralizado
+  role: z.enum(['user', 'admin', 'vip']).default('user').optional().describe('O papel do usuário no sistema para controle de acesso.'),
   // createdAt e updatedAt vêm do BaseSchema e serão objetos Date
 });
 export type UserProfileData = z.infer<typeof UserProfileDataSchema>;
@@ -26,5 +28,7 @@ export const UserProfileUpsertDataSchema = z.object({
   companyPhone: z.string().optional().nullable(),
   companyEmail: z.string().email().optional().or(z.literal('')).nullable(),
   personalPhoneNumber: z.string().optional().nullable(),
+  // Adicionando o campo de role para que possa ser definido
+  role: z.enum(['user', 'admin', 'vip']).optional(),
 }).passthrough();
 export type UserProfileUpsertData = z.infer<typeof UserProfileUpsertDataSchema>;
