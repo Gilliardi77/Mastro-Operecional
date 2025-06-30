@@ -14,8 +14,6 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { getFirebaseInstances } from '@/lib/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useAuth } from '@/components/auth/auth-provider';
 import Link from 'next/link';
 
@@ -29,9 +27,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticating, signIn } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { auth: firebaseAuth } = getFirebaseInstances();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -42,39 +39,20 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (!isAuthLoading && user) {
+    if (!isAuthenticating && user) {
       router.replace('/'); // Redireciona se o usuário já estiver logado
     }
-  }, [user, isAuthLoading, router]);
+  }, [user, isAuthenticating, router]);
 
   const onSubmit = async (data: LoginFormValues) => {
-    if (!firebaseAuth) {
-      toast({
-        title: 'Erro de Configuração',
-        description: 'O sistema de autenticação não está pronto. Tente novamente mais tarde.',
-        variant: 'destructive',
-      });
-      return;
-    }
     setIsSubmitting(true);
     try {
-      await signInWithEmailAndPassword(firebaseAuth, data.email, data.password);
-      toast({
-        title: 'Login Bem-Sucedido!',
-        description: 'Redirecionando...',
-      });
-      router.push('/'); // Redireciona para a página inicial ou desejada após o login
+      await signIn(data.email, data.password);
+      // O AuthProvider agora lida com o sucesso, falha e redirecionamento.
     } catch (error: any) {
-      console.error('Erro de login:', error);
-      let errorMessage = 'Falha no login. Verifique suas credenciais.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        errorMessage = 'Email ou senha inválidos.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'O formato do email é inválido.';
-      }
       toast({
         title: 'Erro de Login',
-        description: errorMessage,
+        description: error.message || 'Falha no login. Verifique suas credenciais.',
         variant: 'destructive',
       });
     } finally {
@@ -82,7 +60,7 @@ export default function LoginPage() {
     }
   };
 
-  if (isAuthLoading || (!isAuthLoading && user)) {
+  if (isAuthenticating || (!isAuthenticating && user)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
