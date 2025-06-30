@@ -13,7 +13,9 @@ export const UserProfileDataSchema = BaseSchema.extend({
   companyEmail: z.string().email().optional().or(z.literal('')).nullable(),
   personalPhoneNumber: z.string().optional().or(z.literal('')).nullable(),
   // Adicionando o campo de role para controle de acesso centralizado
-  role: z.enum(['user', 'admin', 'vip']).default('user').optional().describe('O papel do usuário no sistema para controle de acesso.'),
+  // O '.default()' foi removido para que o valor seja 'undefined' se não estiver no Firestore,
+  // permitindo que a lógica no AuthProvider determine o privilégio corretamente.
+  role: z.enum(['user', 'admin', 'vip']).optional().describe('O papel do usuário no sistema para controle de acesso.'),
   // createdAt e updatedAt vêm do BaseSchema e serão objetos Date
 });
 export type UserProfileData = z.infer<typeof UserProfileDataSchema>;

@@ -154,9 +154,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           
           try {
             const profile = await getUserProfile(firebaseUser.uid);
-            const role = profile?.role ?? 'user';
-            setUserRole(role);
-            const isPrivileged = role === 'admin' || role === 'vip';
+            const actualRole = profile?.role; // Can be 'vip', 'admin', 'user', or undefined
+            const isPrivileged = actualRole === 'admin' || actualRole === 'vip';
+            
+            setUserRole(actualRole ?? 'user');
 
             if (isPrivileged) {
               setHasCompletedConsultation(true);
@@ -233,8 +234,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (loggedInUser) {
         const profile = await getUserProfile(loggedInUser.uid);
-        const role = profile?.role ?? 'user';
-        const isPrivileged = role === 'admin' || role === 'vip';
+        const actualRole = profile?.role;
+        const isPrivileged = actualRole === 'admin' || actualRole === 'vip';
 
         if (isPrivileged) {
           toast({ title: "Login Liberado", description: "Bem-vindo(a)!" });
