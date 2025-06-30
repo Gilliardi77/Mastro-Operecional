@@ -134,14 +134,11 @@ export default function Home() {
   ];
 
   return (
-    <div className="space-y-16">
-      <section className="text-center py-12 bg-gradient-to-br from-primary/10 via-background to-background rounded-xl shadow-inner">
+    <div className="space-y-12">
+      <section className="text-center py-8 bg-gradient-to-br from-primary/10 via-background to-background rounded-xl shadow-inner">
         <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-          {greeting ? `${greeting}, bem-vindo(a) ao` : 'Bem-vindo(a) ao'} Maestro Operacional
+          {greeting}, {user.displayName || 'pessoa usuária'}!
         </h2>
-        <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-          Sua plataforma completa para gerenciar clientes, serviços, agenda, vendas e muito mais, com o poder da Inteligência Artificial para otimizar suas operações.
-        </p>
       </section>
 
       <section id="quick-access" aria-labelledby="quick-access-title">
