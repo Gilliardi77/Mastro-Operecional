@@ -2,8 +2,26 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+
+// Auth and Contexts
+import { useAuth } from '@/components/auth/auth-provider';
+import { useToast } from "@/hooks/use-toast";
+import CashBoxModalGuard from "@/components/cash-box/CashBoxModalGuard";
+
+// Firebase and Services
+import { getFirebaseInstances } from '@/lib/firebase'; 
+import { collection, addDoc, Timestamp, doc, runTransaction } from "firebase/firestore"; 
+import { getAllClientsByUserId, createClient } from '@/services/clientService';
+import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
+
+// Schemas and Types
+import type { Client } from '@/schemas/clientSchema';
+import type { ProductService } from '@/schemas/productServiceSchema'; 
+import { ClientFormSchema, type ClientFormValues, type ClientCreateData } from '@/schemas/clientSchema';
+
+// UI Components
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, ShoppingCart, Trash2, Search, UserPlus, ScanLine, Edit, FileText, Loader2, PackageSearch } from "lucide-react";
@@ -11,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -21,14 +38,13 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { useToast } from "@/hooks/use-toast";
-import { getFirebaseInstances } from '@/lib/firebase'; 
-import { collection, addDoc, Timestamp, doc, runTransaction } from "firebase/firestore"; 
-import { getAllClientsByUserId } from '@/services/clientService';
-import type { Client } from '@/schemas/clientSchema';
-import { getAllProductServicesByUserId } from '@/services/productServiceService'; 
-import type { ProductService } from '@/schemas/productServiceSchema'; 
-import CashBoxModalGuard from "@/components/cash-box/CashBoxModalGuard";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+
+// RHF
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
 
 interface CartItem {
   id: string;
@@ -73,6 +89,23 @@ export default function BalcaoPage() {
 
   const [fetchedClients, setFetchedClients] = useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
+
+  // States and form for new client modal
+  const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+  const [isSavingNewClient, setIsSavingNewClient] = useState(false);
+  const newClientForm = useForm<ClientFormValues>({
+    resolver: zodResolver(ClientFormSchema),
+    defaultValues: {
+      nome: "",
+      email: "",
+      telefone: "",
+      endereco: "",
+      cpfCnpj: "",
+      dataNascimento: "",
+      observacoes: "",
+      temDebitos: false,
+    },
+  });
   
   useEffect(() => {
     if (!isAuthenticating && !user) {
@@ -189,6 +222,37 @@ export default function BalcaoPage() {
     setManualItemQuantity(1);
     setManualItemPrice(0);
     setIsManualItemModalOpen(false);
+  };
+  
+  const onSaveNewClient = async (data: ClientFormValues) => {
+    if (!user?.uid) {
+      toast({ title: "Ação não permitida", description: "Você precisa estar logado para salvar um novo cliente.", variant: "destructive" });
+      return;
+    }
+    setIsSavingNewClient(true);
+    const clientDataToCreate: ClientCreateData = {
+        nome: data.nome,
+        email: data.email,
+        telefone: data.telefone,
+        endereco: data.endereco,
+        cpfCnpj: data.cpfCnpj,
+        dataNascimento: data.dataNascimento,
+        observacoes: data.observacoes,
+        temDebitos: data.temDebitos,
+    };
+    try {
+      const clienteCriado = await createClient(user.uid, clientDataToCreate);
+      setFetchedClients(prev => [...prev, clienteCriado].sort((a,b) => a.nome.localeCompare(b.nome)));
+      setSelectedClient(clienteCriado.id);
+      toast({ title: "Novo Cliente Salvo!", description: `${clienteCriado.nome} foi adicionado e selecionado.` });
+      setIsNewClientModalOpen(false);
+      newClientForm.reset();
+    } catch (e: any) {
+      console.error("Erro ao salvar novo cliente:", e);
+      toast({ title: "Erro ao Salvar Cliente", variant: "destructive", description: e.message });
+    } finally {
+      setIsSavingNewClient(false);
+    }
   };
 
   const handleFinalizarVenda = async () => {
@@ -408,14 +472,16 @@ export default function BalcaoPage() {
                   {filteredAvailableProducts.map((product) => (
                     <Card key={product.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToCart(product)}>
                       <CardContent className="p-3 flex flex-col items-center text-center">
-                        <Image
-                          src={`https://placehold.co/100x80.png?text=${encodeURIComponent(product.nome.substring(0,12))}`}
-                          alt={product.nome}
-                          width={100}
-                          height={80}
-                          className="rounded-md mb-2 object-cover"
-                          data-ai-hint={product.nome.toLowerCase().split(" ").slice(0,2).join(" ")}
-                        />
+                        <div className="w-[100px] h-[80px] mb-2 rounded-md bg-white flex items-center justify-center border">
+                          <Image
+                            src={`https://placehold.co/100x80/FFFFFF/FFFFFF.png`}
+                            alt={product.nome}
+                            width={100}
+                            height={80}
+                            className="rounded-md object-cover"
+                            data-ai-hint={product.nome.toLowerCase().split(" ").slice(0,2).join(" ")}
+                          />
+                        </div>
                         <p className="text-sm font-medium truncate w-full" title={product.nome}>{product.nome}</p>
                         <p className="text-xs text-muted-foreground">R$ {product.valorVenda.toFixed(2)}</p>
                         <p className="text-xs text-muted-foreground">({product.tipo})</p>
@@ -448,7 +514,7 @@ export default function BalcaoPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="icon" aria-label="Adicionar novo cliente" disabled>
+                  <Button variant="outline" size="icon" aria-label="Adicionar novo cliente" onClick={() => setIsNewClientModalOpen(true)} disabled={isLoadingClients}>
                     <UserPlus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -595,6 +661,83 @@ export default function BalcaoPage() {
                 <Button type="submit">Adicionar ao Carrinho</Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+        
+        <Dialog open={isNewClientModalOpen} onOpenChange={(isOpen) => { setIsNewClientModalOpen(isOpen); if (!isOpen) newClientForm.reset(); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+              <DialogDescription>
+                Preencha os dados para cadastrar um novo cliente rapidamente.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...newClientForm}>
+              <form onSubmit={newClientForm.handleSubmit(onSaveNewClient)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
+                <FormField control={newClientForm.control} name="nome" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome Completo</FormLabel>
+                    <FormControl><Input placeholder="Nome do cliente" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (Opcional)</FormLabel>
+                    <FormControl><Input type="email" placeholder="email@exemplo.com" {...field} value={field.value || ''} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="telefone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telefone (Opcional)</FormLabel>
+                    <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} value={field.value || ''} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="endereco" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Endereço Completo (Opcional)</FormLabel>
+                    <FormControl><Textarea placeholder="Rua ABC, 123, Bairro, Cidade - UF" {...field} value={field.value || ''} rows={2} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="cpfCnpj" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CPF/CNPJ (Opcional)</FormLabel>
+                    <FormControl><Input placeholder="Documento do cliente" {...field} value={field.value || ''} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="dataNascimento" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data Nascimento (Opcional)</FormLabel>
+                    <FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="observacoes" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações (Opcional)</FormLabel>
+                    <FormControl><Textarea placeholder="Preferências, histórico, etc." {...field} value={field.value || ''} rows={2} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={newClientForm.control} name="temDebitos" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                    <FormControl><input type="checkbox" checked={field.value || false} onChange={field.onChange} className="form-checkbox h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" /></FormControl>
+                    <FormLabel className="font-normal text-sm">Cliente possui débitos pendentes?</FormLabel>
+                  </FormItem>
+                )} />
+                <DialogFooter>
+                  <DialogClose asChild><Button type="button" variant="outline" disabled={isSavingNewClient}>Cancelar</Button></DialogClose>
+                  <Button type="submit" disabled={isSavingNewClient}>
+                    {isSavingNewClient && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar Novo Cliente
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       </div>
