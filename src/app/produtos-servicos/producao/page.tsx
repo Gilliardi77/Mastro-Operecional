@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, MessageSquare, Mail, CreditCard, CalendarIcon as CalendarIconLucide, Printer } from "lucide-react";
+import { CheckCircle, ListFilter, Search, Loader2, Settings2, Eye, CreditCard, CalendarIcon as CalendarIconLucide, Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -523,15 +523,6 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
     }
   };
 
-  const handleSendWhatsAppStatus = () => {
-    if (!viewingOrder) return;
-    toast({ title: "WhatsApp", description: `Simulando envio de status da OS #${viewingOrder.agendamentoId.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
-  };
-  const handleSendEmailStatus = () => {
-    if (!viewingOrder) return;
-    toast({ title: "E-mail", description: `Simulando envio de e-mail de status da OS #${viewingOrder.agendamentoId.substring(0,6)} para ${viewingOrder.clienteNome}. (Funcionalidade em desenvolvimento)` });
-  };
-
   const handleOpenPrintModal = async (osId: string) => {
     if (!osId) {
         toast({ title: "Erro", description: "ID da Ordem de Serviço não encontrado.", variant: "destructive" });
@@ -712,13 +703,6 @@ const handleQuickStatusUpdate = async (order: ProductionOrder, newStatus: Produc
                   rows={4}
                   className="mt-1"
                 />
-              </div>
-               <div>
-                <h4 className="font-semibold text-sm mb-2">Comunicação com Cliente (Opcional):</h4>
-                <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleSendWhatsAppStatus} disabled={isSubmitting}><MessageSquare className="mr-1.5 h-4 w-4"/> Enviar Status (WhatsApp)</Button>
-                    <Button variant="outline" size="sm" onClick={handleSendEmailStatus} disabled={isSubmitting}><Mail className="mr-1.5 h-4 w-4"/> Enviar Status (E-mail)</Button>
-                </div>
               </div>
             </div>
           )}
