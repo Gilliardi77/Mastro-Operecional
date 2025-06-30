@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { useEffect } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useRouter } from 'next/navigation';
-import { Loader2, TrendingUp, Calculator, ListChecks, Link2Icon, History, ShoppingBag } from 'lucide-react';
+import { Loader2, TrendingUp, Calculator, ListChecks, History, ShoppingBag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -120,11 +121,11 @@ export default function DashboardFinanceiroPage() {
             </div>
              <div className="mt-4 text-center">
                 <Button variant="outline" asChild>
-                    <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app">
-                        Acessar Visão Clara Financeira <Link2Icon className="ml-2 h-4 w-4" />
+                    <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app" target="_blank">
+                        Acessar Módulo Financeiro <TrendingUp className="ml-2 h-4 w-4" />
                     </Link>
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2">Para análises financeiras avançadas, utilize o app Visão Clara Financeira.</p>
+                <p className="text-xs text-muted-foreground mt-2">Para análises financeiras avançadas, utilize o Módulo Financeiro.</p>
             </div>
           </CardContent>
         </Card>

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
-  Settings, Loader2, ArrowLeftCircle, Link2Icon, Briefcase, Calculator, TrendingUp, History
+  Settings, Loader2, ArrowLeftCircle, Briefcase, TrendingUp, History, Wand2
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -81,19 +81,14 @@ export default function Header() {
             <Briefcase className="mr-1 h-4 w-4" /> Operacional
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-          <Link href="/financeiro/dashboard">
-            <TrendingUp className="mr-1 h-4 w-4" /> Financeiro
-          </Link>
-        </Button>
         <Button variant="ghost" size="sm" asChild>
-            <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app">
-                <Link2Icon className="mr-1 h-4 w-4" /> Visão Fin.
+            <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app" target="_blank">
+                <TrendingUp className="mr-1 h-4 w-4" /> Modulo Financeiro
             </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
             <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank">
-                <Link2Icon className="mr-1 h-4 w-4" /> Gestor M.
+                <Wand2 className="mr-1 h-4 w-4" /> Modulo Consultor
             </Link>
         </Button>
 
@@ -130,11 +125,6 @@ export default function Header() {
                     <Briefcase className="mr-2 h-4 w-4" /> Operacional
                 </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="sm:hidden">
-                  <Link href="/financeiro/dashboard">
-                    <TrendingUp className="mr-2 h-4 w-4" /> Financeiro
-                  </Link>
-                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/financeiro/vendas">
                     <History className="mr-2 h-4 w-4" />
@@ -142,13 +132,13 @@ export default function Header() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app">
-                    <Link2Icon className="mr-2 h-4 w-4" /> Visão Fin.
+                <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app" target="_blank">
+                    <TrendingUp className="mr-2 h-4 w-4" /> Modulo Financeiro
                 </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
                 <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank">
-                    <Link2Icon className="mr-2 h-4 w-4" /> Gestor M.
+                    <Wand2 className="mr-2 h-4 w-4" /> Modulo Consultor
                 </Link>
                 </DropdownMenuItem>
               <DropdownMenuSeparator />
