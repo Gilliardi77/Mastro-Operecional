@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -87,7 +86,7 @@ export default function Header() {
             </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-            <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank">
+            <Link href="https://studio--maestro-ia-veiy3.us-central1.hosted.app/" target="_blank">
                 <Wand2 className="mr-1 h-4 w-4" /> Modulo Consultor
             </Link>
         </Button>
@@ -137,7 +136,7 @@ export default function Header() {
                 </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="https://studio--stratagem-ai-cvflr.us-central1.hosted.app" target="_blank">
+                <Link href="https://studio--maestro-ia-veiy3.us-central1.hosted.app/" target="_blank">
                     <Wand2 className="mr-2 h-4 w-4" /> Modulo Consultor
                 </Link>
                 </DropdownMenuItem>
