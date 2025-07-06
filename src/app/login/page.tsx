@@ -1,131 +1,111 @@
 
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useRouter } from 'next/navigation';
-import { Lock, Mail, Loader2 } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label"; // Manter para uso direto, se necessário
+import Link from "next/link";
+import { LogIn, Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useAuth } from "@/hooks/useAuth";
+import { useState } from "react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/auth-provider';
-import Link from 'next/link';
-
-const loginSchema = z.object({
-  email: z.string().email({ message: 'Por favor, insira um email válido.' }),
-  password: z.string().min(6, { message: 'A senha deve ter pelo menos 6 caracteres.' }),
+const LoginFormSchema = z.object({
+  email: z.string().email({ message: "Por favor, insira um email válido." }),
+  password: z.string().min(1, { message: "A senha não pode estar vazia." }),
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type LoginFormValues = z.infer<typeof LoginFormSchema>;
 
 export default function LoginPage() {
-  const { toast } = useToast();
-  const router = useRouter();
-  const { user, isAuthenticating, signIn } = useAuth();
+  const { signIn, loading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(LoginFormSchema),
     defaultValues: {
-      email: '',
-      password: '',
+      email: "",
+      password: "",
     },
   });
 
-  useEffect(() => {
-    if (!isAuthenticating && user) {
-      router.replace('/'); // Redireciona se o usuário já estiver logado
-    }
-  }, [user, isAuthenticating, router]);
-
-  const onSubmit = async (data: LoginFormValues) => {
+  async function onSubmit(data: LoginFormValues) {
     setIsSubmitting(true);
     try {
       await signIn(data.email, data.password);
-      // O AuthProvider agora lida com o sucesso, falha e redirecionamento.
-    } catch (error: any) {
-      toast({
-        title: 'Erro de Login',
-        description: error.message || 'Falha no login. Verifique suas credenciais.',
-        variant: 'destructive',
-      });
+      // O redirecionamento é tratado dentro da função signIn do AuthContext
+    } catch (error) {
+      // O tratamento de erro (toast) é feito dentro da função signIn do AuthContext
+      console.error("Falha no login pela página:", error);
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  if (isAuthenticating || (!isAuthenticating && user)) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-2">Carregando...</p>
-      </div>
-    );
   }
 
+  const isLoading = authLoading || isSubmitting;
+
   return (
-    <Card className="w-full max-w-md shadow-xl">
-      <CardHeader className="text-center">
-        <CardTitle className="text-3xl font-bold text-primary">Maestro Operacional</CardTitle>
-        <CardDescription>Acesse o Maestro Operacional.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-gradient-to-b from-background to-secondary/30 pt-16 pb-24 px-4">
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold text-primary">Entrar</CardTitle>
+          <CardDescription className="text-md text-muted-foreground">
+            Acesse sua conta Gestor Maestro.
+          </CardDescription>
+        </CardHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <Label htmlFor="email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <CardContent className="space-y-6">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input id="email" type="email" placeholder="seu@email.com" {...field} className="pl-10" />
+                      <Input type="email" placeholder="seu@email.com" {...field} disabled={isLoading} />
                     </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <Label htmlFor="password">Senha</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Senha</FormLabel>
                     <FormControl>
-                      <Input id="password" type="password" placeholder="Sua senha" {...field} className="pl-10" />
+                      <Input type="password" placeholder="Sua senha" {...field} disabled={isLoading} />
                     </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                'Entrar'
-              )}
-            </Button>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+            <CardFooter className="flex flex-col gap-4">
+              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <LogIn className="mr-2 h-5 w-5" />
+                )}
+                Entrar
+              </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Não tem uma conta?{" "}
+                <Link href="/register" className="font-semibold text-primary hover:underline">
+                  Registre-se
+                </Link>
+              </p>
+            </CardFooter>
           </form>
         </Form>
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          Para criar uma conta ou recuperar sua senha, utilize o Módulo Consultor.
-        </p>
-      </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

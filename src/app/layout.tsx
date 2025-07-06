@@ -1,20 +1,15 @@
 
 import type { Metadata } from 'next';
 import './globals.css';
+import { Toaster } from "@/components/ui/toaster";
+import { AppProviders } from '@/contexts/AppProviders';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { Toaster } from "@/components/ui/toaster";
-import ContextualAIGuide from '@/components/ai/ContextualAIGuide';
-import { AppProviders } from '@/contexts/AppProviders';
 
 export const metadata: Metadata = {
-  title: 'Maestro Operacional',
-  description: 'Gerado pelo Firebase Studio para Maestro Operacional',
-  icons: {
-    icon: '/images/novalogo120x120.png',
-    shortcut: '/images/novalogo120x120.png',
-    apple: '/images/novalogo120x120.png',
-  },
+  title: 'Gestor Maestro',
+  description: 'Soluções inteligentes para gestão de negócios: Diagnóstico, Operacional e Financeiro.',
+  manifest: '/manifest.json', 
 };
 
 export default function RootLayout({
@@ -28,6 +23,17 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        
+        {/* PWA Meta Tags */}
+        <meta name="application-name" content="Gestor Maestro" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Gestor Maestro" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="msapplication-TileColor" content="#FA711D" />
+        <meta name="msapplication-tap-highlight" content="no" />
+        <meta name="theme-color" content="#FA711D" />
       </head>
       <body className="font-body antialiased flex flex-col min-h-screen bg-background">
         <AppProviders>
@@ -39,7 +45,6 @@ export default function RootLayout({
           </div>
           <Footer />
           <Toaster />
-          <ContextualAIGuide />
         </AppProviders>
       </body>
     </html>
