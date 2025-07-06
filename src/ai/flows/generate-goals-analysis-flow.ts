@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Um fluxo Genkit para analisar dados de negócios e gerar um plano estratégico completo.
