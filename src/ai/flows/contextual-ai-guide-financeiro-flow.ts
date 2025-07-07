@@ -36,7 +36,7 @@ Contexto Atual do Usuário:
 {{#if chatHistory}}
 Histórico da Conversa Recente:
 {{#each chatHistory}}
-- {{sender}}: {{text}}
+- {{role}}: {{text}}
 {{/each}}
 {{/if}}
 

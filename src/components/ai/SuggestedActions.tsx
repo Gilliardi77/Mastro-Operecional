@@ -4,10 +4,10 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import type { ContextualAIGuideOutput } from '@/ai/schemas/contextual-ai-guide-schema';
+import type { SuggestedAction } from '@/ai/schemas/contextual-ai-guide-operacional-schema';
 
 interface SuggestedActionsProps {
-  actions: NonNullable<ContextualAIGuideOutput['suggestedActions']>;
+  actions: SuggestedAction[];
   onActionClick: (actionLabel: string, actionId: string, payload?: any) => void;
   isLoading: boolean;
   selectedActionId: string | null;

@@ -16,9 +16,9 @@ export const ContextualAIGuideInputSchema = z.object({
   currentAction: z.string().optional().describe('Opcional: A ação específica que o usuário está tentando realizar na página (ex: "criando_novo_lancamento", "filtrando_relatorio").'),
   formSnapshotJSON: z.string().optional().describe('Opcional: Um snapshot JSON dos dados atuais de um formulário que o usuário pode estar preenchendo.'),
   chatHistory: z.array(z.object({
-    sender: z.enum(['user', 'ai']),
+    role: z.enum(['user', 'model']),
     text: z.string(),
-  })).optional().describe('Opcional: Histórico recente da conversa para manter o contexto.'),
+  })).optional().describe('Opcional: Histórico recente da conversa para manter o contexto. "model" é a IA.'),
 });
 export type ContextualAIGuideInput = z.infer<typeof ContextualAIGuideInputSchema>;
 

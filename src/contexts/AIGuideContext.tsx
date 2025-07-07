@@ -4,8 +4,12 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { contextualAIGuideFlow } from '@/ai/flows/contextual-ai-guide-flow';
-import type { ContextualAIGuideInput, ContextualAIGuideOutput } from '@/ai/schemas/contextual-ai-guide-schema';
+
+import { contextualAIGuideFlow as operacionalFlow } from '@/ai/flows/contextual-ai-guide-operacional-flow';
+import { contextualAIGuideFlow as financeiroFlow } from '@/ai/flows/contextual-ai-guide-financeiro-flow';
+// As schemas are compatible, we can use one as the base for types
+import type { ContextualAIGuideInput as AnyContextualAIGuideInput, SuggestedAction } from '@/ai/schemas/contextual-ai-guide-operacional-schema';
+import type { ContextualAIGuideOutput as AnyContextualAIGuideOutput } from '@/ai/schemas/contextual-ai-guide-operacional-schema';
 
 
 interface ChatMessage {
@@ -13,7 +17,7 @@ interface ChatMessage {
   sender: 'user' | 'ai';
   text: string;
   timestamp: Date;
-  suggestedActions?: ContextualAIGuideOutput['suggestedActions'];
+  suggestedActions?: SuggestedAction[];
 }
 
 interface CurrentAppContext {
@@ -95,7 +99,7 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
     setCurrentAppContext(prev => ({ ...prev, ...context, pageName: context.pageName || prev.pageName || pathname || 'unknown' }));
   }, [pathname]);
 
-  const addMessage = useCallback((sender: 'user' | 'ai', text: string, suggestedActions?: ContextualAIGuideOutput['suggestedActions']) => {
+  const addMessage = useCallback((sender: 'user' | 'ai', text: string, suggestedActions?: SuggestedAction[]) => {
     setChatMessages(prev => [...prev, {
       id: Date.now().toString(),
       sender,
@@ -126,21 +130,26 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
     const historyForAI = currentMessages
       .slice(-6) // Pega as últimas 6 mensagens
       .map(msg => ({
-        role: msg.sender === 'ai' ? 'model' : 'user',
+        role: msg.sender === 'ai' ? 'model' : 'user', // Standardizing to 'role'
         text: msg.text,
       }));
     
     try {
-      const input: ContextualAIGuideInput = {
+      const input: AnyContextualAIGuideInput = {
         pageName: currentAppContext.pageName,
         userQuery: userQuery,
         currentAction: currentAppContext.currentAction,
         formSnapshotJSON: currentAppContext.formSnapshotJSON,
-        // If it's not a user message, we send the whole history. If it is, we send history *before* the current query.
         chatHistory: options.asUserMessage ? historyForAI.slice(0, -1) : historyForAI,
       };
       
-      const aiResponse = await contextualAIGuideFlow(input);
+      let aiResponse: AnyContextualAIGuideOutput;
+      if (currentAppContext.pageName.startsWith('/financeiro')) {
+        aiResponse = await financeiroFlow(input);
+      } else { // default to operacional
+        aiResponse = await operacionalFlow(input);
+      }
+
       addMessage('ai', aiResponse.aiResponseText, aiResponse.suggestedActions);
     } catch (error) {
       console.error("Error calling contextual AI guide flow:", error);
@@ -150,19 +159,19 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
     }
   };
 
+  const value = {
+    isAIGuideOpen,
+    toggleAIGuide,
+    closeAIGuide,
+    chatMessages,
+    currentAppContext,
+    updateAICurrentPageContext,
+    sendQueryToAIGuide,
+    isAILoading,
+  };
+
   return (
-    <AIGuideContext.Provider
-      value={{
-        isAIGuideOpen,
-        toggleAIGuide,
-        closeAIGuide,
-        chatMessages,
-        currentAppContext,
-        updateAICurrentPageContext,
-        sendQueryToAIGuide,
-        isAILoading,
-      }}
-    >
+    <AIGuideContext.Provider value={value}>
       {children}
     </AIGuideContext.Provider>
   );
