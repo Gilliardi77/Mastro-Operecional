@@ -22,7 +22,7 @@ export default function VitrinePage() {
             alt="Logo Gestor Maestro"
             width={120}
             height={120}
-            className="object-contain"
+            className="object-contain scale-[1.35]"
           />
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-primary mb-3">
