@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Loader2, Unlock } from "lucide-react";
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useCashBox } from '@/contexts/CashBoxContext';
 import { abrirSessaoCaixa, getUltimaSessaoFechada } from '@/services/sessaoCaixaService';
