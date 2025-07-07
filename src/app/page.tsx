@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -6,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowRight, LayoutDashboard, Loader2, Lightbulb, Briefcase, TrendingUp } from 'lucide-react'; 
 import Image from 'next/image';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function VitrinePage() {
   const { user, isAuthenticating } = useAuth();

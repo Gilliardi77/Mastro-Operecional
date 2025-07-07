@@ -6,14 +6,14 @@ import { CashBoxProvider } from '@/contexts/CashBoxContext';
 import { AIGuideProvider } from '@/contexts/AIGuideContext';
 import { ThemeProvider } from 'next-themes';
 import type { ReactNode } from 'react';
-import { ConsultationProvider } from './ConsultationContext';
+import { ConsultationProvider } from '@/contexts/ConsultationContext';
 import { 
   INITIAL_FORM_CFG, 
   RAW_MAESTRO_DATA_CFG, 
   BLOCKS_CFG, 
   TOTAL_MAIN_QUESTIONS_CFG, 
   FINAL_DIAGNOSIS_DISPLAY_CFG 
-} from '@/data/questions';
+} from '@/app/consultor/data/questions';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   if (!INITIAL_FORM_CFG || !RAW_MAESTRO_DATA_CFG || !BLOCKS_CFG || !FINAL_DIAGNOSIS_DISPLAY_CFG) {

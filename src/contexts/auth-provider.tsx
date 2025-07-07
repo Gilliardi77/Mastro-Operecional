@@ -1,1 +1,0 @@
-// Este arquivo foi unificado em src/contexts/AuthContext.tsx e pode ser excluído.
