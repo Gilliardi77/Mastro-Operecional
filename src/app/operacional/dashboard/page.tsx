@@ -281,7 +281,7 @@ export default function DashboardOperacionalPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             {[
-              { href: "/operacional/atendimentos/novo", label: "Nova OS", icon: PlusCircle },
+              { href: "/operacional/produtos-servicos/atendimentos/novo", label: "Nova OS", icon: PlusCircle },
               { href: "/operacional/balcao", label: "Balcão PDV", icon: Package },
               { href: "/operacional/clientes", label: "Clientes", icon: Users, variant: "secondary" as const },
               { href: "/operacional/produtos", label: "Produtos/Serviços", icon: ListOrdered, variant: "secondary" as const },
@@ -310,5 +310,3 @@ export default function DashboardOperacionalPage() {
     </div>
   );
 }
-
-    
