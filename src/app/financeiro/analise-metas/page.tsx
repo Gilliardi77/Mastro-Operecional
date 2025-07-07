@@ -189,16 +189,15 @@ export default function MetasFinanceirasForm() {
       });
       setFaturamentoAtual(totalFaturamento);
 
-      if (user) {
-        const idToken = await user.getIdToken();
-        if (!idToken) {
-            setErroBuscaCustosReais("ID Token não disponível para buscar custos.");
-            setCustosFixosReaisConfigurados(null);
-        } else {
-            const custosFixosAtivos = await getAllCustosFixosConfigurados(idToken, false); 
+      if (activeUserId) {
+        try {
+            const custosFixosAtivos = await getAllCustosFixosConfigurados(activeUserId, false); 
             const totalCustosConfigurados = custosFixosAtivos.reduce((sum, custo) => sum + custo.valorMensal, 0);
             setCustosFixosReaisConfigurados(totalCustosConfigurados);
             setErroBuscaCustosReais(null); 
+        } catch(custosError: any) {
+            setErroBuscaCustosReais(custosError.message || "Erro ao buscar custos.");
+            setCustosFixosReaisConfigurados(null);
         }
       } else { 
         setCustosFixosReaisConfigurados(null);
@@ -208,7 +207,7 @@ export default function MetasFinanceirasForm() {
       console.error('Erro detalhado ao carregar dados da Análise de Metas:', error);
       const errorMessage = (error as Error).message;
       toast({ title: 'Erro ao Carregar Dados', description: `Não foi possível carregar todos os dados. ${errorMessage}`, variant: 'destructive' });
-      if (String(error).includes("custos configurados") || String(error).includes("ID Token")) {
+      if (String(error).includes("custos configurados")) {
         setErroBuscaCustosReais(errorMessage);
         setCustosFixosReaisConfigurados(null);
       }
@@ -217,7 +216,7 @@ export default function MetasFinanceirasForm() {
       setIsFetchingData(false);
       setIsLoadingCustosReais(false);
     }
-  }, [activeUserId, form, toast, user, resetFormAndStates, defaultFormValues]);
+  }, [activeUserId, form, toast, resetFormAndStates, defaultFormValues]);
 
   useEffect(() => {
     if (!authLoading && !user) {
