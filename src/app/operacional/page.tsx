@@ -120,7 +120,7 @@ export default function OperacionalHomePage() {
      {
       title: 'Gestão de Caixa',
       description: 'Realize aberturas, fechamentos e sangrias do seu caixa diário.',
-      href: '/operacional/caixa',
+      href: '/financeiro/fechamento-caixa',
       icon: Calculator,
       cta: 'Gerenciar Caixa',
     },
