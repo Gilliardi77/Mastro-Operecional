@@ -16,7 +16,7 @@ export default function VitrinePage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] pt-16 pb-20 px-4">
       <header className="text-center mb-10">
-        <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 shadow-lg overflow-hidden">
+        <div className="mx-auto mb-5 flex h-32 w-32 items-center justify-center rounded-full bg-primary/10 shadow-lg overflow-hidden">
           <Image
             src="/images/Logo geométrico roxo minimalista.png"
             alt="Logo Gestor Maestro"
@@ -65,7 +65,7 @@ export default function VitrinePage() {
               </Card>
             </div>
             
-            <div>
+            <div className="theme-operacional">
               <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full h-full flex flex-col">
                 <CardHeader>
                   <Briefcase className="h-10 w-10 text-primary mb-3" />

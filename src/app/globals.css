@@ -101,6 +101,18 @@ body {
     --accent: 260 60% 15%;
     --ring: 260 70% 65%;
   }
+  
+  /* Tema Operacional */
+  .theme-operacional {
+    --primary: 24 95% 53%; /* Laranja Vívido */
+    --accent: 24 95% 90%;
+    --ring: 24 95% 53%;
+  }
+  .dark .theme-operacional {
+    --primary: 24 95% 60%;
+    --accent: 24 95% 15%;
+    --ring: 24 95% 60%;
+  }
 }
 
 @layer base {
