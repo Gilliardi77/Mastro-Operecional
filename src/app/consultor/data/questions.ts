@@ -11,8 +11,8 @@ import type {
   BlockConfig,
   FinalDiagnosisDisplayConfig,
   FinalDiagnosisPartStructure,
-} from '@/types';
-import { setDerivedConfig } from '@/types';
+} from '../types';
+import { setDerivedConfig } from '../types';
 import consultorMaestroDataJson from './consultor_maestro.json';
 
 console.log("[questions.ts] consultor_maestro.json raw import:", consultorMaestroDataJson);
