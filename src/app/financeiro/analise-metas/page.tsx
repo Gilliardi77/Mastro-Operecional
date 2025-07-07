@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   doc, setDoc, getDoc, collection, query, where, getDocs, Timestamp
 } from 'firebase/firestore';
@@ -72,7 +72,7 @@ export interface LancamentoFinanceiro {
 const DIAS_UTEIS_PADRAO = 22;
 
 export default function MetasFinanceirasForm() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAuthenticating: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoadingForm, setIsLoadingForm] = useState(true);

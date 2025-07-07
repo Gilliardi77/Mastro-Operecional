@@ -19,7 +19,7 @@ import type { Assinatura } from '@/schemas/assinaturaSchema';
 import { getUserProfile } from "@/services/userProfileService";
 import { Loader2 } from 'lucide-react';
 
-interface User {
+export interface User {
   uid: string;
   email: string | null;
   displayName: string | null;
