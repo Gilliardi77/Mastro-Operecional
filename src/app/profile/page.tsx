@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CompanyInfoFormSchema, PersonalInfoFormSchema, defaultCompanyValues } from "./schemas";
 import { fetchUserProfileServerAction, saveCompanyProfileServerAction, savePersonalDisplayNameServerAction } from "./actions";
 import type { UserProfileFirestoreData } from "@/schemas/userProfileSchema";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, Building, User, AlertTriangle } from "lucide-react";
 import Link from "next/link";
