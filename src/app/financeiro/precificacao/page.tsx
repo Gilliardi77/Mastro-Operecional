@@ -16,13 +16,13 @@ import { DollarSign, Percent, TrendingUp, AlertTriangle, Lightbulb, Send, Loader
 import { productPricingFlow } from '@/ai/flows/product-pricing-flow';
 import type { ProductPricingOutput, ProductPricingInput } from '@/ai/schemas/product-pricing-schema';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { getActiveUserId } from '@/lib/authUtils';
 import { getAllCustosFixosConfigurados } from '@/services/custoFixoConfiguradoService';
 import { db } from '@/lib/firebase'; 
 import { doc, getDoc } from 'firebase/firestore'; 
 import { getYear, getMonth } from 'date-fns'; 
-import type { MetasFinanceiras as MetasFinanceirasTipo } from '@/app/analise-metas/page'; 
+import type { MetasFinanceiras as MetasFinanceirasTipo } from '@/app/financeiro/analise-metas/page'; 
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -89,7 +89,7 @@ export default function PrecificacaoPage() {
   const [custosFixosReaisConfiguradosPrecificacao, setCustosFixosReaisConfiguradosPrecificacao] = useState<number | null>(null);
   const [isLoadingCustosReaisPrecificacao, setIsLoadingCustosReaisPrecificacao] = useState(false);
 
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAuthenticating: authLoading } = useAuth();
   const activeUserId = useMemo(() => getActiveUserId(user), [user]);
 
   const { updateAICurrentAppContext } = useAIGuide();
@@ -261,7 +261,7 @@ export default function PrecificacaoPage() {
       if (!idToken) {
         throw new Error("ID Token não disponível para autenticação do serviço.");
       }
-      const custosFixosAtivos = await getAllCustosFixosConfigurados(idToken, false); 
+      const custosFixosAtivos = await getAllCustosFixosConfigurados(user.uid, false); 
       const totalCustosConfigurados = custosFixosAtivos.reduce((sum, custo) => sum + custo.valorMensal, 0);
       setCustosFixosReaisConfiguradosPrecificacao(totalCustosConfigurados);
     } catch (error) {
