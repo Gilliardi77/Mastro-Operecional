@@ -34,9 +34,13 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Gestor Maestro" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="msapplication-TileColor" content="#FA711D" />
+        <meta name="msapplication-TileColor" content="#5d4dbe" />
         <meta name="msapplication-tap-highlight" content="no" />
-        <meta name="theme-color" content="#FA711D" />
+        <meta name="theme-color" content="#5d4dbe" />
+        
+        {/* Favicon links */}
+        <link rel="icon" href="/images/GM_40x40.png" sizes="any" type="image/png" />
+        <link rel="apple-touch-icon" href="/images/logo GM roxo 180.png" />
       </head>
       <body className="font-body antialiased flex flex-col min-h-screen bg-background">
         <AppProviders>
