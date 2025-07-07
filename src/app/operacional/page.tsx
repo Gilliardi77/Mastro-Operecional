@@ -78,7 +78,7 @@ export default function OperacionalHomePage() {
     {
       title: 'Nova Ordem de Serviço',
       description: 'Crie e gerencie ordens de serviço para seus clientes.',
-      href: '/operacional/produtos-servicos/atendimentos/novo',
+      href: '/operacional/atendimentos/novo',
       icon: FilePlus2,
       cta: 'Criar OS',
     },
