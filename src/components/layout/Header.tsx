@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
-  Settings, Loader2, ArrowLeftCircle, Briefcase, TrendingUp, History
+  Settings, Loader2, ArrowLeftCircle, Briefcase, TrendingUp, History, Wand2
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -79,13 +79,7 @@ export default function Header() {
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
             <Link href="/consultor">
-                <Image 
-                  src="/images/logo sem fundo 120x120.png"
-                  alt="Consultor IA Icon"
-                  width={16}
-                  height={16}
-                  className="filter brightness-0 invert mr-1"
-                /> Consultor IA
+                <Wand2 className="mr-1 h-4 w-4" /> Consultor IA
             </Link>
         </Button>
         
@@ -132,13 +126,7 @@ export default function Header() {
               </DropdownMenuItem>
               <DropdownMenuItem asChild className="sm:hidden">
                 <Link href="/consultor">
-                    <Image 
-                      src="/images/logo sem fundo 120x120.png"
-                      alt="Consultor IA Icon"
-                      width={16}
-                      height={16}
-                      className="filter brightness-0 invert mr-2"
-                    /> Consultor IA
+                    <Wand2 className="mr-2 h-4 w-4" /> Consultor IA
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator className="sm:hidden" />
