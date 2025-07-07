@@ -15,4 +15,4 @@ import '@/ai/flows/generate-goals-analysis-flow.ts';
 // Flows from 'financeiro' module
 import '@/ai/flows/financial-trend-prediction.ts';
 import '@/ai/flows/product-pricing-flow.ts';
-import '@/ai/flows/contextual-ai-guide-financeiro-flow.ts';
+// O fluxo financeiro foi unificado no operacional, então removemos o import daqui.

@@ -5,11 +5,9 @@ import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
-import { contextualAIGuideFlow as operacionalFlow } from '@/ai/flows/contextual-ai-guide-operacional-flow';
-import { contextualAIGuideFlow as financeiroFlow } from '@/ai/flows/contextual-ai-guide-financeiro-flow';
-// As schemas are compatible, we can use one as the base for types
-import type { ContextualAIGuideInput as AnyContextualAIGuideInput, SuggestedAction } from '@/ai/schemas/contextual-ai-guide-operacional-schema';
-import type { ContextualAIGuideOutput as AnyContextualAIGuideOutput } from '@/ai/schemas/contextual-ai-guide-operacional-schema';
+import { contextualAIGuideFlow } from '@/ai/flows/contextual-ai-guide-operacional-flow';
+// As schemas são compatíveis, então usamos a do operacional como a fonte da verdade.
+import type { ContextualAIGuideInput, SuggestedAction, ContextualAIGuideOutput } from '@/ai/schemas/contextual-ai-guide-operacional-schema';
 
 
 interface ChatMessage {
@@ -135,7 +133,7 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
       }));
     
     try {
-      const input: AnyContextualAIGuideInput = {
+      const input: ContextualAIGuideInput = {
         pageName: currentAppContext.pageName,
         userQuery: userQuery,
         currentAction: currentAppContext.currentAction,
@@ -143,12 +141,8 @@ export function AIGuideProvider({ children }: { children: ReactNode }): JSX.Elem
         chatHistory: options.asUserMessage ? historyForAI.slice(0, -1) : historyForAI,
       };
       
-      let aiResponse: AnyContextualAIGuideOutput;
-      if (currentAppContext.pageName.startsWith('/financeiro')) {
-        aiResponse = await financeiroFlow(input);
-      } else { // default to operacional
-        aiResponse = await operacionalFlow(input);
-      }
+      // Chamada para o fluxo unificado
+      const aiResponse: ContextualAIGuideOutput = await contextualAIGuideFlow(input);
 
       addMessage('ai', aiResponse.aiResponseText, aiResponse.suggestedActions);
     } catch (error) {
