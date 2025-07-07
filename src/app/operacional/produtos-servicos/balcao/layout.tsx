@@ -1,17 +1,12 @@
 
 import type { Metadata } from 'next';
 
+// This page has been moved to /app/operacional/balcao/layout.tsx
 export const metadata: Metadata = {
-  title: 'Balcão de Vendas - Business Maestro',
-  description: 'Realize vendas rápidas e gerencie o carrinho.',
+  title: 'Página Movida',
+  description: 'Esta página foi movida.',
 };
 
-export default function BalcaoLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function MovedLayout({ children }: { children: React.ReactNode; }) {
   return <>{children}</>;
 }
-
-    
