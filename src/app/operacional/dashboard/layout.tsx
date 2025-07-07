@@ -1,15 +1,2 @@
-
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Dashboard Financeiro - Maestro Operacional',
-  description: 'Visão geral das suas finanças.',
-};
-
-export default function DashboardFinanceiroLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <>{children}</>;
-}
+// Esta página foi movida para /src/app/financeiro/dashboard-geral/layout.tsx
+// e este arquivo pode ser excluído.

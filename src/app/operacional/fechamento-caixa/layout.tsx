@@ -1,15 +1,2 @@
-
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Gestão de Caixa - Maestro Operacional',
-  description: 'Abra e feche o caixa da sua operação diária.',
-};
-
-export default function GestaoCaixaLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <>{children}</>;
-}
+// Esta página foi movida para /src/app/financeiro/fechamento-caixa/layout.tsx
+// e este arquivo pode ser excluído.

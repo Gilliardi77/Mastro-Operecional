@@ -37,9 +37,8 @@ import { z } from "zod";
 import { format, parse, setHours, setMinutes, setSeconds, setMilliseconds, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from "next/navigation";
-import { type Firestore } from "firebase/firestore";
 
 import { getAllClientsByUserId } from '@/services/clientService';
 import type { Client } from '@/schemas/clientSchema';
@@ -59,7 +58,7 @@ import {
   type AppointmentUpdateData
 } from '@/schemas/appointmentSchema';
 import { createOrdemServico, PaymentStatusEnum, type OrdemServicoCreateData } from '@/services/ordemServicoService';
-import { createOrdemProducao, type OrdemProducaoCreateData, type OrdemProducaoStatus } from '@/services/ordemProducaoService';
+import { createOrdemProducao, type OrdemProducaoCreateData, type OrdemProducaoStatus } from '@/services/ordemProducaoSchema';
 import { createLancamentoFinanceiro, type LancamentoFinanceiroCreateData } from '@/services/lancamentoFinanceiroService';
 
 

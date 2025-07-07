@@ -37,7 +37,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { getFirebaseInstances } from '@/lib/firebase';
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   collection,

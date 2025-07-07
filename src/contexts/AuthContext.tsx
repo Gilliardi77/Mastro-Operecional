@@ -54,7 +54,7 @@ const performAccessCheck = async (uid: string, db: any): Promise<{ status: Subsc
     try {
         const profile = await getUserProfile(uid);
         if (profile?.role === 'admin' || profile?.role === 'vip') {
-            return { status: 'privileged', role: profile.role };
+            return { status: 'privileged', role: profile.role || 'vip' };
         }
     } catch (e) {
         console.error("Error checking user role, proceeding as standard user.", e);
@@ -138,7 +138,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (firebaseUser) {
         const { status, role } = await performAccessCheck(firebaseUser.uid, db);
         if (status === 'inactive') {
-          if (!pathname.startsWith('/login')) { // Avoid toast loop on login page
+          if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) { // Avoid toast loop on public pages
              toast({ title: "Acesso Negado", description: "Sua assinatura não está ativa. Faça login para revalidar.", variant: "destructive", duration: 7000 });
           }
           await logout(false);
@@ -166,16 +166,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signIn = useCallback(async (email: string, pass: string) => {
     if (!authInstance) throw new Error("Firebase Auth não inicializado.");
     try {
-      await signInWithEmailAndPassword(authInstance, email, pass);
+      const userCredential = await signInWithEmailAndPassword(authInstance, email, pass);
       toast({ title: "Autenticado", description: "Verificando seu acesso..." });
-      // onAuthStateChanged will handle the rest
+      // The onAuthStateChanged listener handles the rest, including access checks and redirection.
+      const redirectPath = new URLSearchParams(window.location.search).get('redirect') || '/';
+      router.push(redirectPath);
     } catch (error: any) {
+      console.error("Sign-in error:", error);
+      let errorMessage = "Ocorreu um erro desconhecido durante o login.";
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
-        throw new Error("Email ou senha incorretos.");
+        errorMessage = "Email ou senha incorretos.";
       }
-      throw new Error("Ocorreu um erro desconhecido durante o login.");
+      toast({ title: "Falha no Login", description: errorMessage, variant: "destructive" });
+      throw new Error(errorMessage);
     }
-  }, [authInstance, toast]);
+  }, [authInstance, router, toast]);
 
 
   const signUp = useCallback(async (name: string, email: string, pass: string) => {
