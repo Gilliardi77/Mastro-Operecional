@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -94,6 +93,12 @@ export default function CashBoxModalGuard({ children }: CashBoxModalGuardProps) 
             onEscapeKeyDown={(e) => e.preventDefault()}
             showCloseButton={false}
           >
+            <DialogHeader className="sr-only">
+              <DialogTitle>Abrir Caixa</DialogTitle>
+              <DialogDescription>
+                Você precisa abrir uma nova sessão de caixa para registrar vendas e outras operações financeiras.
+              </DialogDescription>
+            </DialogHeader>
             <AbrirCaixaForm />
           </DialogContent>
         </Dialog>
