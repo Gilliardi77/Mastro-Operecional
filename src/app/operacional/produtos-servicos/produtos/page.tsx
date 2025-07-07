@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from "next/navigation";
 import {
   ProductServiceFormSchema,
@@ -243,7 +243,7 @@ export default function ProdutosServicosPage() {
               <CardDescription>Cadastre e gerencie seus produtos, serviços e respectivos estoques (para produtos).</CardDescription>
             </div>
             <Button onClick={handleAbrirModalParaNovo}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo
+              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Item
             </Button>
           </div>
         </CardHeader>

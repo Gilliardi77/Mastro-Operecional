@@ -36,7 +36,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase"; 
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from "next/navigation";
 import { collection, Timestamp, doc, updateDoc, runTransaction } from "firebase/firestore";
 import { cn } from '@/lib/utils';

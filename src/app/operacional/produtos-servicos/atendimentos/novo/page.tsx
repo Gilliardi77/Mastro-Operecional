@@ -4,7 +4,7 @@
 
 // Imports agrupados por funcionalidade
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useFieldArray, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
