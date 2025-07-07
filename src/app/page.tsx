@@ -18,7 +18,7 @@ export default function VitrinePage() {
       <header className="text-center mb-10">
         <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 shadow-lg overflow-hidden">
           <Image
-            src="/images/novalogo120x120.png"
+            src="/images/Logo geométrico roxo minimalista.png"
             alt="Logo Gestor Maestro"
             width={120}
             height={120}

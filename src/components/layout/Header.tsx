@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -56,7 +57,7 @@ export default function Header() {
 
         <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Gestor Maestro">
           <Image
-            src="/images/novalogo120x120.png"
+            src="/images/Logo geométrico roxo minimalista.png"
             alt="Gestor Maestro Logo"
             width={36}
             height={36}
