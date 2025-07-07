@@ -89,7 +89,7 @@ export default function PrecificacaoPage() {
   const [custosFixosReaisConfiguradosPrecificacao, setCustosFixosReaisConfiguradosPrecificacao] = useState<number | null>(null);
   const [isLoadingCustosReaisPrecificacao, setIsLoadingCustosReaisPrecificacao] = useState(false);
 
-  const { user, isAuthenticating: authLoading } = useAuth();
+  const { user, isAuthenticating: authLoading, firebaseAuth } = useAuth();
   const activeUserId = useMemo(() => getActiveUserId(user), [user]);
 
   const { updateAICurrentPageContext } = useAIGuide();
@@ -249,19 +249,19 @@ export default function PrecificacaoPage() {
   }, [activeUserId]);
 
   const fetchCustosFixosParaPrecificacao = useCallback(async () => {
-    if (!user) { 
+    if (!user || !firebaseAuth?.currentUser) {
       setCustosFixosReaisConfiguradosPrecificacao(null);
       setIsLoadingCustosReaisPrecificacao(false);
       return;
     }
-
+  
     setIsLoadingCustosReaisPrecificacao(true);
     try {
-      const idToken = await user.getIdToken(); 
+      const idToken = await firebaseAuth.currentUser.getIdToken();
       if (!idToken) {
         throw new Error("ID Token não disponível para autenticação do serviço.");
       }
-      const custosFixosAtivos = await getAllCustosFixosConfigurados(user.uid, false); 
+      const custosFixosAtivos = await getAllCustosFixosConfigurados(user.uid, false);
       const totalCustosConfigurados = custosFixosAtivos.reduce((sum, custo) => sum + custo.valorMensal, 0);
       setCustosFixosReaisConfiguradosPrecificacao(totalCustosConfigurados);
     } catch (error) {
@@ -270,7 +270,7 @@ export default function PrecificacaoPage() {
     } finally {
       setIsLoadingCustosReaisPrecificacao(false);
     }
-  }, [user, toast]);
+  }, [user, firebaseAuth, toast]);
 
 
   useEffect(() => {
