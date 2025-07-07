@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -45,77 +46,87 @@ export default function VitrinePage() {
           </Card>
         ) : user ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-            <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
+            <div className="theme-consultor">
+              <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full h-full flex flex-col">
+                <CardHeader>
+                  <Lightbulb className="h-10 w-10 text-primary mb-3" />
+                  <CardTitle className="text-xl text-primary">Consultor IA</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                  <p className="text-sm text-muted-foreground">Diagnóstico e planejamento estratégico para o seu negócio.</p>
+                </CardContent>
+                <CardFooter>
+                  <Button asChild className="w-full">
+                    <Link href="/consultor">
+                      Acessar Consultor <ArrowRight className="ml-2" />
+                    </Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            </div>
+            
+            <div>
+              <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full h-full flex flex-col">
+                <CardHeader>
+                  <Briefcase className="h-10 w-10 text-primary mb-3" />
+                  <CardTitle className="text-xl text-primary">Maestro Operacional</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                  <p className="text-sm text-muted-foreground">Gerencie suas vendas, agenda, clientes e ordens de serviço.</p>
+                </CardContent>
+                <CardFooter>
+                  <Button asChild className="w-full">
+                    <Link href="/operacional">
+                      Acessar Operacional <ArrowRight className="ml-2" />
+                    </Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            </div>
+
+            <div className="theme-financeiro">
+              <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full h-full flex flex-col">
+                <CardHeader>
+                  <TrendingUp className="h-10 w-10 text-primary mb-3" />
+                  <CardTitle className="text-xl text-primary">Visão Clara Financeira</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                  <p className="text-sm text-muted-foreground">Controle suas finanças, defina metas e precifique com inteligência.</p>
+                </CardContent>
+                <CardFooter>
+                  <Button asChild className="w-full">
+                    <Link href="/financeiro">
+                      Acessar Financeiro <ArrowRight className="ml-2" />
+                    </Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            </div>
+          </div>
+        ) : (
+          <div className="theme-consultor">
+            <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full max-w-md flex flex-col">
               <CardHeader>
                 <Lightbulb className="h-10 w-10 text-primary mb-3" />
-                <CardTitle className="text-xl text-primary">Consultor IA</CardTitle>
+                <CardTitle className="text-xl text-primary">Diagnóstico Inicial Gratuito</CardTitle>
+                <CardDescription className="text-sm">Comece com uma análise estratégica para destravar o potencial do seu negócio.</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">Diagnóstico e planejamento estratégico para o seu negócio.</p>
+              <CardContent className="flex-grow">
+                <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
+                  <li>Descubra insights personalizados.</li>
+                  <li>Receba um direcionamento claro.</li>
+                  <li>Primeiro passo para o sucesso.</li>
+                </ul>
               </CardContent>
               <CardFooter>
                 <Button asChild className="w-full">
-                  <Link href="/consultor">
-                    Acessar Consultor <ArrowRight className="ml-2" />
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-             <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
-              <CardHeader>
-                <Briefcase className="h-10 w-10 text-primary mb-3" />
-                <CardTitle className="text-xl text-primary">Maestro Operacional</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">Gerencie suas vendas, agenda, clientes e ordens de serviço.</p>
-              </CardContent>
-              <CardFooter>
-                <Button asChild className="w-full">
-                  <Link href="/operacional">
-                    Acessar Operacional <ArrowRight className="ml-2" />
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-             <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
-              <CardHeader>
-                <TrendingUp className="h-10 w-10 text-primary mb-3" />
-                <CardTitle className="text-xl text-primary">Visão Clara Financeira</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">Controle suas finanças, defina metas e precifique com inteligência.</p>
-              </CardContent>
-              <CardFooter>
-                <Button asChild className="w-full">
-                  <Link href="/financeiro">
-                    Acessar Financeiro <ArrowRight className="ml-2" />
+                  <Link href="/consultor/consultation">
+                    Iniciar Diagnóstico Gratuito <ArrowRight className="ml-2" />
                   </Link>
                 </Button>
               </CardFooter>
             </Card>
           </div>
-        ) : (
-          <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full max-w-md">
-            <CardHeader>
-              <Lightbulb className="h-10 w-10 text-primary mb-3" />
-              <CardTitle className="text-xl text-primary">Diagnóstico Inicial Gratuito</CardTitle>
-              <CardDescription className="text-sm">Comece com uma análise estratégica para destravar o potencial do seu negócio.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
-                <li>Descubra insights personalizados.</li>
-                <li>Receba um direcionamento claro.</li>
-                <li>Primeiro passo para o sucesso.</li>
-              </ul>
-            </CardContent>
-            <CardFooter>
-              <Button asChild className="w-full">
-                <Link href="/consultor/consultation">
-                  Iniciar Diagnóstico Gratuito <ArrowRight className="ml-2" />
-                </Link>
-              </Button>
-            </CardFooter>
-          </Card>
         )}
       </main>
     </div>
