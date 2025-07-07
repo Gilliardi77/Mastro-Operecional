@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -13,28 +14,18 @@ import {
   DropdownMenuTrigger, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { useAuth } from '@/components/auth/auth-provider';
-import { getFirebaseInstances, signOut as firebaseSignOutUtil } from '@/lib/firebase';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "./ThemeToggle";
 
 export default function Header() {
-  const { user, isAuthenticating } = useAuth();
+  const { user, isAuthenticating, logout } = useAuth();
   const router = useRouter();
-  const { auth: firebaseAuthInstance } = getFirebaseInstances();
   const { toast } = useToast();
 
   const handleSignOut = async () => {
-    if (!firebaseAuthInstance) {
-      toast({
-        title: "Erro de Logout",
-        description: "Sistema de autenticação não está pronto.",
-        variant: "destructive",
-      });
-      return;
-    }
     try {
-      await firebaseSignOutUtil(firebaseAuthInstance);
+      await logout();
       toast({
         title: "Logout Realizado",
         description: "Você foi desconectado com sucesso.",
@@ -64,10 +55,10 @@ export default function Header() {
           <ArrowLeftCircle className="h-5 w-5" />
         </Button>
 
-        <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Maestro Operacional">
+        <Link href="/" className="flex items-center gap-2" aria-label="Página Inicial do Gestor Maestro">
           <Image
             src="/images/novalogo120x120.png"
-            alt="Maestro Operacional Logo"
+            alt="Gestor Maestro Logo"
             width={36}
             height={36}
             className="object-contain filter brightness-0 invert"
@@ -77,18 +68,18 @@ export default function Header() {
 
       <div className="flex items-center gap-2 sm:gap-3">
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-          <Link href="/produtos-servicos">
+          <Link href="/operacional">
             <Briefcase className="mr-1 h-4 w-4" /> Operacional
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild>
-            <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app" target="_blank">
-                <TrendingUp className="mr-1 h-4 w-4" /> Modulo Financeiro
+        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+            <Link href="/financeiro">
+                <TrendingUp className="mr-1 h-4 w-4" /> Financeiro
             </Link>
         </Button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-            <Link href="https://studio--maestro-ia-veiy3.us-central1.hosted.app/" target="_blank">
-                <Wand2 className="mr-1 h-4 w-4" /> Modulo Consultor
+            <Link href="/consultor">
+                <Wand2 className="mr-1 h-4 w-4" /> Consultor IA
             </Link>
         </Button>
         
@@ -122,30 +113,25 @@ export default function Header() {
                   <span>Painel Principal</span>
                 </Link>
               </DropdownMenuItem>
-               <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="/produtos-servicos">
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="sm:hidden">
+                <Link href="/operacional">
                     <Briefcase className="mr-2 h-4 w-4" /> Operacional
                 </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/financeiro/vendas">
-                    <History className="mr-2 h-4 w-4" />
-                    <span>Histórico de Vendas</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="https://studio--financeflow-ywslc.us-central1.hosted.app" target="_blank">
-                    <TrendingUp className="mr-2 h-4 w-4" /> Modulo Financeiro
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="sm:hidden">
+                <Link href="/financeiro">
+                    <TrendingUp className="mr-2 h-4 w-4" /> Financeiro
                 </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="sm:hidden">
-                <Link href="https://studio--maestro-ia-veiy3.us-central1.hosted.app/" target="_blank">
-                    <Wand2 className="mr-2 h-4 w-4" /> Modulo Consultor
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="sm:hidden">
+                <Link href="/consultor">
+                    <Wand2 className="mr-2 h-4 w-4" /> Consultor IA
                 </Link>
-                </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="sm:hidden" />
               <DropdownMenuItem asChild>
-                <a href="mailto:feedback@maestrooperacional.app?subject=Feedback sobre o Maestro Operacional" target="_blank" rel="noopener noreferrer">
+                <a href="mailto:feedback@gestormaestro.app?subject=Feedback sobre o Gestor Maestro" target="_blank" rel="noopener noreferrer">
                   <MessageSquareText className="mr-2 h-4 w-4" />
                   <span>Enviar Feedback</span>
                 </a>

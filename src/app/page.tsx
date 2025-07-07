@@ -4,14 +4,14 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, LayoutDashboard, Loader2, Lightbulb } from 'lucide-react'; 
+import { ArrowRight, LayoutDashboard, Loader2, Lightbulb, Briefcase, TrendingUp } from 'lucide-react'; 
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function VitrinePage() {
-  const { user, isAuthenticating, hasCompletedConsultation, checkingConsultationStatus } = useAuth();
+  const { user, isAuthenticating } = useAuth();
 
-  const isLoadingPage = isAuthenticating || checkingConsultationStatus;
+  const isLoadingPage = isAuthenticating;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] pt-16 pb-20 px-4">
@@ -29,13 +29,13 @@ export default function VitrinePage() {
           Bem-vindo ao Ecossistema Gestor Maestro
         </h1>
         <p className="text-md sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-          Transforme a gestão do seu negócio com nossa plataforma integrada. O Gestor Maestro oferece um diagnóstico empresarial estratégico, seguido de módulos operacionais e financeiros inteligentes, desenhados para otimizar processos, impulsionar resultados e proporcionar clareza para suas decisões.
+          Transforme a gestão do seu negócio com nossa plataforma integrada, unindo diagnóstico estratégico, controle operacional e visão financeira em um só lugar.
         </p>
       </header>
 
-      <main className="container mx-auto flex justify-center w-full max-w-md px-4">
+      <main className="container mx-auto flex justify-center w-full max-w-4xl px-4">
         {isLoadingPage ? (
-          <Card className="shadow-xl w-full">
+          <Card className="shadow-xl w-full max-w-md">
             <CardHeader>
               <div className="flex items-center justify-center mb-3">
                 <Loader2 className="h-10 w-10 text-primary animate-spin" />
@@ -43,44 +43,64 @@ export default function VitrinePage() {
               <CardTitle className="text-xl text-primary text-center">Carregando...</CardTitle>
               <CardDescription className="text-sm text-center">Verificando informações.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="h-12 bg-muted rounded-md animate-pulse"></div>
-            </CardContent>
-            <CardFooter>
-              <Button className="w-full" disabled>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Aguarde
-              </Button>
-            </CardFooter>
           </Card>
         ) : user ? (
-          <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
-            <CardHeader>
-              <LayoutDashboard className="h-10 w-10 text-primary mb-3" />
-              <CardTitle className="text-xl text-primary">Acessar seu Painel</CardTitle>
-              <CardDescription className="text-sm">Continue gerenciando seu negócio e acompanhando seu progresso.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
-                <li>Visão geral do seu negócio.</li>
-                <li>Acesso rápido aos módulos.</li>
-                <li>Acompanhamento de metas.</li>
-              </ul>
-            </CardContent>
-            <CardFooter>
-              <Button asChild className="w-full">
-                <Link href="/operacional">
-                  Ir para o Painel <ArrowRight className="ml-2" />
-                </Link>
-              </Button>
-            </CardFooter>
-          </Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+            <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
+              <CardHeader>
+                <Lightbulb className="h-10 w-10 text-primary mb-3" />
+                <CardTitle className="text-xl text-primary">Consultor IA</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">Diagnóstico e planejamento estratégico para o seu negócio.</p>
+              </CardContent>
+              <CardFooter>
+                <Button asChild className="w-full">
+                  <Link href="/consultor">
+                    Acessar Consultor <ArrowRight className="ml-2" />
+                  </Link>
+                </Button>
+              </CardFooter>
+            </Card>
+             <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
+              <CardHeader>
+                <Briefcase className="h-10 w-10 text-primary mb-3" />
+                <CardTitle className="text-xl text-primary">Maestro Operacional</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">Gerencie suas vendas, agenda, clientes e ordens de serviço.</p>
+              </CardContent>
+              <CardFooter>
+                <Button asChild className="w-full">
+                  <Link href="/operacional">
+                    Acessar Operacional <ArrowRight className="ml-2" />
+                  </Link>
+                </Button>
+              </CardFooter>
+            </Card>
+             <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
+              <CardHeader>
+                <TrendingUp className="h-10 w-10 text-primary mb-3" />
+                <CardTitle className="text-xl text-primary">Visão Clara Financeira</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">Controle suas finanças, defina metas e precifique com inteligência.</p>
+              </CardContent>
+              <CardFooter>
+                <Button asChild className="w-full">
+                  <Link href="/financeiro">
+                    Acessar Financeiro <ArrowRight className="ml-2" />
+                  </Link>
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
         ) : (
-          <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full">
+          <Card className="shadow-xl hover:shadow-2xl transition-shadow w-full max-w-md">
             <CardHeader>
               <Lightbulb className="h-10 w-10 text-primary mb-3" />
-              <CardTitle className="text-xl text-primary">Diagnóstico Business Maestro</CardTitle>
-              <CardDescription className="text-sm">Comece com uma análise estratégica gratuita para entender seu negócio e destravar seu potencial de crescimento com o apoio da nossa IA.</CardDescription>
+              <CardTitle className="text-xl text-primary">Diagnóstico Inicial Gratuito</CardTitle>
+              <CardDescription className="text-sm">Comece com uma análise estratégica para destravar o potencial do seu negócio.</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">

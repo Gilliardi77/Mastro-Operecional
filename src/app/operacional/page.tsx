@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/components/auth/auth-provider';
+import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -38,14 +38,14 @@ function QuickAccessCard({ title, description, href, icon: Icon, cta }: QuickAcc
   );
 }
 
-export default function Home() {
+export default function OperacionalHomePage() {
   const { user, isAuthenticating } = useAuth();
   const router = useRouter();
   const [greeting, setGreeting] = useState('');
 
   useEffect(() => {
     if (!isAuthenticating && !user) {
-      router.push('/login');
+      router.push('/login?redirect=/operacional');
     }
   }, [user, isAuthenticating, router]);
 
@@ -71,65 +71,58 @@ export default function Home() {
     {
       title: 'Dashboard Operacional',
       description: 'Visão geral das atividades diárias do seu negócio.',
-      href: '/produtos-servicos',
+      href: '/operacional/dashboard',
       icon: LayoutGrid,
       cta: 'Ver Dashboard',
     },
     {
-      title: 'Controle de Produção',
-      description: 'Acompanhe e gerencie o progresso das suas ordens de produção.',
-      href: '/produtos-servicos/producao',
-      icon: Settings,
-      cta: 'Acessar Produção',
-    },
-    {
       title: 'Nova Ordem de Serviço',
       description: 'Crie e gerencie ordens de serviço para seus clientes.',
-      href: '/produtos-servicos/atendimentos/novo',
+      href: '/operacional/atendimentos/novo',
       icon: FilePlus2,
       cta: 'Criar OS',
     },
     {
-      title: 'Balcão de Vendas',
-      description: 'Realize vendas rápidas de produtos e serviços.',
-      href: '/produtos-servicos/balcao',
+      title: 'Balcão de Vendas (PDV)',
+      description: 'Realize vendas rápidas de produtos e serviços no balcão.',
+      href: '/operacional/balcao',
       icon: ShoppingCart,
       cta: 'Ir para o Balcão',
     },
     {
+      title: 'Controle de Produção',
+      description: 'Acompanhe e gerencie o progresso das suas ordens de produção.',
+      href: '/operacional/producao',
+      icon: Settings,
+      cta: 'Acessar Produção',
+    },
+    {
       title: 'Agenda',
       description: 'Visualize e gerencie seus compromissos e agendamentos.',
-      href: '/produtos-servicos/agenda',
+      href: '/operacional/agenda',
       icon: CalendarDays,
       cta: 'Ver Agenda',
     },
     {
       title: 'Clientes',
       description: 'Cadastre e gerencie sua base de clientes.',
-      href: '/produtos-servicos/clientes',
+      href: '/operacional/clientes',
       icon: Users,
       cta: 'Gerenciar Clientes',
     },
     {
       title: 'Produtos e Serviços',
       description: 'Administre seu catálogo de produtos e tipos de serviços.',
-      href: '/produtos-servicos/produtos',
+      href: '/operacional/produtos',
       icon: PackageSearch,
-      cta: 'Ver Produtos/Serviços',
+      cta: 'Ver Catálogo',
     },
-    {
-      title: 'Dashboard Financeiro',
-      description: 'Acompanhe a saúde financeira do seu negócio.',
-      href: '/financeiro/dashboard',
-      icon: TrendingUp,
-      cta: 'Ver Dashboard Fin.',
-    },
-    {
-      title: 'Fechamento de Caixa',
-      description: 'Registre e confira o movimento financeiro diário.',
-      href: '/financeiro/fechamento-caixa',
+     {
+      title: 'Gestão de Caixa',
+      description: 'Realize aberturas, fechamentos e sangrias do seu caixa diário.',
+      href: '/operacional/caixa',
       icon: Calculator,
-      cta: 'Fechar Caixa',
+      cta: 'Gerenciar Caixa',
     },
   ];
 
@@ -139,6 +132,9 @@ export default function Home() {
         <h2 className="font-headline text-3xl font-bold tracking-tight text-primary sm:text-4xl">
           {greeting}, {user.displayName || 'pessoa usuária'}!
         </h2>
+        <p className="mt-2 text-lg text-muted-foreground">
+          Módulo Operacional: gerencie o dia a dia do seu negócio.
+        </p>
       </section>
 
       <section id="quick-access" aria-labelledby="quick-access-title">
@@ -148,7 +144,7 @@ export default function Home() {
           </h3>
           <p className="mt-2 text-muted-foreground">Comece a operar rapidamente com as principais funcionalidades.</p>
         </div>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           {quickAccessItems.map((item) => (
             <QuickAccessCard key={item.href} {...item} />
           ))}

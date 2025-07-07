@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -45,6 +46,16 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+
+    /* Sidebar variables */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 25 96% 55%;      /* Aligned with new primary */
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 25 96% 90%;       /* Lighter version of new primary for sidebar accents */
+    --sidebar-accent-foreground: 25 96% 15%; 
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 25 96% 58%;         /* Aligned with new primary */
   }
 
   .dark {
@@ -75,6 +86,16 @@ body {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    /* Sidebar dark variables */
+    --sidebar-background: 240 10% 3.9%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 25 96% 60%;
+    --sidebar-primary-foreground: 25 96% 15%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 25 96% 60%;
   }
 }
 
@@ -85,4 +106,33 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Estilos para destacar dias com agendamento no calendário */
+.day-with-appointment {
+  position: relative;
+}
+.day-with-appointment::after {
+  content: '';
+  position: absolute;
+  bottom: 4px; /* Ajuste a posição vertical do ponto */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px; /* Tamanho do ponto */
+  height: 6px; /* Tamanho do ponto */
+  border-radius: 50%;
+  background-color: hsl(var(--primary)); /* Cor do ponto para dias normais */
+}
+
+/* Ajuste para o ponto no dia selecionado */
+.rdp-day_selected.day-with-appointment::after {
+  background-color: hsl(var(--primary-foreground)); /* Cor do ponto em dias selecionados */
+}
+/* Ajuste para o ponto no dia de hoje, se não estiver selecionado */
+.rdp-day_today:not(.rdp-day_selected).day-with-appointment::after {
+  background-color: hsl(var(--accent-foreground)); /* Cor do ponto no dia de hoje (se não selecionado) */
+}
+/* Ajuste para o ponto no dia de hoje E selecionado (sobrepõe os anteriores se necessário) */
+.rdp-day_today.rdp-day_selected.day-with-appointment::after {
+  background-color: hsl(var(--primary-foreground)); /* Ponto no "hoje selecionado" - igual ao "selecionado" */
 }
