@@ -1,15 +1,5 @@
 {
   "projects": {
     "default": "gestor-maestro"
-  },
-  "targets": {
-    "gestor-maestro": {
-      "hosting": {
-        "operacionais": [
-          "gestor-maestro"
-        ]
-      }
-    }
-  },
-  "etags": {}
+  }
 }
