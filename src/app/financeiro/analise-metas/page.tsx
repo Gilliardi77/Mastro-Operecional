@@ -36,38 +36,12 @@ import {
 } from '@/components/ui/tooltip';
 import { getActiveUserId } from '@/lib/authUtils';
 import { getAllCustosFixosConfigurados } from '@/services/custoFixoConfiguradoService';
-import type { LancamentoFinanceiro as LancamentoFinanceiroDoc } from '@/schemas/lancamentoFinanceiroSchema';
+import type { LancamentoFinanceiro } from '@/schemas/lancamentoFinanceiroSchema';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-
-
-const metasSchema = z.object({
-  metaFaturamento: z.coerce.number().nonnegative().step(0.01).default(0),
-  metaLucro: z.coerce.number().nonnegative().step(0.01).default(0),
-  metaDespesaMaxima: z.coerce.number().nonnegative({ message: "Meta de despesa máxima deve ser não-negativa."}).step(0.01).optional().default(0),
-  margemDesejada: z.coerce.number().min(0).max(100).step(0.01).default(0),
-  margemContribuicaoMediaPercentual: z.coerce.number().min(0).max(100, { message: "Margem de contribuição deve ser entre 0 e 100." }).step(0.01).optional().default(0),
-  descricaoMeta: z.string().optional().default('').describe("Descrição geral ou foco para as metas do mês."),
-});
-
-export type MetasFormValues = z.infer<typeof metasSchema>;
-
-export interface MetasFinanceiras extends MetasFormValues {
-  userId: string;
-  anoMes: string;
-  criadoEm?: Timestamp;
-  atualizadoEm: Timestamp;
-}
-
-export interface LancamentoFinanceiro {
-  id: string;
-  valor: number;
-  tipo: 'RECEITA' | 'DESPESA' | 'receita' | 'despesa';
-  data: Date;
-  status: 'pago' | 'recebido' | 'pendente';
-}
+import { MetasFormSchema, type MetasFormValues, type MetasFinanceiras } from '@/schemas/metasFinanceirasSchema';
 
 const DIAS_UTEIS_PADRAO = 22;
 
@@ -89,7 +63,7 @@ export default function MetasFinanceirasForm() {
 
   const activeUserId = useMemo(() => getActiveUserId(user), [user]);
 
-  const defaultFormValues: MetasFormValues = useMemo(() => metasSchema.parse({}), []);
+  const defaultFormValues: MetasFormValues = useMemo(() => MetasFormSchema.parse({}), []);
   
   const anoMesParaSalvar: string = useMemo(() => {
     const dataRef = new Date();
@@ -98,7 +72,7 @@ export default function MetasFinanceirasForm() {
 
 
   const form = useForm<MetasFormValues>({
-    resolver: zodResolver(metasSchema),
+    resolver: zodResolver(MetasFormSchema),
     defaultValues: defaultFormValues
   });
 

@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -22,6 +22,9 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import type { OrdemServico, ItemOS } from '@/schemas/ordemServicoSchema';
 import type { Venda, ItemVenda } from '@/schemas/vendaSchema';
+import TabelaDinamica from '@/components/shared/TabelaDinamica';
+import { getActiveUserId } from '@/lib/authUtils';
+
 
 interface AgendamentoResumo {
   id: string;
@@ -54,6 +57,7 @@ export default function DashboardOperacionalPage() {
     osAtrasadas: 0,
   });
   const [loading, setLoading] = useState({ agenda: true, resumo: true });
+  const activeUserId = getActiveUserId(user);
   
   useEffect(() => {
     if (!isAuthenticating && !user) {
@@ -189,7 +193,7 @@ export default function DashboardOperacionalPage() {
         numeroVendasHoje, 
         clientesAtendidosHoje: clientesAtendidosIds.size, 
         osConcluidasHoje, 
-        produtosVendidosHoje,
+        produtosVendidosHoje, 
         osAtrasadas 
       });
 
@@ -224,6 +228,13 @@ export default function DashboardOperacionalPage() {
     { title: "Produtos Vendidos Hoje", value: resumoDiario.produtosVendidosHoje, icon: Package, color: "text-orange-500" },
     { title: "OS em Atraso", value: resumoDiario.osAtrasadas, icon: AlertTriangle, color: "text-red-500" },
   ];
+
+  const formatCurrencyForTable = (value: any): ReactNode => {
+    if (typeof value === 'number') {
+      return `R$ ${value.toFixed(2).replace('.', ',')}`;
+    }
+    return String(value);
+  };
 
   return (
     <div className="space-y-8">
@@ -301,10 +312,30 @@ export default function DashboardOperacionalPage() {
        <Card>
         <CardHeader>
             <CardTitle className="flex items-center gap-2"><ServerIcon className="h-5 w-5 text-primary"/> Histórico de Dados Recentes</CardTitle>
-            <CardDescription>Visualização de tabelas com dados recentes das principais coleções. (Em desenvolvimento)</CardDescription>
+            <CardDescription>Visualização das últimas ordens de serviço e vendas registradas.</CardDescription>
         </CardHeader>
-        <CardContent>
-            <p className="text-muted-foreground">Esta seção exibirá tabelas dinâmicas com as últimas OS, Vendas, etc.</p>
+        <CardContent className="space-y-6">
+            <TabelaDinamica 
+                nomeColecao="ordensServico"
+                userId={activeUserId}
+                titulo="Últimas Ordens de Serviço"
+                colunasOrdenadas={['numeroOS', 'clienteNome', 'status', 'valorTotal']}
+                formatadoresDeColuna={{ valorTotal: formatCurrencyForTable }}
+                orderByField="createdAt"
+                orderByDirection="desc"
+            />
+            <TabelaDinamica 
+                nomeColecao="vendas"
+                userId={activeUserId}
+                titulo="Últimas Vendas"
+                colunasOrdenadas={['dataVenda', 'clienteNome', 'totalVenda', 'formaPagamento']}
+                formatadoresDeColuna={{ 
+                    totalVenda: formatCurrencyForTable,
+                    dataVenda: (data) => data instanceof Date ? format(data, "dd/MM/yyyy HH:mm") : String(data)
+                }}
+                orderByField="dataVenda"
+                orderByDirection="desc"
+            />
         </CardContent>
       </Card>
     </div>

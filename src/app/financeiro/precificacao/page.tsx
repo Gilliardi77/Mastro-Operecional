@@ -22,9 +22,9 @@ import { getAllCustosFixosConfigurados } from '@/services/custoFixoConfiguradoSe
 import { db } from '@/lib/firebase'; 
 import { doc, getDoc } from 'firebase/firestore'; 
 import { getYear, getMonth } from 'date-fns'; 
-import type { MetasFinanceiras as MetasFinanceirasTipo } from '@/app/financeiro/analise-metas/page'; 
 import { useAIGuide } from '@/contexts/AIGuideContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { MetasFinanceiras as MetasFinanceirasTipo } from '@/schemas/metasFinanceirasSchema';
 
 const pricingFormSchema = z.object({
   productName: z.string().min(3, { message: "Nome do produto/serviço deve ter pelo menos 3 caracteres." }),
