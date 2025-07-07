@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { LayoutGrid, History, Brain, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface DashboardItemProps {
@@ -40,7 +40,7 @@ const DashboardItem: React.FC<DashboardItemProps> = ({ title, description, icon:
 );
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { user, isAuthenticating: loading } = useAuth();
 
   if (loading) {
     return (
