@@ -1,2 +1,15 @@
-// Esta página foi movida para /src/app/financeiro/dashboard-geral/layout.tsx
-// e este arquivo pode ser excluído.
+
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Dashboard - Maestro Operacional',
+  description: 'Visão geral das suas operações.',
+};
+
+export default function DashboardOperacionalLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <>{children}</>;
+}
