@@ -92,7 +92,7 @@ export default function PrecificacaoPage() {
   const { user, isAuthenticating: authLoading } = useAuth();
   const activeUserId = useMemo(() => getActiveUserId(user), [user]);
 
-  const { updateAICurrentAppContext } = useAIGuide();
+  const { updateAICurrentPageContext } = useAIGuide();
 
   const pricingForm = useForm<PricingFormValues>({
     resolver: zodResolver(pricingFormSchema),
@@ -124,12 +124,12 @@ export default function PrecificacaoPage() {
 
    useEffect(() => {
     const subscription = pricingForm.watch((value) => {
-        updateAICurrentAppContext({
+        updateAICurrentPageContext({
             formSnapshotJSON: JSON.stringify(value),
         });
     });
     return () => subscription.unsubscribe();
-  }, [pricingForm, updateAICurrentAppContext]);
+  }, [pricingForm, updateAICurrentPageContext]);
 
   useEffect(() => {
     const handleAIFill = (event: Event) => {

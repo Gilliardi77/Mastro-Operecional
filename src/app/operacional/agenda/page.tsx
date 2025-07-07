@@ -58,7 +58,8 @@ import {
   type AppointmentUpdateData
 } from '@/schemas/appointmentSchema';
 import { createOrdemServico, PaymentStatusEnum, type OrdemServicoCreateData } from '@/services/ordemServicoService';
-import { createOrdemProducao, type OrdemProducaoCreateData, type OrdemProducaoStatus } from '@/schemas/ordemProducaoSchema';
+import { createOrdemProducao } from '@/services/ordemProducaoService';
+import { type OrdemProducaoCreateData, type OrdemProducaoStatus } from '@/schemas/ordemProducaoSchema';
 import { createLancamentoFinanceiro, type LancamentoFinanceiroCreateData } from '@/services/lancamentoFinanceiroService';
 
 
