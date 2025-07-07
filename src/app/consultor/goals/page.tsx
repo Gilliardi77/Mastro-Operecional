@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,7 +17,7 @@ import { generateGoalsAnalysis } from "@/ai/flows/generate-goals-analysis-flow";
 import type { GenerateGoalsAnalysisInput, GenerateGoalsAnalysisOutput } from "@/ai/flows/generate-goals-analysis-flow";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -254,9 +255,9 @@ export default function StrategicPlanningPage() {
       <div className="w-full max-w-5xl space-y-8">
         <div className="flex justify-between items-center">
           <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard">
+            <Link href="/consultor">
               <ChevronLeft className="mr-2 h-4 w-4" />
-              Voltar para o Dashboard
+              Voltar para o Módulo Consultor
             </Link>
           </Button>
         </div>
