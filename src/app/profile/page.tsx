@@ -57,7 +57,7 @@ export default function ProfilePage() {
     if (isMountedRef.current) setProfileLoading(true);
     if (isMountedRef.current) setPageError(null);
     try {
-      const idToken = await firebaseAuth.currentUser.getIdToken();
+      const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
       const profileData = await fetchUserProfileServerAction(idToken);
       if (isMountedRef.current) {
         if (profileData) {
@@ -93,7 +93,7 @@ export default function ProfilePage() {
     setIsSavingCompany(true);
     if (isMountedRef.current) setPageError(null);
     try {
-      const idToken = await firebaseAuth.currentUser.getIdToken();
+      const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
       const result = await saveCompanyProfileServerAction(idToken, data);
       if (isMountedRef.current) {
         if (result.success) {
@@ -123,7 +123,7 @@ export default function ProfilePage() {
     setIsSavingPersonal(true);
     if (isMountedRef.current) setPageError(null);
     try {
-      const idToken = await firebaseAuth.currentUser.getIdToken();
+      const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
       const result = await savePersonalDisplayNameServerAction(idToken, data);
       if (isMountedRef.current) {
         if (result.success) {
