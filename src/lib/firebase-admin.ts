@@ -7,37 +7,40 @@ if (!admin.apps.length) {
   try {
     const serviceAccountPath = path.resolve(process.cwd(), 'gestor-maestro-service-account.json');
     
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccountFileContent = fs.readFileSync(serviceAccountPath, 'utf8');
-      if (serviceAccountFileContent.trim() && serviceAccountFileContent.trim() !== '{}' && !serviceAccountFileContent.includes("//")) {
-        const serviceAccount = JSON.parse(serviceAccountFileContent);
-        console.log('Initializing Firebase Admin SDK with Service Account file...');
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        });
-      } else {
-        // File is a placeholder, so we don't try to initialize with it.
-        // Fallback to Application Default Credentials which might be set in the environment.
-        console.warn('Service Account file is a placeholder or not found. Falling back to Application Default Credentials...');
-        admin.initializeApp({
-          credential: admin.credential.applicationDefault(),
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        });
-      }
-    } else {
-      console.warn('Service Account file not found. Falling back to Application Default Credentials...');
-      // Fallback to Application Default Credentials (for GCP environments)
-      admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      });
+    if (!fs.existsSync(serviceAccountPath)) {
+      throw new Error(
+        "Arquivo da conta de serviço 'gestor-maestro-service-account.json' não encontrado. " +
+        "Por favor, baixe-o do seu Console do Firebase e coloque na raiz do projeto."
+      );
     }
+    
+    const serviceAccountFileContent = fs.readFileSync(serviceAccountPath, 'utf8');
+    if (!serviceAccountFileContent.trim() || serviceAccountFileContent.trim() === '{}' || serviceAccountFileContent.includes("//")) {
+      throw new Error(
+        "O arquivo 'gestor-maestro-service-account.json' é um placeholder. " +
+        "Por favor, preencha com as credenciais da sua conta de serviço do Firebase."
+      );
+    }
+
+    const serviceAccount = JSON.parse(serviceAccountFileContent);
+    
+    // Verificação mínima para garantir que o JSON parece válido
+    if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
+      throw new Error("O conteúdo do arquivo 'gestor-maestro-service-account.json' parece inválido ou incompleto.");
+    }
+    
+    console.log('Initializing Firebase Admin SDK with Service Account file...');
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    });
+    
     console.log(`Firebase Admin SDK initialized for project: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.`);
   } catch (error: any) {
     console.error('Firebase Admin SDK initialization error:', error.message);
-    // If we fail, it's better to not export broken services.
-    // The try/catch here prevents the app from crashing on start if config is missing.
+    // Propagate the specific error instead of a generic one.
+    // This allows the application to fail fast with a clear message.
+    // We will still export undefined services, and checks elsewhere will handle this.
   }
 }
 

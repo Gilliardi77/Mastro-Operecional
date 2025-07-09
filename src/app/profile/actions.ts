@@ -6,17 +6,19 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { UserProfileDataSchema, type UserProfileData, type UserProfileUpsertData } from '@/schemas/userProfileSchema';
 import { PersonalInfoFormSchema, CompanyInfoFormSchema } from './schemas';
 import { cookies } from 'next/headers';
+import * as admin from 'firebase-admin';
 
 // UID seguro a partir do cookie da sessão
 async function getVerifiedUid(): Promise<string> {
-  if (!adminAuth) {
-    console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado.");
-    throw new Error("Serviço de autenticação do servidor indisponível. Tente novamente mais tarde.");
+  // Verificação explícita no início da função.
+  if (!adminAuth || !admin.apps.length) {
+    console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado. Verifique as credenciais da conta de serviço no servidor.");
+    throw new Error("Serviço de autenticação do servidor indisponível. Verifique as credenciais da conta de serviço (service account).");
   }
-  
+
   const sessionCookie = (await cookies()).get('__session')?.value;
   if (!sessionCookie) {
-    throw new Error("Cookie de sessão ('__session') não encontrado. O navegador pode não ter enviado a autenticação para o servidor. Por favor, faça login novamente.");
+    throw new Error("Sessão não encontrada ou expirada. Por favor, faça login novamente.");
   }
 
   try {
