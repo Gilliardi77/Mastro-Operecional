@@ -164,6 +164,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
         try {
+          // It's good practice to force a token refresh to ensure it's valid
           await firebaseUser.getIdToken(true); 
           const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
           
@@ -177,9 +178,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setSubscriptionStatus(status);
           await checkConsultationStatus(firebaseUser.uid);
           
-        } catch (error) {
+        } catch (error: any) {
           console.error("Auth session validation failed, forcing logout.", error);
-          await logout(false); 
+          await logout(false); // Force logout on token error
         }
       } else {
         setUser(null);
@@ -197,16 +198,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const userCredential = await signInWithEmailAndPassword(authInstance, email, pass);
       toast({ title: "Autenticado", description: "Verificando seu acesso..." });
-      // The onAuthStateChanged listener handles the rest, including access checks and redirection.
+      
       const redirectPath = new URLSearchParams(window.location.search).get('redirect') || '/';
       router.push(redirectPath);
     } catch (error: any) {
       console.error("Sign-in error:", error);
       let errorMessage = "Ocorreu um erro desconhecido durante o login.";
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+      
+      // Catch the specific API key error
+      if (error.code === 'auth/api-key-not-valid') {
+        errorMessage = "A chave de API do Firebase é inválida. Verifique sua configuração no arquivo .env.local.";
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
         errorMessage = "Email ou senha incorretos.";
       }
-      toast({ title: "Falha no Login", description: errorMessage, variant: "destructive" });
+      
+      toast({ title: "Falha no Login", description: errorMessage, variant: "destructive", duration: 7000 });
       throw new Error(errorMessage);
     }
   }, [authInstance, router, toast]);
