@@ -12,7 +12,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { getFirebaseInstances } from '@/lib/firebase';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import type { Assinatura } from '@/schemas/assinaturaSchema';
@@ -112,7 +112,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [checkingConsultationStatus, setCheckingConsultationStatus] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('loading');
   const router = useRouter();
-  const pathname = usePathname();
   const { toast } = useToast();
 
   const { auth: authInstance, db } = getFirebaseInstances();
@@ -131,8 +130,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        setUser(null);
        setSubscriptionStatus('inactive');
        setHasCompletedConsultation(null);
-       // Limpar o estado relacionado ao usuário, se houver
-       // Ex: sessionStorage.clear();
        router.push('/login');
     }
   }, [authInstance, router, toast]);
@@ -165,37 +162,54 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser: FirebaseUser | null) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
-        // We no longer force a logout here if the checks fail.
-        // We will optimistically set the user and let protected components/actions handle access denial.
-        // This prevents logging out the user if, for example, Firestore is temporarily down.
-        const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
-        
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          role,
-          accessibleModules,
-        });
-        setSubscriptionStatus(status);
-        await checkConsultationStatus(firebaseUser.uid);
+        try {
+          // Proactively get a fresh token to validate the session on the client-side.
+          // This will throw an error if the session is invalid (e.g., token revoked, user disabled).
+          await firebaseUser.getIdToken(true);
+
+          // If token is valid, proceed with access checks and setting user state.
+          const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
+          
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            role,
+            accessibleModules,
+          });
+          setSubscriptionStatus(status);
+          await checkConsultationStatus(firebaseUser.uid);
+        } catch (error: any) {
+          // If getting the token fails, the session is corrupted or invalid.
+          // Force a clean logout.
+          console.error("Auth session validation failed, forcing logout:", error);
+          toast({
+            title: "Sua sessão é inválida",
+            description: "Por favor, faça login novamente para continuar.",
+            variant: "destructive",
+          });
+          await logout(false); // Call logout without showing a second toast
+        } finally {
+          setIsAuthenticating(false);
+        }
       } else {
+        // No user is signed in.
         setUser(null);
         setSubscriptionStatus('inactive');
         setHasCompletedConsultation(null);
+        setIsAuthenticating(false);
       }
-      setIsAuthenticating(false);
     });
+
     return () => unsubscribe();
-  }, [authInstance, db, toast, logout, pathname, checkConsultationStatus]);
+  }, [authInstance, db, toast, logout, checkConsultationStatus]);
   
 
   const signIn = useCallback(async (email: string, pass: string) => {
     if (!authInstance) throw new Error("Firebase Auth não inicializado.");
     try {
-      const userCredential = await signInWithEmailAndPassword(authInstance, email, pass);
+      await signInWithEmailAndPassword(authInstance, email, pass);
       toast({ title: "Autenticado", description: "Verificando seu acesso..." });
-      
       const redirectPath = new URLSearchParams(window.location.search).get('redirect') || '/';
       router.push(redirectPath);
     } catch (error: any) {
