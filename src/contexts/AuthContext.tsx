@@ -117,7 +117,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!authInstance) return;
     try {
       await signOut(authInstance);
-      await fetch('/api/auth/session', { method: 'DELETE' });
+      // Client-side logout is enough, onIdTokenChanged will handle server session invalidation.
       if (showToast) {
         toast({ title: "Sessão encerrada", description: "Você foi desconectado." });
       }
@@ -161,34 +161,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const unsubscribe = onIdTokenChanged(authInstance, async (firebaseUser) => {
       setIsAuthenticating(true);
-      setIsSessionReady(false); // Reset on every auth state change
+      setIsSessionReady(false); 
       if (firebaseUser) {
-        const token = await firebaseUser.getIdToken();
-        const response = await fetch('/api/auth/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
-        });
-        
-        if (!response.ok) {
-            console.error("Falha ao criar a sessão no servidor. Deslogando...");
-            await logout(false);
-            setIsAuthenticating(false);
-            return;
+        try {
+            const token = await firebaseUser.getIdToken();
+            const response = await fetch('/api/auth/session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token }),
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.details || `Falha ao criar sessão no servidor (status ${response.status}).`);
+            }
+            setIsSessionReady(true);
+
+            const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              role,
+              accessibleModules,
+            });
+            setSubscriptionStatus(status);
+            await checkConsultationStatus(firebaseUser.uid);
+        } catch (error: any) {
+            console.error("Erro de sincronização de sessão ou acesso:", error.message);
+            // If session creation fails, it's a critical auth issue. Logout user.
+            await logout(false); 
         }
-
-        setIsSessionReady(true); // Signal that the server session is ready
-
-        const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          role,
-          accessibleModules,
-        });
-        setSubscriptionStatus(status);
-        await checkConsultationStatus(firebaseUser.uid);
       } else {
         await fetch('/api/auth/session', { method: 'DELETE' });
         setUser(null);
@@ -206,22 +209,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!authInstance) throw new Error("Firebase Auth não inicializado.");
     setIsLoggingIn(true);
     try {
-      // Don't await here in the same way, let onIdTokenChanged handle the post-login logic
       await signInWithEmailAndPassword(authInstance, email, pass);
+      // onIdTokenChanged will handle the rest, including setting isLoggingIn to false.
     } catch (error: any) {
       console.error("Sign-in error:", error);
       let errorMessage = "Ocorreu um erro desconhecido durante o login.";
       
       if (error.code === 'auth/api-key-not-valid') {
         errorMessage = "A chave de API do Firebase é inválida. Verifique sua configuração no arquivo .env.local.";
-      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         errorMessage = "Email ou senha incorretos.";
       } else if (error.code === 'auth/invalid-session-cookie') {
         errorMessage = "Sua sessão é inválida. Por favor, tente novamente.";
       }
       
       toast({ title: "Falha no Login", description: errorMessage, variant: "destructive", duration: 7000 });
-      setIsLoggingIn(false);
+      setIsLoggingIn(false); // Make sure to turn off loading on error
       throw new Error(errorMessage);
     }
   }, [authInstance, toast]);

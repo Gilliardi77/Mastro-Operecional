@@ -1,4 +1,3 @@
-
 # Guia de Arquitetura de Backend - Ecossistema Gestor Maestro
 -->
 

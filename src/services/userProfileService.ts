@@ -1,4 +1,3 @@
-
 // src/services/userProfileService.ts
 import { getFirebaseInstances } from '@/lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp, type FirestoreError } from 'firebase/firestore';
