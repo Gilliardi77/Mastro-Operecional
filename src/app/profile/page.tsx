@@ -29,6 +29,7 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [pageError, setPageError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
+  const [isAuthError, setIsAuthError] = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -54,8 +55,11 @@ export default function ProfilePage() {
       if (isMountedRef.current) setProfileLoading(false);
       return;
     }
-    if (isMountedRef.current) setProfileLoading(true);
-    if (isMountedRef.current) setPageError(null);
+    if (isMountedRef.current) {
+        setProfileLoading(true);
+        setPageError(null);
+        setIsAuthError(false);
+    }
     try {
       const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
       const profileData = await fetchUserProfileServerAction(idToken);
@@ -71,28 +75,27 @@ export default function ProfilePage() {
       console.error("[ProfilePage] Erro ao buscar perfil:", err);
       const errorMessage = err.message || "Não foi possível carregar os dados do seu perfil.";
       if (isMountedRef.current) {
-        if (!errorMessage.includes("PERMISSION_DENIED") && !errorMessage.includes("permission-denied") && !errorMessage.includes("Admin SDK não inicializado")) {
-          setPageError(errorMessage);
-        }
-        toast({
-          title: "Erro ao Carregar Perfil",
-          description: errorMessage,
-          variant: "destructive",
-        });
-
-        // If the error indicates a bad session, force a logout to clear state
         if (
             errorMessage.includes("Sua sessão") ||
             errorMessage.includes("token inválido") ||
             errorMessage.includes("Não foi possível verificar sua identidade")
         ) {
-           logout();
+           setIsAuthError(true);
+           setPageError("Sua sessão de autenticação parece estar inválida. Por favor, saia e entre novamente para continuar.");
+        } else if (!errorMessage.includes("PERMISSION_DENIED") && !errorMessage.includes("permission-denied") && !errorMessage.includes("Admin SDK não inicializado")) {
+           setPageError(errorMessage);
         }
+        
+        toast({
+          title: "Erro ao Carregar Perfil",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
     } finally {
       if (isMountedRef.current) setProfileLoading(false);
     }
-  }, [user, firebaseAuth, companyForm, personalForm, toast, logout]);
+  }, [user, firebaseAuth, companyForm, personalForm, toast]);
 
   const onCompanySubmit = async (data: UserProfileFirestoreData) => {
     if (!user || !firebaseAuth?.currentUser) {
@@ -123,7 +126,7 @@ export default function ProfilePage() {
             errorMessage.includes("token inválido") ||
             errorMessage.includes("Não foi possível verificar sua identidade")
         ) {
-           logout();
+           setIsAuthError(true);
         }
       }
     } finally {
@@ -164,7 +167,7 @@ export default function ProfilePage() {
             errorMessage.includes("token inválido") ||
             errorMessage.includes("Não foi possível verificar sua identidade")
         ) {
-           logout();
+           setIsAuthError(true);
         }
       }
     } finally {
@@ -211,6 +214,25 @@ export default function ProfilePage() {
   }
   
   const isLoadingContent = profileLoading && user;
+
+  if (isAuthError) {
+    return (
+        <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
+            <Card className="w-full max-w-lg text-center">
+                 <CardHeader>
+                    <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+                    <CardTitle className="text-destructive">Erro de Sessão</CardTitle>
+                    <CardDescription>{pageError || "Ocorreu um erro com sua autenticação."}</CardDescription>
+                </CardHeader>
+                <CardFooter>
+                    <Button onClick={() => logout()} className="w-full">
+                        Sair e Tentar Novamente
+                    </Button>
+                </CardFooter>
+            </Card>
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-8rem)] bg-gradient-to-b from-background to-secondary/10 flex flex-col items-center pt-16 pb-24 px-4">
@@ -266,7 +288,7 @@ export default function ProfilePage() {
             <CardDescription>Gerencie as informações do seu negócio.</CardDescription>
           </CardHeader>
           
-          {pageError && !isLoadingContent && ( 
+          {pageError && !isLoadingContent && !isAuthError && ( 
             <CardContent>
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
