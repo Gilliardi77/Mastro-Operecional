@@ -22,7 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 type PersonalInfoFormValues = z.infer<typeof PersonalInfoFormSchema>;
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, firebaseAuth } = useAuth();
+  const { user, loading: authLoading, firebaseAuth, logout } = useAuth();
   const [profileLoading, setProfileLoading] = useState(true);
   const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [isSavingPersonal, setIsSavingPersonal] = useState(false);
@@ -79,11 +79,20 @@ export default function ProfilePage() {
           description: errorMessage,
           variant: "destructive",
         });
+
+        // If the error indicates a bad session, force a logout to clear state
+        if (
+            errorMessage.includes("Sua sessão") ||
+            errorMessage.includes("token inválido") ||
+            errorMessage.includes("Não foi possível verificar sua identidade")
+        ) {
+           logout();
+        }
       }
     } finally {
       if (isMountedRef.current) setProfileLoading(false);
     }
-  }, [user, firebaseAuth, companyForm, personalForm, toast]);
+  }, [user, firebaseAuth, companyForm, personalForm, toast, logout]);
 
   const onCompanySubmit = async (data: UserProfileFirestoreData) => {
     if (!user || !firebaseAuth?.currentUser) {
@@ -109,6 +118,13 @@ export default function ProfilePage() {
       if (isMountedRef.current) {
         setPageError(errorMessage);
         toast({ title: "Erro ao Salvar", description: errorMessage, variant: "destructive" });
+        if (
+            errorMessage.includes("Sua sessão") ||
+            errorMessage.includes("token inválido") ||
+            errorMessage.includes("Não foi possível verificar sua identidade")
+        ) {
+           logout();
+        }
       }
     } finally {
       if (isMountedRef.current) setIsSavingCompany(false);
@@ -143,6 +159,13 @@ export default function ProfilePage() {
       if (isMountedRef.current) {
         setPageError(errorMessage);
         toast({ title: "Erro ao Salvar", description: errorMessage, variant: "destructive" });
+        if (
+            errorMessage.includes("Sua sessão") ||
+            errorMessage.includes("token inválido") ||
+            errorMessage.includes("Não foi possível verificar sua identidade")
+        ) {
+           logout();
+        }
       }
     } finally {
       if (isMountedRef.current) setIsSavingPersonal(false);
@@ -157,7 +180,7 @@ export default function ProfilePage() {
       companyForm.reset(defaultCompanyValues);
       personalForm.reset({ displayName: "" });
     }
-  }, [user, firebaseAuth, authLoading, fetchProfile, companyForm, personalForm]);
+  }, [user, firebaseAuth, authLoading, fetchProfile]);
 
 
   if (authLoading && !user) {
