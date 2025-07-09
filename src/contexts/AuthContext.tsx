@@ -24,6 +24,7 @@ export interface User {
   email: string | null;
   displayName: string | null;
   role: 'user' | 'admin' | 'vip';
+  accessibleModules: string[];
 }
 
 type SubscriptionStatus = 'loading' | 'active' | 'inactive' | 'privileged';
@@ -48,13 +49,21 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const performAccessCheck = async (uid: string, db: any): Promise<{ status: SubscriptionStatus; role: User['role'] }> => {
-    if (!uid || !db) return { status: 'inactive', role: 'user' };
+const performAccessCheck = async (uid: string, db: any): Promise<{ status: SubscriptionStatus; role: User['role']; accessibleModules: string[] }> => {
+    if (!uid || !db) return { status: 'inactive', role: 'user', accessibleModules: [] };
+    
+    let profileRole: User['role'] = 'user';
+    let profileModules: string[] | undefined;
 
     try {
         const profile = await getUserProfile(uid);
-        if (profile?.role === 'admin' || profile?.role === 'vip') {
-            return { status: 'privileged', role: profile.role || 'vip' };
+        if (profile) {
+            profileRole = profile.role || 'user';
+            profileModules = profile.accessibleModules;
+        }
+
+        if (profileRole === 'admin' || profileRole === 'vip') {
+            return { status: 'privileged', role: profileRole, accessibleModules: ['operacional', 'financeiro', 'consultor'] };
         }
     } catch (e) {
         console.error("Error checking user role, proceeding as standard user.", e);
@@ -67,14 +76,16 @@ const performAccessCheck = async (uid: string, db: any): Promise<{ status: Subsc
             const subData = subSnap.data() as Assinatura;
             const isExpired = (subData.expiracao as Timestamp).toDate() < new Date();
             if (subData.status === 'ativa' && !isExpired) {
-                return { status: 'active', role: 'user' };
+                // Default to all modules if not specified for a subscribed user
+                const modules = profileModules || ['operacional', 'financeiro', 'consultor'];
+                return { status: 'active', role: profileRole, accessibleModules: modules };
             }
         }
     } catch (e) {
         console.error("Error checking subscription status.", e);
     }
 
-    return { status: 'inactive', role: 'user' };
+    return { status: 'inactive', role: profileRole, accessibleModules: [] };
 };
 
 
@@ -136,7 +147,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser: FirebaseUser | null) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
-        const { status, role } = await performAccessCheck(firebaseUser.uid, db);
+        const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, db);
         if (status === 'inactive') {
           if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) { // Avoid toast loop on public pages
              toast({ title: "Acesso Negado", description: "Sua assinatura não está ativa. Faça login para revalidar.", variant: "destructive", duration: 7000 });
@@ -148,6 +159,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             email: firebaseUser.email,
             displayName: firebaseUser.displayName,
             role,
+            accessibleModules,
           });
           setSubscriptionStatus(status);
           await checkConsultationStatus(firebaseUser.uid);

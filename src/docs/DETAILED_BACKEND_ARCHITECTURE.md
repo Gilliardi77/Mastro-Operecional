@@ -36,6 +36,7 @@ A seguir, a lista de coleções utilizadas no Firestore, seus propósitos, campo
     *   `companyEmail` (string, opcional): Email comercial. Ex: "contato@acme.com".
     *   `personalPhoneNumber` (string, opcional): Telefone pessoal/WhatsApp do usuário. Ex: "(11) 98888-7777".
     *   `role` (enum: 'user' | 'admin' | 'vip', opcional, default: 'user'): Papel do usuário no sistema. Controla o acesso privilegiado.
+    *   `accessibleModules` (array de strings, opcional): Lista de módulos que o usuário pode acessar. Ex: `["operacional", "financeiro"]`. Essencial para controle de acesso granular.
     *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema): Data de criação do perfil.
     *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema): Data da última atualização.
 *   **Operações e Atores:**
@@ -45,7 +46,7 @@ A seguir, a lista de coleções utilizadas no Firestore, seus propósitos, campo
     *   **READ:**
         *   **Ator:** Usuário (em todos os apps para exibir informações de perfil e verificar permissões).
     *   **UPDATE:**
-        *   **Ator:** Usuário (via página de Perfil no app Diagnóstico Maestro, e potencialmente em outros apps). A `role` só deve ser alterada por um processo administrativo.
+        *   **Ator:** Usuário (via página de Perfil no app Diagnóstico Maestro, e potencialmente em outros apps). A `role` e `accessibleModules` só devem ser alterados por um processo administrativo.
     *   **DELETE:**
         *   **Ator:** Geralmente não permitido pelo usuário final; pode ser uma operação administrativa.
 *   **Aplicativos que Utilizam:**
@@ -59,8 +60,10 @@ A seguir, a lista de coleções utilizadas no Firestore, seus propósitos, campo
       allow create: if docIdIsSelf(userIdDoc) &&
                        (request.resource.data.userId == null || request.resource.data.userId == userIdDoc); // userId no corpo opcional e deve ser o mesmo
       allow read: if isSignedIn() && request.auth.uid == userIdDoc;
-      // Impede que o usuário altere seu próprio 'role'. Isso deve ser feito pelo backend com permissões de admin.
-      allow update: if docIdIsSelf(userIdDoc) && request.resource.data.role == resource.data.role;
+      // Impede que o usuário altere seu próprio 'role' ou 'accessibleModules'. Isso deve ser feito pelo backend com permissões de admin.
+      allow update: if docIdIsSelf(userIdDoc) && 
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.accessibleModules == resource.data.accessibleModules;
       // allow delete: if docIdIsSelf(userIdDoc); // Descomentar com cautela
     }
     ```

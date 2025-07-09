@@ -15,6 +15,7 @@ export const UserProfileDataSchema = BaseSchema.extend({
   // O campo role é opcional. Se não existir no documento do Firestore,
   // a lógica do AuthProvider irá tratá-lo como 'user'.
   role: z.enum(['user', 'admin', 'vip']).optional().describe('O papel do usuário no sistema para controle de acesso.'),
+  accessibleModules: z.array(z.string()).optional().describe("Lista de módulos que o usuário pode acessar, ex: ['operacional', 'financeiro']."),
   // createdAt e updatedAt vêm do BaseSchema e serão objetos Date
 });
 export type UserProfileData = z.infer<typeof UserProfileDataSchema>;
@@ -31,5 +32,6 @@ export const UserProfileUpsertDataSchema = z.object({
   personalPhoneNumber: z.string().optional().nullable(),
   // Permitir que a role seja definida durante o upsert (por um processo administrativo)
   role: z.enum(['user', 'admin', 'vip']).optional(),
+  accessibleModules: z.array(z.string()).optional(),
 }).passthrough();
 export type UserProfileUpsertData = z.infer<typeof UserProfileUpsertDataSchema>;
