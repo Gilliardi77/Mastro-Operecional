@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Lightbulb, Send, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
@@ -35,6 +36,7 @@ const QuickSuggestions = ({ onSuggestionClick }: { onSuggestionClick: (query: st
 
 
 export default function ContextualAIGuide() {
+  const pathname = usePathname();
   const {
     isAIGuideOpen,
     toggleAIGuide,
@@ -50,6 +52,7 @@ export default function ContextualAIGuide() {
   const { toast } = useToast(); 
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
 
+  const hiddenPaths = ['/login', '/register', '/profile'];
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -145,7 +148,7 @@ export default function ContextualAIGuide() {
   }, [isAILoading]);
 
 
-  if (!currentAppContext.pageName) {
+  if (hiddenPaths.includes(pathname) || !currentAppContext.pageName) {
     return null;
   }
 
