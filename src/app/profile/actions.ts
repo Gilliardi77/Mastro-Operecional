@@ -14,7 +14,7 @@ async function getVerifiedUid(): Promise<string> {
     throw new Error("Serviço de autenticação do servidor indisponível. Tente novamente mais tarde.");
   }
   
-  const sessionCookie = cookies().get('__session')?.value;
+  const sessionCookie = (await cookies()).get('__session')?.value;
   if (!sessionCookie) {
     throw new Error("Sessão não encontrada ou expirada. Por favor, faça login novamente.");
   }
@@ -63,7 +63,7 @@ export async function fetchUserProfileServerAction(): Promise<Partial<UserProfil
     const docRef = adminDb.collection('usuarios').doc(uid);
     const docSnap = await docRef.get();
 
-    if (docSnap.exists()) {
+    if (docSnap.exists) {
       const rawData = docSnap.data();
       const dataWithId = { ...rawData, id: uid, userId: uid };
       const dataWithDates = convertDocTimestampsToDates(dataWithId);
