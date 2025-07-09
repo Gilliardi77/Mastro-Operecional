@@ -34,7 +34,7 @@ interface AuthContextType {
   isAuthenticating: boolean;
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (name: string, email: string, pass: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (showToast?: boolean) => Promise<void>;
   updateUserDisplayName: (newName: string) => Promise<void>;
   hasCompletedConsultation: boolean | null; 
   checkingConsultationStatus: boolean;
@@ -131,6 +131,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        setUser(null);
        setSubscriptionStatus('inactive');
        setHasCompletedConsultation(null);
+       // Limpar o estado relacionado ao usuário, se houver
+       // Ex: sessionStorage.clear();
        router.push('/login');
     }
   }, [authInstance, router, toast]);
@@ -163,25 +165,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser: FirebaseUser | null) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
-        try {
-          // It's good practice to force a token refresh to ensure it's valid
-          await firebaseUser.getIdToken(true); 
-          const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
-          
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            role,
-            accessibleModules,
-          });
-          setSubscriptionStatus(status);
-          await checkConsultationStatus(firebaseUser.uid);
-          
-        } catch (error: any) {
-          console.error("Auth session validation failed, forcing logout.", error);
-          await logout(false); // Force logout on token error
-        }
+        // We no longer force a logout here if the checks fail.
+        // We will optimistically set the user and let protected components/actions handle access denial.
+        // This prevents logging out the user if, for example, Firestore is temporarily down.
+        const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
+        
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          role,
+          accessibleModules,
+        });
+        setSubscriptionStatus(status);
+        await checkConsultationStatus(firebaseUser.uid);
       } else {
         setUser(null);
         setSubscriptionStatus('inactive');
@@ -205,7 +202,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.error("Sign-in error:", error);
       let errorMessage = "Ocorreu um erro desconhecido durante o login.";
       
-      // Catch the specific API key error
       if (error.code === 'auth/api-key-not-valid') {
         errorMessage = "A chave de API do Firebase é inválida. Verifique sua configuração no arquivo .env.local.";
       } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {

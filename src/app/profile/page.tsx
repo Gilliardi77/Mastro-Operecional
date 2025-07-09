@@ -12,7 +12,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { CompanyInfoFormSchema, PersonalInfoFormSchema, defaultCompanyValues } from "./schemas";
 import { fetchUserProfileServerAction, saveCompanyProfileServerAction, savePersonalDisplayNameServerAction } from "./actions";
-import type { UserProfileFirestoreData } from "@/schemas/userProfileSchema";
+import type { UserProfileUpsertData } from "@/schemas/userProfileSchema";
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, Building, User, AlertTriangle } from "lucide-react";
@@ -20,6 +20,7 @@ import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type PersonalInfoFormValues = z.infer<typeof PersonalInfoFormSchema>;
+type CompanyInfoFormValues = z.infer<typeof CompanyInfoFormSchema>;
 
 export default function ProfilePage() {
   const { user, loading: authLoading, firebaseAuth, logout } = useAuth();
@@ -38,7 +39,7 @@ export default function ProfilePage() {
     };
   }, []);
 
-  const companyForm = useForm<UserProfileFirestoreData>({
+  const companyForm = useForm<CompanyInfoFormValues>({
     resolver: zodResolver(CompanyInfoFormSchema),
     defaultValues: defaultCompanyValues,
   });
@@ -97,7 +98,7 @@ export default function ProfilePage() {
     }
   }, [user, firebaseAuth, companyForm, personalForm, toast]);
 
-  const onCompanySubmit = async (data: UserProfileFirestoreData) => {
+  const onCompanySubmit = async (data: CompanyInfoFormValues) => {
     if (!user || !firebaseAuth?.currentUser) {
       toast({ title: "Erro de Autenticação", description: "Usuário não autenticado.", variant: "destructive" });
       return;
@@ -106,7 +107,8 @@ export default function ProfilePage() {
     if (isMountedRef.current) setPageError(null);
     try {
       const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
-      const result = await saveCompanyProfileServerAction(idToken, data);
+      const dataToSave: UserProfileUpsertData = data;
+      const result = await saveCompanyProfileServerAction(idToken, dataToSave);
       if (isMountedRef.current) {
         if (result.success) {
           toast({ title: "Sucesso", description: result.message || "Perfil da empresa atualizado." });
@@ -225,7 +227,7 @@ export default function ProfilePage() {
                     <CardDescription>{pageError || "Ocorreu um erro com sua autenticação."}</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                    <Button onClick={() => logout()} className="w-full">
+                    <Button onClick={() => logout(false)} className="w-full">
                         Sair e Tentar Novamente
                     </Button>
                 </CardFooter>

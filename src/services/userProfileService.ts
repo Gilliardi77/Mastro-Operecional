@@ -1,3 +1,4 @@
+
 // src/services/userProfileService.ts
 import { getFirebaseInstances } from '@/lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp, type FirestoreError } from 'firebase/firestore';
@@ -45,18 +46,9 @@ export async function getUserProfile(userId: string): Promise<UserProfileData | 
       // Adicionar id e userId (que é o mesmo que id) explicitamente para validação pelo BaseSchema
       let dataWithIds = { ...rawData, id: userId, userId: userId };
       
-      // Assegurar que createdAt e updatedAt existam como Timestamps ou sejam adicionados como Dates
-      if (!(dataWithIds.createdAt instanceof Timestamp)) {
-        console.warn(`UserProfile for ${userId} missing Firestore Timestamp for createdAt, defaulting.`);
-        dataWithIds.createdAt = new Date(0); // Default to epoch if not a Firestore Timestamp
-      }
-      if (!(dataWithIds.updatedAt instanceof Timestamp)) {
-        console.warn(`UserProfile for ${userId} missing Firestore Timestamp for updatedAt, defaulting.`);
-        dataWithIds.updatedAt = new Date(0); // Default to epoch
-      }
+      const dataWithDates = convertDocTimestampsToDates(dataWithIds);
       
       // O schema Zod com .default('user') para 'role' cuidará de usuários existentes sem o campo.
-      const dataWithDates = convertDocTimestampsToDates(dataWithIds);
       return UserProfileDataSchema.parse(dataWithDates);
     }
     return null;

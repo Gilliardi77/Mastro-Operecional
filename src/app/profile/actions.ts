@@ -10,7 +10,7 @@ import { PersonalInfoFormSchema, CompanyInfoFormSchema } from './schemas';
 async function getVerifiedUid(idToken: string | undefined | null): Promise<string> {
   if (!adminAuth) {
     console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado.");
-    throw new Error("Serviço de autenticação indisponível. Tente novamente mais tarde.");
+    throw new Error("Serviço de autenticação do servidor indisponível. Tente novamente mais tarde.");
   }
   if (!idToken) {
     console.error("[ProfileActions] Tentativa de verificar UID com token nulo ou indefinido.");
@@ -18,7 +18,7 @@ async function getVerifiedUid(idToken: string | undefined | null): Promise<strin
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(idToken, true);
+    const decodedToken = await adminAuth.verifyIdToken(idToken, true); // checkRevoked = true
     return decodedToken.uid;
   } catch (error: any) {
     console.error(`[ProfileActions] Falha na verificação do token de ID. Código: ${error.code}. Mensagem: ${error.message}`);
@@ -38,7 +38,7 @@ async function getVerifiedUid(idToken: string | undefined | null): Promise<strin
 // Busca perfil do usuário autenticado e retorna dados seguros para o cliente
 export async function fetchUserProfileServerAction(
   idToken: string | undefined | null
-): Promise<Omit<UserProfileData, 'createdAt' | 'updatedAt' | 'id' | 'userId'> | null> {
+): Promise<Partial<UserProfileData> | null> {
   const uid = await getVerifiedUid(idToken);
   if (!adminDb) {
     throw new Error("Serviço de banco de dados do servidor indisponível.");
@@ -50,21 +50,11 @@ export async function fetchUserProfileServerAction(
 
     if (docSnap.exists) {
       const rawData = docSnap.data();
-      const dataWithIds = { ...rawData, id: uid, userId: uid };
+      const dataWithId = { ...rawData, id: uid, userId: uid };
       
-      const convertedData: any = { ...dataWithIds };
-      if (convertedData.createdAt instanceof Timestamp) {
-        convertedData.createdAt = convertedData.createdAt.toDate();
-      } else {
-        convertedData.createdAt = new Date(0); // Padrão se ausente
-      }
-      if (convertedData.updatedAt instanceof Timestamp) {
-        convertedData.updatedAt = convertedData.updatedAt.toDate();
-      } else {
-        convertedData.updatedAt = new Date(0); // Padrão se ausente
-      }
-
-      const validatedProfile = UserProfileDataSchema.parse(convertedData);
+      const dataWithDates = convertDocTimestampsToDates(dataWithId)
+      
+      const validatedProfile = UserProfileDataSchema.parse(dataWithDates);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, userId, createdAt, updatedAt, ...clientSafeProfile } = validatedProfile;
       return clientSafeProfile;
@@ -137,4 +127,22 @@ export async function savePersonalDisplayNameServerAction(
     console.error("[ProfileActions] Falha ao atualizar nome no Auth:", error);
     throw error;
   }
+}
+
+function convertDocTimestampsToDates(docData: any): any {
+    if (!docData) return null;
+    const dataWithDates = { ...docData };
+    for (const key in dataWithDates) {
+      if (dataWithDates[key] instanceof Timestamp) {
+        (dataWithDates as any)[key] = (dataWithDates[key] as Timestamp).toDate();
+      }
+    }
+    // Adiciona valores padrão se createdAt ou updatedAt não existirem
+    if (!dataWithDates.createdAt) {
+      dataWithDates.createdAt = new Date(0); // Epoch
+    }
+    if (!dataWithDates.updatedAt) {
+      dataWithDates.updatedAt = new Date(0); // Epoch
+    }
+    return dataWithDates;
 }
