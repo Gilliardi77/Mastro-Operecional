@@ -16,20 +16,29 @@ import { PersonalInfoFormSchema, CompanyInfoFormSchema } from './schemas';
 async function getVerifiedUid(idToken: string | undefined | null): Promise<string> {
   if (!idToken) {
     console.error("[ProfileActions] Tentativa de verificar UID sem idToken.");
-    throw new Error("Token de autenticação ausente.");
+    throw new Error("Token de autenticação ausente. Por favor, faça login novamente.");
   }
   if (!adminAuth) {
     console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado para getVerifiedUid.");
-    throw new Error("Serviço de autenticação do servidor não disponível.");
+    throw new Error("Serviço de autenticação do servidor indisponível. Tente novamente mais tarde.");
   }
 
   try {
     const decodedToken = await adminAuth.verifyIdToken(idToken);
     return decodedToken.uid;
-  } catch (error) {
-    console.error("[ProfileActions] Erro ao verificar token de ID:", error);
-    // Lançar erro específico ou genérico, dependendo da política de tratamento de erros
-    throw new Error("Token inválido ou expirado. Faça login novamente.");
+  } catch (error: any) {
+    // Log detalhado para depuração no servidor
+    console.error(`[ProfileActions] Falha na verificação do token de ID. Código: ${error.code}. Mensagem: ${error.message}`);
+    
+    // Mensagens de erro mais amigáveis e específicas para o usuário
+    if (error.code === 'auth/id-token-expired') {
+        throw new Error("Sua sessão expirou. Por favor, faça login novamente para continuar.");
+    }
+    if (error.code === 'auth/argument-error') {
+        throw new Error("Ocorreu um erro com sua autenticação. Por favor, recarregue a página e tente novamente.");
+    }
+    // Erro genérico para outros casos
+    throw new Error("Não foi possível verificar sua identidade. Por favor, faça login novamente.");
   }
 }
 
