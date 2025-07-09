@@ -1,6 +1,6 @@
 // src/services/userProfileService.ts
 import { getFirebaseInstances } from '@/lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp, type FirestoreError } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, Timestamp, type FirestoreError, collection, query, where, getDocs } from 'firebase/firestore';
 import {
   UserProfileDataSchema,
   UserProfileUpsertDataSchema,
@@ -42,12 +42,10 @@ export async function getUserProfile(userId: string): Promise<UserProfileData | 
 
     if (docSnap.exists()) {
       const rawData = docSnap.data();
-      // Adicionar id e userId (que é o mesmo que id) explicitamente para validação pelo BaseSchema
       let dataWithIds = { ...rawData, id: userId, userId: userId };
       
       const dataWithDates = convertDocTimestampsToDates(dataWithIds);
       
-      // O schema Zod com .default('user') para 'role' cuidará de usuários existentes sem o campo.
       return UserProfileDataSchema.parse(dataWithDates);
     }
     return null;
@@ -79,14 +77,12 @@ export async function upsertUserProfile(userId: string, data: UserProfileUpsertD
     
     const currentProfileSnap = await getDoc(docRef);
     if (currentProfileSnap.exists() && currentProfileSnap.data()?.createdAt) {
-      dataToSet.createdAt = currentProfileSnap.data()?.createdAt; // Preserve original createdAt
+      dataToSet.createdAt = currentProfileSnap.data()?.createdAt; 
     } else {
-      dataToSet.createdAt = serverTime; // Set new createdAt
+      dataToSet.createdAt = serverTime; 
     }
     dataToSet.updatedAt = serverTime;
 
-    // Se um 'role' não for explicitamente fornecido, não o defina (deixe o Firestore manter o valor existente ou use o padrão do schema na leitura).
-    // O schema já lida com o upsert opcional.
 
     await setDoc(docRef, dataToSet, { merge: true });
 
@@ -103,4 +99,32 @@ export async function upsertUserProfile(userId: string, data: UserProfileUpsertD
     }
     throw new Error(`Failed to upsert user profile for ${userId}: ${(error as FirestoreError).message || error}`);
   }
+}
+
+/**
+ * Busca todos os membros da equipe que são gerenciados por um admin específico.
+ * @param adminId O UID do usuário administrador.
+ * @returns Uma lista de perfis de usuário da equipe.
+ */
+export async function getTeamMembers(adminId: string): Promise<UserProfileData[]> {
+  const { db } = getFirebaseInstances();
+  if (!db) throw new Error('Firestore not initialized.');
+
+  const usersCollection = collection(db, COLLECTION_NAME);
+  const q = query(usersCollection, where("adminId", "==", adminId));
+  
+  const querySnapshot = await getDocs(q);
+  const members: UserProfileData[] = [];
+  querySnapshot.forEach((doc) => {
+    const rawData = doc.data();
+    const dataWithId = { ...rawData, id: doc.id, userId: doc.id };
+    const dataWithDates = convertDocTimestampsToDates(dataWithId);
+    try {
+      members.push(UserProfileDataSchema.parse(dataWithDates));
+    } catch(e) {
+      console.warn(`Skipping invalid team member profile (ID: ${doc.id}):`, e);
+    }
+  });
+
+  return members;
 }

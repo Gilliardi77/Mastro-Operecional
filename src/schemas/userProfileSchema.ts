@@ -12,11 +12,9 @@ export const UserProfileDataSchema = BaseSchema.extend({
   companyPhone: z.string().optional().or(z.literal('')).nullable(),
   companyEmail: z.string().email().optional().or(z.literal('')).nullable(),
   personalPhoneNumber: z.string().optional().or(z.literal('')).nullable(),
-  // O campo role é opcional. Se não existir no documento do Firestore,
-  // a lógica do AuthProvider irá tratá-lo como 'user'.
   role: z.enum(['user', 'admin', 'vip']).optional().default('user').describe('O papel do usuário no sistema para controle de acesso.'),
   accessibleModules: z.array(z.string()).optional().describe("Lista de módulos que o usuário pode acessar, ex: ['operacional', 'financeiro']."),
-  // createdAt e updatedAt vêm do BaseSchema e serão objetos Date
+  adminId: z.string().optional().nullable().describe("ID do usuário administrador que gerencia esta conta, se aplicável."),
 });
 export type UserProfileData = z.infer<typeof UserProfileDataSchema>;
 
@@ -30,8 +28,8 @@ export const UserProfileUpsertDataSchema = z.object({
   companyPhone: z.string().optional().nullable(),
   companyEmail: z.string().email().optional().or(z.literal('')).nullable(),
   personalPhoneNumber: z.string().optional().nullable(),
-  // Permitir que a role seja definida durante o upsert (por um processo administrativo)
   role: z.enum(['user', 'admin', 'vip']).optional(),
   accessibleModules: z.array(z.string()).optional(),
+  adminId: z.string().optional().nullable(),
 }).passthrough();
 export type UserProfileUpsertData = z.infer<typeof UserProfileUpsertDataSchema>;

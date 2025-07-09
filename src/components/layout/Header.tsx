@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   LogIn, UserCircle, LogOut, LayoutDashboard, MessageSquareText, HelpCircle,
-  Settings, Loader2, ArrowLeftCircle, Briefcase, TrendingUp, History, Wand2
+  Settings, Loader2, ArrowLeftCircle, Briefcase, TrendingUp, History, Wand2, Users
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -113,6 +113,14 @@ export default function Header() {
                   <span>Painel Principal</span>
                 </Link>
               </DropdownMenuItem>
+               {user.role === 'admin' && (
+                <DropdownMenuItem asChild>
+                  <Link href="/team">
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>Gerenciar Equipe</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild className="sm:hidden">
                 <Link href="/operacional">

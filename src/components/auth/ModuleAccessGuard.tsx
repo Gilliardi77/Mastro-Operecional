@@ -10,7 +10,7 @@ import Link from 'next/link';
 
 interface ModuleAccessGuardProps {
   children: React.ReactNode;
-  moduleName: 'operacional' | 'financeiro' | 'consultor';
+  moduleName: 'operacional' | 'financeiro' | 'consultor' | 'admin';
 }
 
 export default function ModuleAccessGuard({ children, moduleName }: ModuleAccessGuardProps) {
@@ -25,8 +25,13 @@ export default function ModuleAccessGuard({ children, moduleName }: ModuleAccess
     );
   }
 
-  const hasAccess = user?.accessibleModules?.includes(moduleName);
-
+  let hasAccess = false;
+  if (moduleName === 'admin') {
+    hasAccess = user?.role === 'admin';
+  } else {
+    hasAccess = user?.accessibleModules?.includes(moduleName) ?? false;
+  }
+  
   if (!user || !hasAccess) {
     return (
       <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center p-4">
