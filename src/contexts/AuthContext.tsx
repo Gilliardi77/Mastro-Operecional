@@ -147,22 +147,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser: FirebaseUser | null) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
-        const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, db);
-        if (status === 'inactive') {
-          if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) { // Avoid toast loop on public pages
-             toast({ title: "Acesso Negado", description: "Sua assinatura não está ativa. Faça login para revalidar.", variant: "destructive", duration: 7000 });
+        try {
+          // Proactively check token validity to catch expired/invalid sessions early.
+          await firebaseUser.getIdToken(true); 
+
+          const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, db);
+          if (status === 'inactive') {
+            if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) {
+               toast({ title: "Acesso Negado", description: "Sua assinatura não está ativa. Faça login para revalidar.", variant: "destructive", duration: 7000 });
+            }
+            await logout(false);
+          } else {
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              role,
+              accessibleModules,
+            });
+            setSubscriptionStatus(status);
+            await checkConsultationStatus(firebaseUser.uid);
           }
+        } catch (error) {
+          console.error("Auth session validation failed, forcing logout.", error);
           await logout(false);
-        } else {
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            role,
-            accessibleModules,
-          });
-          setSubscriptionStatus(status);
-          await checkConsultationStatus(firebaseUser.uid);
         }
       } else {
         setUser(null);
