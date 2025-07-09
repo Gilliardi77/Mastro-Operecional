@@ -32,6 +32,7 @@ type SubscriptionStatus = 'loading' | 'active' | 'inactive' | 'privileged';
 interface AuthContextType {
   user: User | null;
   isAuthenticating: boolean;
+  isLoggingIn: boolean; // Estado para rastrear o processo de login
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (name: string, email: string, pass: string) => Promise<void>;
   logout: (showToast?: boolean) => Promise<void>;
@@ -101,6 +102,7 @@ const performAccessCheck = async (
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [hasCompletedConsultation, setHasCompletedConsultation] = useState<boolean | null>(null);
   const [checkingConsultationStatus, setCheckingConsultationStatus] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('loading');
@@ -113,7 +115,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!authInstance) return;
     try {
       await signOut(authInstance);
-      // The onIdTokenChanged listener will handle clearing the cookie.
       if (showToast) {
         toast({ title: "Sessão encerrada", description: "Você foi desconectado." });
       }
@@ -157,13 +158,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const unsubscribe = onIdTokenChanged(authInstance, async (firebaseUser) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
-        // User is signed in, or the token has been refreshed.
         const token = await firebaseUser.getIdToken();
-        await fetch('/api/auth/session', {
+        const response = await fetch('/api/auth/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token }),
         });
+        
+        if (!response.ok) {
+            console.error("Falha ao criar a sessão no servidor. Deslogando...");
+            await logout(false);
+            setIsAuthenticating(false);
+            return;
+        }
 
         const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
         setUser({
@@ -176,7 +183,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setSubscriptionStatus(status);
         await checkConsultationStatus(firebaseUser.uid);
       } else {
-        // User is signed out.
         await fetch('/api/auth/session', { method: 'DELETE' });
         setUser(null);
         setSubscriptionStatus('inactive');
@@ -186,30 +192,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     });
 
     return () => unsubscribe();
-  }, [authInstance, db, checkConsultationStatus]);
+  }, [authInstance, db, checkConsultationStatus, logout]);
 
   const signIn = useCallback(async (email: string, pass: string) => {
     if (!authInstance) throw new Error("Firebase Auth não inicializado.");
+    setIsLoggingIn(true);
     try {
       await signInWithEmailAndPassword(authInstance, email, pass);
-      // The onIdTokenChanged listener will handle setting the cookie and user state.
-      toast({ title: "Autenticado", description: "Login realizado com sucesso." });
-      const redirectPath = new URLSearchParams(window.location.search).get('redirect') || '/';
-      router.push(redirectPath);
     } catch (error: any) {
       console.error("Sign-in error:", error);
       let errorMessage = "Ocorreu um erro desconhecido durante o login.";
       
       if (error.code === 'auth/api-key-not-valid') {
         errorMessage = "A chave de API do Firebase é inválida. Verifique sua configuração no arquivo .env.local.";
-      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
         errorMessage = "Email ou senha incorretos.";
       }
       
       toast({ title: "Falha no Login", description: errorMessage, variant: "destructive", duration: 7000 });
+      setIsLoggingIn(false);
       throw new Error(errorMessage);
     }
-  }, [authInstance, router, toast]);
+  }, [authInstance, toast]);
 
   const signUp = useCallback(async (name: string, email: string, pass: string) => {
     if (!authInstance || !db) throw new Error("Firebase Auth ou Firestore não inicializado.");
@@ -218,12 +222,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const newUser = userCredential.user;
       if (newUser) {
         await updateProfile(newUser, { displayName: name });
-        // The onIdTokenChanged listener will handle setting the user and cookie.
         const timestamp = serverTimestamp();
         await setDoc(doc(db, "consultationsMetadata", newUser.uid), { completed: false, createdAt: timestamp });
         await setDoc(doc(db, "usuarios", newUser.uid), { createdAt: timestamp, updatedAt: timestamp, role: 'user', accessibleModules: [] }, { merge: true });
         toast({ title: "Registro bem-sucedido!", description: "Sua conta foi criada. Faça login para continuar." });
-        await signOut(authInstance); // Force sign out to ensure they log in and create a session
+        await signOut(authInstance); 
         router.push('/login'); 
       }
     } catch (error: any) {
@@ -234,6 +237,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       toast({ title: "Erro no Registro", description, variant: "destructive" });
     }
   }, [authInstance, router, toast, db]);
+  
+  useEffect(() => {
+    if (user && isLoggingIn) {
+        toast({ title: "Autenticado", description: "Login realizado com sucesso." });
+        const redirectPath = new URLSearchParams(window.location.search).get('redirect') || '/';
+        router.push(redirectPath);
+        setIsLoggingIn(false);
+    }
+  }, [user, isLoggingIn, router, toast]);
 
   const setAuthConsultationCompleted = useCallback(async (status: boolean) => {
     if (!user || !user.uid || !db) return;
@@ -262,6 +274,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const value = {
     user,
     isAuthenticating,
+    isLoggingIn,
     signIn,
     signUp,
     logout,

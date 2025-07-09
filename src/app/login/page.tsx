@@ -1,9 +1,10 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Manter para uso direto, se necessário
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { LogIn, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -11,7 +12,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
 
 const LoginFormSchema = z.object({
   email: z.string().email({ message: "Por favor, insira um email válido." }),
@@ -21,8 +21,7 @@ const LoginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof LoginFormSchema>;
 
 export default function LoginPage() {
-  const { signIn, loading: authLoading } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { signIn, isLoggingIn, isAuthenticating } = useAuth();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(LoginFormSchema),
@@ -33,19 +32,10 @@ export default function LoginPage() {
   });
 
   async function onSubmit(data: LoginFormValues) {
-    setIsSubmitting(true);
-    try {
-      await signIn(data.email, data.password);
-      // O redirecionamento é tratado dentro da função signIn do AuthContext
-    } catch (error) {
-      // O tratamento de erro (toast) é feito dentro da função signIn do AuthContext
-      console.error("Falha no login pela página:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    await signIn(data.email, data.password);
   }
 
-  const isLoading = authLoading || isSubmitting;
+  const isLoading = isLoggingIn || isAuthenticating;
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-gradient-to-b from-background to-secondary/30 pt-16 pb-24 px-4">
