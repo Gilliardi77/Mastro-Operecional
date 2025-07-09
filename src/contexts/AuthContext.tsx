@@ -49,12 +49,27 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const performAccessCheck = async (uid: string, db: any): Promise<{ status: SubscriptionStatus; role: User['role']; accessibleModules: string[] }> => {
+const performAccessCheck = async (
+  uid: string,
+  email: string | null,
+  db: any
+): Promise<{ status: SubscriptionStatus; role: User['role']; accessibleModules: string[] }> => {
     if (!uid || !db) return { status: 'inactive', role: 'user', accessibleModules: [] };
     
+    // 1. Check for privileged users via environment variables (highest priority)
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').filter(e => e.trim());
+    const vipEmails = (process.env.NEXT_PUBLIC_VIP_EMAILS || '').split(',').filter(e => e.trim());
+
+    if (email && adminEmails.includes(email)) {
+        return { status: 'privileged', role: 'admin', accessibleModules: ['operacional', 'financeiro', 'consultor'] };
+    }
+    if (email && vipEmails.includes(email)) {
+        return { status: 'privileged', role: 'vip', accessibleModules: ['operacional', 'financeiro', 'consultor'] };
+    }
+    
+    // 2. Check for roles in Firestore database
     let profileRole: User['role'] = 'user';
     let profileModules: string[] | undefined;
-
     try {
         const profile = await getUserProfile(uid);
         if (profile) {
@@ -66,9 +81,10 @@ const performAccessCheck = async (uid: string, db: any): Promise<{ status: Subsc
             return { status: 'privileged', role: profileRole, accessibleModules: ['operacional', 'financeiro', 'consultor'] };
         }
     } catch (e) {
-        console.error("Error checking user role, proceeding as standard user.", e);
+        console.error("Error checking user role from Firestore, proceeding as standard user.", e);
     }
     
+    // 3. Check for active subscription
     try {
         const subRef = doc(db, "assinaturas", uid);
         const subSnap = await getDoc(subRef);
@@ -76,7 +92,6 @@ const performAccessCheck = async (uid: string, db: any): Promise<{ status: Subsc
             const subData = subSnap.data() as Assinatura;
             const isExpired = (subData.expiracao as Timestamp).toDate() < new Date();
             if (subData.status === 'ativa' && !isExpired) {
-                // Default to all modules if not specified for a subscribed user
                 const modules = profileModules || ['operacional', 'financeiro', 'consultor'];
                 return { status: 'active', role: profileRole, accessibleModules: modules };
             }
@@ -85,7 +100,8 @@ const performAccessCheck = async (uid: string, db: any): Promise<{ status: Subsc
         console.error("Error checking subscription status.", e);
     }
 
-    return { status: 'inactive', role: profileRole, accessibleModules: [] };
+    // 4. Default to inactive with whatever modules were found (for non-subscribed but perhaps permissioned users)
+    return { status: 'inactive', role: profileRole, accessibleModules: profileModules || [] };
 };
 
 
@@ -148,31 +164,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
         try {
-          // Proactively check token validity to catch expired/invalid sessions early.
           await firebaseUser.getIdToken(true); 
-
-          const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, db);
+          const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
           
-          // ALWAYS set the user if firebaseUser exists, regardless of subscription status.
-          // The access control is handled by ModuleAccessGuard based on `accessibleModules`.
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             displayName: firebaseUser.displayName,
             role,
-            accessibleModules, // This will be [] for inactive users, which is correct.
+            accessibleModules,
           });
           setSubscriptionStatus(status);
           await checkConsultationStatus(firebaseUser.uid);
           
         } catch (error) {
-          // This catch block handles cases where the token is fundamentally invalid.
-          // In this case, logging out is the correct action.
           console.error("Auth session validation failed, forcing logout.", error);
           await logout(false); 
         }
       } else {
-        // No firebase user, so clear all state.
         setUser(null);
         setSubscriptionStatus('inactive');
         setHasCompletedConsultation(null);

@@ -594,17 +594,18 @@ Estas coleções são mencionadas no `DATA_INTERACTION_GUIDE.md` ou no `firestor
 Esta seção destina-se a outros aplicativos do ecossistema ("Maestro Operacional", "Visão Clara Financeira") que precisam verificar se um usuário possui uma assinatura ativa para conceder acesso.
 
 ### 8.1. Visão Geral do Fluxo de Acesso
-1.  **Fonte da Verdade**: O acesso é determinado por uma hierarquia de dados no Firestore.
-    *   **Acesso Privilegiado (`usuarios`)**: Um documento na coleção `usuarios` (com ID igual ao UID do usuário) pode ter um campo `role` definido como `"admin"` ou `"vip"`. Se este for o caso, o acesso é concedido imediatamente, ignorando a verificação de assinatura.
+1.  **Fonte da Verdade**: O acesso é determinado por uma hierarquia de dados.
+    *   **Acesso Privilegiado (`.env` local)**: Para desenvolvimento e administração, e-mails específicos podem ser definidos no arquivo `.env` (ex: `NEXT_PUBLIC_ADMIN_EMAILS`). Esta verificação tem a **maior prioridade**.
+    *   **Acesso por Papel (`usuarios`)**: Um documento na coleção `usuarios` (com ID igual ao UID do usuário) pode ter um campo `role` definido como `"admin"` ou `"vip"`. Se este for o caso, o acesso é concedido, sobrepondo a verificação de assinatura.
     *   **Acesso Padrão (`assinaturas`)**: Se o usuário não for privilegiado, o sistema consulta a coleção `assinaturas`. Um documento com ID igual ao UID do usuário deve existir, ter `status: "ativa"`, e a data em `expiracao` não deve ter passado.
 2.  **Entrada de Dados**:
+    *   As variáveis de ambiente são gerenciadas no arquivo `.env` de cada projeto.
     *   O campo `role` na coleção `usuarios` deve ser gerenciado por um aplicativo administrativo (ex: "Módulo Consultor") ou diretamente no console do Firestore por um administrador humano. **O usuário não pode alterar seu próprio `role`**.
-    *   Os dados na coleção `assinaturas` são gerenciados por um sistema externo (ex: Hotmart) através de webhooks que chamam uma API no seu aplicativo principal (ex: "Diagnóstico Maestro"). Os outros apps apenas leem esses dados.
+    *   Os dados na coleção `assinaturas` são gerenciados por um sistema externo (ex: Hotmart) através de webhooks.
 3.  **Lógica de Verificação (Centralizada no `AuthContext`)**:
-    *   Quando um usuário tenta fazer login, a função `signIn` primeiro o autentica no Firebase.
-    *   O `onAuthStateChanged` (um listener de autenticação) é acionado. Ele executa uma função centralizada `performAccessCheck`.
-    *   `performAccessCheck` implementa a hierarquia de verificação: primeiro `role`, depois `assinaturas`.
-    *   Se `performAccessCheck` retornar que o acesso foi negado, o usuário é imediatamente desconectado (`signOut`) e recebe um aviso. Se for bem-sucedido, a sessão é mantida, e ele pode usar o app.
+    *   O `onAuthStateChanged` (um listener de autenticação) é acionado no login. Ele executa uma função centralizada `performAccessCheck`.
+    *   `performAccessCheck` implementa a hierarquia de verificação: `.env` -> `role` -> `assinaturas`.
+    *   O `AuthContext` então popula o objeto `user` com as permissões corretas (`role`, `accessibleModules`). Componentes como `ModuleAccessGuard` usam essas informações para controlar o acesso.
 
 ### 8.2. Checklist de Implementação para Outros Apps
 Para implementar a verificação de acesso no seu aplicativo, siga estes passos:
@@ -633,20 +634,36 @@ import type { Assinatura } from '@/schemas/assinaturaSchema'; // Importe o tipo
 type SubscriptionStatus = 'loading' | 'active' | 'inactive' | 'privileged';
 
 // Função de verificação centralizada
-const performAccessCheck = async (uid: string, db: any): Promise<{ status: SubscriptionStatus }> => {
-    if (!uid || !db) return { status: 'inactive' };
-
-    // 1. Verifica se o usuário tem um papel privilegiado
-    try {
-        const profile = await getUserProfile(uid);
-        if (profile?.role === 'admin' || profile?.role === 'vip') {
-            return { status: 'privileged' };
-        }
-    } catch (e) {
-        console.error("Erro ao verificar papel do usuário, tratando como padrão.", e);
+const performAccessCheck = async (
+  uid: string,
+  email: string | null,
+  db: any
+): Promise<{ status: SubscriptionStatus; role: User['role']; accessibleModules: string[] }> => {
+    if (!uid || !db) return { status: 'inactive', role: 'user', accessibleModules: [] };
+    
+    // 1. Check for privileged users via environment variables (highest priority)
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').filter(e => e.trim());
+    if (email && adminEmails.includes(email)) {
+        return { status: 'privileged', role: 'admin', accessibleModules: ['operacional', 'financeiro', 'consultor'] };
     }
     
-    // 2. Se não for privilegiado, verifica a assinatura
+    // 2. Check for roles in Firestore database
+    let profileRole: User['role'] = 'user';
+    let profileModules: string[] | undefined;
+    try {
+        const profile = await getUserProfile(uid);
+        if (profile) {
+            profileRole = profile.role || 'user';
+            profileModules = profile.accessibleModules;
+        }
+        if (profileRole === 'admin' || profileRole === 'vip') {
+            return { status: 'privileged', role: profileRole, accessibleModules: ['operacional', 'financeiro', 'consultor'] };
+        }
+    } catch (e) {
+        console.error("Error checking user role from Firestore.", e);
+    }
+    
+    // 3. Check for active subscription
     try {
         const subRef = doc(db, "assinaturas", uid);
         const subSnap = await getDoc(subRef);
@@ -654,80 +671,47 @@ const performAccessCheck = async (uid: string, db: any): Promise<{ status: Subsc
             const subData = subSnap.data() as Assinatura;
             const isExpired = (subData.expiracao as Timestamp).toDate() < new Date();
             if (subData.status === 'ativa' && !isExpired) {
-                return { status: 'active' };
+                const modules = profileModules || ['operacional', 'financeiro', 'consultor'];
+                return { status: 'active', role: profileRole, accessibleModules: modules };
             }
         }
     } catch (e) {
-        console.error("Erro ao verificar status da assinatura.", e);
+        console.error("Error checking subscription status.", e);
     }
 
-    return { status: 'inactive' };
+    // 4. Default to inactive
+    return { status: 'inactive', role: profileRole, accessibleModules: profileModules || [] };
 };
 
 
 // Dentro do seu componente AuthProvider
 // ...
 
-const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('loading');
+const [user, setUser] = useState<User | null>(null);
 
 // Efeito principal que reage a mudanças no estado de autenticação
 useEffect(() => {
-    if (!authInstance) {
-        setIsAuthenticating(false);
-        return;
-    }
+    if (!authInstance) return;
 
     const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser) => {
-        setIsAuthenticating(true);
         if (firebaseUser) {
-            // Verifica o acesso do usuário logado
-            const { status } = await performAccessCheck(firebaseUser.uid, db);
-            setSubscriptionStatus(status);
+            const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
             
-            if (status === 'inactive') {
-                // Se o acesso for negado, desconecta o usuário
-                toast({
-                    title: "Acesso Negado",
-                    description: "Sua assinatura não está ativa ou você não tem permissão.",
-                    variant: "destructive",
-                });
-                await signOut(authInstance); // Desconecta
-            } else {
-                // Se o acesso for permitido, define os dados do usuário
-                const profile = await getUserProfile(firebaseUser.uid);
-                setUser({
-                    uid: firebaseUser.uid,
-                    email: firebaseUser.email,
-                    displayName: firebaseUser.displayName,
-                    role: profile?.role || 'user',
-                });
-            }
+            setUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                role,
+                accessibleModules,
+            });
+            // ... resto da lógica
         } else {
-            // Se não houver usuário Firebase, limpa o estado
             setUser(null);
-            setSubscriptionStatus('inactive');
+            // ... resto da lógica
         }
-        setIsAuthenticating(false);
     });
     return () => unsubscribe();
-}, [authInstance, db, toast]);
-
-// Função de login simplificada
-const signIn = useCallback(async (email: string, pass: string) => {
-    if (!authInstance) throw new Error("Firebase Auth não inicializado.");
-    try {
-        await signInWithEmailAndPassword(authInstance, email, pass);
-        // O listener onAuthStateChanged cuidará de todo o resto (verificação de acesso, redirecionamento/logout).
-        toast({ title: "Autenticado", description: "Verificando seu acesso..." });
-    } catch (error: any) {
-        if (error.code === 'auth/invalid-credential') {
-            throw new Error("Email ou senha incorretos.");
-        }
-        throw new Error("Ocorreu um erro durante o login.");
-    }
-}, [authInstance, toast]);
-
-// ... restante do seu AuthProvider
+}, [authInstance, db]);
 ```
 
 **Passo 4: Configurar Regras do Firestore**
@@ -749,7 +733,7 @@ match /usuarios/{userIdDoc} {
 }
 ```
 
-Seguindo estes passos, qualquer aplicativo do ecossistema poderá verificar de forma segura e consistente se um usuário tem permissão para usar as funcionalidades, mantendo a fonte da verdade centralizada no Firestore.
+Seguindo estes passos, qualquer aplicativo do ecossistema poderá verificar de forma segura e consistente se um usuário tem permissão para usar as funcionalidades, mantendo a fonte da verdade centralizada no Firestore e permitindo overrides de desenvolvimento via `.env`.
 
 
 ## 9. Regras de Segurança Globais (Fallback)
@@ -776,3 +760,4 @@ Este guia serve como um pilar para o desenvolvimento coeso do backend do ecossis
 2.  Detalhar os schemas e operações para coleções marcadas como "Exemplo" ou "A ser detalhado".
 3.  Revisar e atualizar `firestore.rules` e `firestore.indexes.json` com base neste guia consolidado e no `DATA_SYNC_CONFIG.json`.
 4.  Considerar a criação de testes automatizados para as regras de segurança.
+
