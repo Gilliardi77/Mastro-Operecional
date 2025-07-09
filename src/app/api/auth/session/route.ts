@@ -16,14 +16,20 @@ export async function POST(request: NextRequest) {
     const expiresIn = 60 * 60 * 24 * 5 * 1000;
     
     // This verifies the token and creates a session cookie.
+    if (!adminAuth) {
+      throw new Error("A autenticação do Admin não está inicializada no servidor.");
+    }
     const sessionCookie = await adminAuth.createSessionCookie(token, { expiresIn });
 
     cookies().set('__session', sessionCookie, {
       maxAge: expiresIn / 1000,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      // The 'Secure' attribute is required for 'SameSite=None'
+      // The Firebase Studio dev environment uses HTTPS, so this is safe.
+      secure: true,
       path: '/',
-      sameSite: 'lax',
+      // 'None' is necessary for cross-origin requests in dev environments like Firebase Studio
+      sameSite: 'none',
     });
     
     return NextResponse.json({ status: 'success' });
