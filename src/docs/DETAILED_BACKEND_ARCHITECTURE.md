@@ -1,3 +1,4 @@
+
 # Guia de Arquitetura de Backend - Ecossistema Gestor Maestro
 -->
 
@@ -36,7 +37,7 @@ A seguir, a lista de coleções utilizadas no Firestore, seus propósitos, campo
     *   `companyEmail` (string, opcional): Email comercial. Ex: "contato@acme.com".
     *   `personalPhoneNumber` (string, opcional): Telefone pessoal/WhatsApp do usuário. Ex: "(11) 98888-7777".
     *   `role` (enum: 'user' | 'admin' | 'vip', opcional, default: 'user'): Papel do usuário no sistema. Controla o acesso privilegiado.
-    *   `accessibleModules` (array de strings, opcional): Lista de módulos que o usuário pode acessar. Ex: `["operacional", "financeiro"]`. Essencial para controle de acesso granular.
+    *   `accessibleModules` (array de strings, opcional): Lista de módulos que o usuário pode acessar. Ex: `["operacional", "consultor"]`. Essencial para controle de acesso granular.
     *   `createdAt` (timestamp, obrigatório, gerenciado pelo sistema): Data de criação do perfil.
     *   `updatedAt` (timestamp, obrigatório, gerenciado pelo sistema): Data da última atualização.
 *   **Operações e Atores:**
@@ -760,4 +761,3 @@ Este guia serve como um pilar para o desenvolvimento coeso do backend do ecossis
 2.  Detalhar os schemas e operações para coleções marcadas como "Exemplo" ou "A ser detalhado".
 3.  Revisar e atualizar `firestore.rules` e `firestore.indexes.json` com base neste guia consolidado e no `DATA_SYNC_CONFIG.json`.
 4.  Considerar a criação de testes automatizados para as regras de segurança.
-

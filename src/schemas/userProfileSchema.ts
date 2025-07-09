@@ -1,3 +1,4 @@
+
 // src/schemas/userProfileSchema.ts
 import { z } from 'zod';
 import { BaseSchema, FirestoreTimestampSchema } from './commonSchemas';

@@ -1,3 +1,4 @@
+
 import ModuleAccessGuard from '@/components/auth/ModuleAccessGuard';
 import type { Metadata } from 'next';
 
