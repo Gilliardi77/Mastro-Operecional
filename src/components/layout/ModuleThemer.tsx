@@ -13,7 +13,13 @@ export default function ModuleThemer() {
 
     if (pathname.startsWith('/financeiro')) {
       body.classList.add('theme-financeiro');
-    } else if (pathname.startsWith('/consultor')) {
+    } else if (
+        pathname.startsWith('/consultor') ||
+        pathname.startsWith('/login') ||
+        pathname.startsWith('/register') ||
+        pathname.startsWith('/profile') ||
+        pathname === '/'
+    ) {
       body.classList.add('theme-consultor');
     } else {
       // O tema 'operacional' é o padrão (root), então não precisa de classe,
