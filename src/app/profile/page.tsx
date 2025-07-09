@@ -23,7 +23,7 @@ type PersonalInfoFormValues = z.infer<typeof PersonalInfoFormSchema>;
 type CompanyInfoFormValues = z.infer<typeof CompanyInfoFormSchema>;
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, firebaseAuth, logout } = useAuth();
+  const { user, isAuthenticating, logout } = useAuth();
   const [profileLoading, setProfileLoading] = useState(true);
   const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [isSavingPersonal, setIsSavingPersonal] = useState(false);
@@ -52,7 +52,7 @@ export default function ProfilePage() {
   });
 
   const fetchProfile = useCallback(async () => {
-    if (!user || !firebaseAuth?.currentUser) {
+    if (!user) {
       if (isMountedRef.current) setProfileLoading(false);
       return;
     }
@@ -62,8 +62,7 @@ export default function ProfilePage() {
         setIsAuthError(false);
     }
     try {
-      const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
-      const profileData = await fetchUserProfileServerAction(idToken);
+      const profileData = await fetchUserProfileServerAction();
       if (isMountedRef.current) {
         if (profileData) {
           companyForm.reset(profileData);
@@ -77,13 +76,13 @@ export default function ProfilePage() {
       const errorMessage = err.message || "Não foi possível carregar os dados do seu perfil.";
       if (isMountedRef.current) {
         if (
-            errorMessage.includes("Sua sessão") ||
-            errorMessage.includes("token inválido") ||
-            errorMessage.includes("Não foi possível verificar sua identidade")
+            errorMessage.includes("Sessão não encontrada") ||
+            errorMessage.includes("Sua sessão expirou") ||
+            errorMessage.includes("Sua sessão foi revogada")
         ) {
            setIsAuthError(true);
            setPageError("Sua sessão de autenticação parece estar inválida. Por favor, saia e entre novamente para continuar.");
-        } else if (!errorMessage.includes("PERMISSION_DENIED") && !errorMessage.includes("permission-denied") && !errorMessage.includes("Admin SDK não inicializado")) {
+        } else {
            setPageError(errorMessage);
         }
         
@@ -96,19 +95,18 @@ export default function ProfilePage() {
     } finally {
       if (isMountedRef.current) setProfileLoading(false);
     }
-  }, [user, firebaseAuth, companyForm, personalForm, toast]);
+  }, [user, companyForm, personalForm, toast]);
 
   const onCompanySubmit = async (data: CompanyInfoFormValues) => {
-    if (!user || !firebaseAuth?.currentUser) {
+    if (!user) {
       toast({ title: "Erro de Autenticação", description: "Usuário não autenticado.", variant: "destructive" });
       return;
     }
     setIsSavingCompany(true);
     if (isMountedRef.current) setPageError(null);
     try {
-      const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
       const dataToSave: UserProfileUpsertData = data;
-      const result = await saveCompanyProfileServerAction(idToken, dataToSave);
+      const result = await saveCompanyProfileServerAction(dataToSave);
       if (isMountedRef.current) {
         if (result.success) {
           toast({ title: "Sucesso", description: result.message || "Perfil da empresa atualizado." });
@@ -123,11 +121,7 @@ export default function ProfilePage() {
       if (isMountedRef.current) {
         setPageError(errorMessage);
         toast({ title: "Erro ao Salvar", description: errorMessage, variant: "destructive" });
-        if (
-            errorMessage.includes("Sua sessão") ||
-            errorMessage.includes("token inválido") ||
-            errorMessage.includes("Não foi possível verificar sua identidade")
-        ) {
+        if (errorMessage.includes("Sessão")) {
            setIsAuthError(true);
         }
       }
@@ -137,22 +131,19 @@ export default function ProfilePage() {
   };
 
   const onPersonalInfoSubmit = async (data: PersonalInfoFormValues) => {
-    if (!user || !firebaseAuth?.currentUser) {
+    if (!user) {
       toast({ title: "Erro de Autenticação", description: "Usuário não autenticado.", variant: "destructive" });
       return;
     }
     setIsSavingPersonal(true);
     if (isMountedRef.current) setPageError(null);
     try {
-      const idToken = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
-      const result = await savePersonalDisplayNameServerAction(idToken, data);
+      const result = await savePersonalDisplayNameServerAction(data);
       if (isMountedRef.current) {
         if (result.success) {
           toast({ title: "Sucesso", description: result.message || "Nome de exibição atualizado." });
-          if (firebaseAuth.currentUser) {
-            await firebaseAuth.currentUser.reload();
-            await firebaseAuth.currentUser.getIdToken(true); 
-            if (isMountedRef.current) personalForm.reset({ displayName: firebaseAuth.currentUser.displayName || "" });
+           if (user) {
+             user.displayName = data.displayName;
           }
         } else {
           throw new Error(result.message || "Falha ao atualizar o nome de exibição.");
@@ -164,11 +155,7 @@ export default function ProfilePage() {
       if (isMountedRef.current) {
         setPageError(errorMessage);
         toast({ title: "Erro ao Salvar", description: errorMessage, variant: "destructive" });
-        if (
-            errorMessage.includes("Sua sessão") ||
-            errorMessage.includes("token inválido") ||
-            errorMessage.includes("Não foi possível verificar sua identidade")
-        ) {
+        if (errorMessage.includes("Sessão")) {
            setIsAuthError(true);
         }
       }
@@ -178,17 +165,17 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    if (user && firebaseAuth?.currentUser && !authLoading) {
+    if (user && !isAuthenticating) {
       fetchProfile();
-    } else if (!authLoading && !user && isMountedRef.current) {
+    } else if (!isAuthenticating && !user && isMountedRef.current) {
       setProfileLoading(false);
       companyForm.reset(defaultCompanyValues);
       personalForm.reset({ displayName: "" });
     }
-  }, [user, firebaseAuth, authLoading, fetchProfile]);
+  }, [user, isAuthenticating, fetchProfile]);
 
 
-  if (authLoading && !user) {
+  if (isAuthenticating && !user) {
     return (
       <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -196,7 +183,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user && !authLoading) {
+  if (!user && !isAuthenticating) {
     return (
       <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
         <Card className="w-full max-w-md text-center">

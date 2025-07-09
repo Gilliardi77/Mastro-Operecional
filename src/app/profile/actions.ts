@@ -5,41 +5,56 @@ import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { UserProfileDataSchema, type UserProfileData, type UserProfileUpsertData } from '@/schemas/userProfileSchema';
 import { PersonalInfoFormSchema, CompanyInfoFormSchema } from './schemas';
+import { cookies } from 'next/headers';
 
-// UID seguro a partir do token de autenticação
-async function getVerifiedUid(idToken: string | undefined | null): Promise<string> {
+// UID seguro a partir do cookie da sessão
+async function getVerifiedUid(): Promise<string> {
   if (!adminAuth) {
     console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado.");
     throw new Error("Serviço de autenticação do servidor indisponível. Tente novamente mais tarde.");
   }
-  if (!idToken) {
-    console.error("[ProfileActions] Tentativa de verificar UID com token nulo ou indefinido.");
-    throw new Error("Sessão inválida. Por favor, faça login novamente.");
+  
+  const sessionCookie = cookies().get('__session')?.value;
+  if (!sessionCookie) {
+    throw new Error("Sessão não encontrada ou expirada. Por favor, faça login novamente.");
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(idToken, true); // checkRevoked = true
+    // checkRevoked = true é importante para segurança
+    const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
     return decodedToken.uid;
   } catch (error: any) {
-    console.error(`[ProfileActions] Falha na verificação do token de ID. Código: ${error.code}. Mensagem: ${error.message}`);
-    switch (error.code) {
-      case 'auth/id-token-revoked':
-        throw new Error("Sua sessão foi revogada. Por favor, faça login novamente.");
-      case 'auth/id-token-expired':
+    console.error(`[ProfileActions] Falha na verificação do cookie de sessão. Código: ${error.code}. Mensagem: ${error.message}`);
+    if (error.code === 'auth/session-cookie-expired') {
         throw new Error("Sua sessão expirou. Por favor, faça login novamente.");
-      case 'auth/argument-error':
-        throw new Error("Ocorreu um erro com sua autenticação (token inválido). Por favor, saia e entre novamente.");
-      default:
-        throw new Error("Não foi possível verificar sua identidade. Por favor, faça login novamente.");
     }
+    if (error.code === 'auth/session-cookie-revoked') {
+        throw new Error("Sua sessão foi revogada. Por favor, faça login novamente.");
+    }
+    throw new Error("Não foi possível verificar sua identidade. Por favor, faça login novamente.");
   }
 }
 
-// Busca perfil do usuário autenticado e retorna dados seguros para o cliente
-export async function fetchUserProfileServerAction(
-  idToken: string | undefined | null
-): Promise<Partial<UserProfileData> | null> {
-  const uid = await getVerifiedUid(idToken);
+function convertDocTimestampsToDates(docData: any): any {
+    if (!docData) return null;
+    const dataWithDates = { ...docData };
+    for (const key in dataWithDates) {
+      if (dataWithDates[key] instanceof Timestamp) {
+        (dataWithDates as any)[key] = (dataWithDates[key] as Timestamp).toDate();
+      }
+    }
+    if (!dataWithDates.createdAt) {
+      dataWithDates.createdAt = new Date(0);
+    }
+    if (!dataWithDates.updatedAt) {
+      dataWithDates.updatedAt = new Date(0);
+    }
+    return dataWithDates;
+}
+
+// Busca perfil do usuário autenticado
+export async function fetchUserProfileServerAction(): Promise<Partial<UserProfileData> | null> {
+  const uid = await getVerifiedUid();
   if (!adminDb) {
     throw new Error("Serviço de banco de dados do servidor indisponível.");
   }
@@ -48,12 +63,10 @@ export async function fetchUserProfileServerAction(
     const docRef = adminDb.collection('usuarios').doc(uid);
     const docSnap = await docRef.get();
 
-    if (docSnap.exists) {
+    if (docSnap.exists()) {
       const rawData = docSnap.data();
       const dataWithId = { ...rawData, id: uid, userId: uid };
-      
-      const dataWithDates = convertDocTimestampsToDates(dataWithId)
-      
+      const dataWithDates = convertDocTimestampsToDates(dataWithId);
       const validatedProfile = UserProfileDataSchema.parse(dataWithDates);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, userId, createdAt, updatedAt, ...clientSafeProfile } = validatedProfile;
@@ -71,10 +84,9 @@ export async function fetchUserProfileServerAction(
 
 // Atualiza os dados da empresa do usuário autenticado
 export async function saveCompanyProfileServerAction(
-  idToken: string | undefined | null,
   companyData: UserProfileUpsertData
 ): Promise<{ success: boolean; message?: string }> {
-  const uid = await getVerifiedUid(idToken);
+  const uid = await getVerifiedUid();
   if (!adminDb) {
     throw new Error("Serviço de banco de dados do servidor indisponível.");
   }
@@ -102,10 +114,9 @@ export async function saveCompanyProfileServerAction(
 
 // Atualiza apenas o displayName do Auth
 export async function savePersonalDisplayNameServerAction(
-  idToken: string | undefined | null,
   personalData: { displayName: string }
 ): Promise<{ success: boolean; message?: string }> {
-  const uid = await getVerifiedUid(idToken);
+  const uid = await getVerifiedUid();
 
   const validationResult = PersonalInfoFormSchema.safeParse(personalData);
   if (!validationResult.success) {
@@ -127,22 +138,4 @@ export async function savePersonalDisplayNameServerAction(
     console.error("[ProfileActions] Falha ao atualizar nome no Auth:", error);
     throw error;
   }
-}
-
-function convertDocTimestampsToDates(docData: any): any {
-    if (!docData) return null;
-    const dataWithDates = { ...docData };
-    for (const key in dataWithDates) {
-      if (dataWithDates[key] instanceof Timestamp) {
-        (dataWithDates as any)[key] = (dataWithDates[key] as Timestamp).toDate();
-      }
-    }
-    // Adiciona valores padrão se createdAt ou updatedAt não existirem
-    if (!dataWithDates.createdAt) {
-      dataWithDates.createdAt = new Date(0); // Epoch
-    }
-    if (!dataWithDates.updatedAt) {
-      dataWithDates.updatedAt = new Date(0); // Epoch
-    }
-    return dataWithDates;
 }

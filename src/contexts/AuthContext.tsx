@@ -5,7 +5,7 @@ import type { User as FirebaseUser, Auth as FirebaseAuthType } from 'firebase/au
 import React, { createContext, useState, useEffect, ReactNode, useCallback, useContext } from 'react';
 import { 
   getAuth, 
-  onAuthStateChanged, 
+  onIdTokenChanged,
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut,
@@ -58,13 +58,8 @@ const performAccessCheck = async (
     
     // 1. Check for privileged users via environment variables (highest priority)
     const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').filter(e => e.trim());
-    const vipEmails = (process.env.NEXT_PUBLIC_VIP_EMAILS || '').split(',').filter(e => e.trim());
-
     if (email && adminEmails.includes(email)) {
         return { status: 'privileged', role: 'admin', accessibleModules: ['operacional', 'financeiro', 'consultor'] };
-    }
-    if (email && vipEmails.includes(email)) {
-        return { status: 'privileged', role: 'vip', accessibleModules: ['operacional', 'financeiro', 'consultor'] };
     }
     
     // 2. Check for roles in Firestore database
@@ -76,12 +71,11 @@ const performAccessCheck = async (
             profileRole = profile.role || 'user';
             profileModules = profile.accessibleModules;
         }
-
         if (profileRole === 'admin' || profileRole === 'vip') {
             return { status: 'privileged', role: profileRole, accessibleModules: ['operacional', 'financeiro', 'consultor'] };
         }
     } catch (e) {
-        console.error("Error checking user role from Firestore, proceeding as standard user.", e);
+        console.error("Error checking user role from Firestore.", e);
     }
     
     // 3. Check for active subscription
@@ -100,10 +94,9 @@ const performAccessCheck = async (
         console.error("Error checking subscription status.", e);
     }
 
-    // 4. Default to inactive with whatever modules were found (for non-subscribed but perhaps permissioned users)
+    // 4. Default to inactive
     return { status: 'inactive', role: profileRole, accessibleModules: profileModules || [] };
 };
-
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
@@ -120,6 +113,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!authInstance) return;
     try {
       await signOut(authInstance);
+      // The onIdTokenChanged listener will handle clearing the cookie.
       if (showToast) {
         toast({ title: "Sessão encerrada", description: "Você foi desconectado." });
       }
@@ -159,57 +153,47 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsAuthenticating(false);
       return;
     }
-    const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser: FirebaseUser | null) => {
+
+    const unsubscribe = onIdTokenChanged(authInstance, async (firebaseUser) => {
       setIsAuthenticating(true);
       if (firebaseUser) {
-        try {
-          // Proactively get a fresh token to validate the session on the client-side.
-          // This will throw an error if the session is invalid (e.g., token revoked, user disabled).
-          await firebaseUser.getIdToken(true);
+        // User is signed in, or the token has been refreshed.
+        const token = await firebaseUser.getIdToken();
+        await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+        });
 
-          // If token is valid, proceed with access checks and setting user state.
-          const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
-          
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            role,
-            accessibleModules,
-          });
-          setSubscriptionStatus(status);
-          await checkConsultationStatus(firebaseUser.uid);
-        } catch (error: any) {
-          // If getting the token fails, the session is corrupted or invalid.
-          // Force a clean logout.
-          console.error("Auth session validation failed, forcing logout:", error);
-          toast({
-            title: "Sua sessão é inválida",
-            description: "Por favor, faça login novamente para continuar.",
-            variant: "destructive",
-          });
-          await logout(false); // Call logout without showing a second toast
-        } finally {
-          setIsAuthenticating(false);
-        }
+        const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          role,
+          accessibleModules,
+        });
+        setSubscriptionStatus(status);
+        await checkConsultationStatus(firebaseUser.uid);
       } else {
-        // No user is signed in.
+        // User is signed out.
+        await fetch('/api/auth/session', { method: 'DELETE' });
         setUser(null);
         setSubscriptionStatus('inactive');
         setHasCompletedConsultation(null);
-        setIsAuthenticating(false);
       }
+      setIsAuthenticating(false);
     });
 
     return () => unsubscribe();
-  }, [authInstance, db, toast, logout, checkConsultationStatus]);
-  
+  }, [authInstance, db, checkConsultationStatus]);
 
   const signIn = useCallback(async (email: string, pass: string) => {
     if (!authInstance) throw new Error("Firebase Auth não inicializado.");
     try {
       await signInWithEmailAndPassword(authInstance, email, pass);
-      toast({ title: "Autenticado", description: "Verificando seu acesso..." });
+      // The onIdTokenChanged listener will handle setting the cookie and user state.
+      toast({ title: "Autenticado", description: "Login realizado com sucesso." });
       const redirectPath = new URLSearchParams(window.location.search).get('redirect') || '/';
       router.push(redirectPath);
     } catch (error: any) {
@@ -227,7 +211,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, [authInstance, router, toast]);
 
-
   const signUp = useCallback(async (name: string, email: string, pass: string) => {
     if (!authInstance || !db) throw new Error("Firebase Auth ou Firestore não inicializado.");
     try {
@@ -235,10 +218,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const newUser = userCredential.user;
       if (newUser) {
         await updateProfile(newUser, { displayName: name });
+        // The onIdTokenChanged listener will handle setting the user and cookie.
         const timestamp = serverTimestamp();
         await setDoc(doc(db, "consultationsMetadata", newUser.uid), { completed: false, createdAt: timestamp });
-        await setDoc(doc(db, "usuarios", newUser.uid), { createdAt: timestamp, updatedAt: timestamp, role: 'user' }, { merge: true });
+        await setDoc(doc(db, "usuarios", newUser.uid), { createdAt: timestamp, updatedAt: timestamp, role: 'user', accessibleModules: [] }, { merge: true });
         toast({ title: "Registro bem-sucedido!", description: "Sua conta foi criada. Faça login para continuar." });
+        await signOut(authInstance); // Force sign out to ensure they log in and create a session
         router.push('/login'); 
       }
     } catch (error: any) {
@@ -280,7 +265,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signIn,
     signUp,
     logout,
-    updateUserDisplayName, 
+    updateUserDisplayName,
     hasCompletedConsultation,
     checkingConsultationStatus,
     setAuthConsultationCompleted,
