@@ -152,27 +152,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           await firebaseUser.getIdToken(true); 
 
           const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, db);
-          if (status === 'inactive') {
-            if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) {
-               toast({ title: "Acesso Negado", description: "Sua assinatura não está ativa. Faça login para revalidar.", variant: "destructive", duration: 7000 });
-            }
-            await logout(false);
-          } else {
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName,
-              role,
-              accessibleModules,
-            });
-            setSubscriptionStatus(status);
-            await checkConsultationStatus(firebaseUser.uid);
-          }
+          
+          // ALWAYS set the user if firebaseUser exists, regardless of subscription status.
+          // The access control is handled by ModuleAccessGuard based on `accessibleModules`.
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            role,
+            accessibleModules, // This will be [] for inactive users, which is correct.
+          });
+          setSubscriptionStatus(status);
+          await checkConsultationStatus(firebaseUser.uid);
+          
         } catch (error) {
+          // This catch block handles cases where the token is fundamentally invalid.
+          // In this case, logging out is the correct action.
           console.error("Auth session validation failed, forcing logout.", error);
-          await logout(false);
+          await logout(false); 
         }
       } else {
+        // No firebase user, so clear all state.
         setUser(null);
         setSubscriptionStatus('inactive');
         setHasCompletedConsultation(null);
