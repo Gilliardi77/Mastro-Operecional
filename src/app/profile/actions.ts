@@ -15,39 +15,32 @@ import { PersonalInfoFormSchema, CompanyInfoFormSchema } from './schemas';
 
 // UID seguro a partir do token de autenticação
 async function getVerifiedUid(idToken: string | undefined | null): Promise<string> {
-  // Enhanced validation: Check for presence, type, and basic JWT structure.
-  if (!idToken || typeof idToken !== 'string' || idToken.split('.').length !== 3) {
-    console.error("[ProfileActions] Tentativa de verificar UID com token inválido ou malformado.");
-    throw new Error("Sua sessão parece estar inválida. Por favor, faça login novamente.");
-  }
-
   if (!adminAuth) {
-    console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado para getVerifiedUid.");
-    throw new Error("Serviço de autenticação do servidor indisponível. Tente novamente mais tarde.");
+    console.error("[ProfileActions] ERRO CRÍTICO: Firebase Admin Auth (adminAuth) não está inicializado.");
+    throw new Error("Serviço de autenticação indisponível. Tente novamente mais tarde.");
+  }
+  
+  if (!idToken) {
+    console.error("[ProfileActions] Tentativa de verificar UID com token nulo ou indefinido.");
+    throw new Error("Sessão inválida. Por favor, faça login novamente.");
   }
 
   try {
-    // The `true` argument checks if the token has been revoked.
     const decodedToken = await adminAuth.verifyIdToken(idToken, true);
     return decodedToken.uid;
   } catch (error: any) {
-    // Log detalhado para depuração no servidor
     console.error(`[ProfileActions] Falha na verificação do token de ID. Código: ${error.code}. Mensagem: ${error.message}`);
     
-    // Mensagens de erro mais amigáveis e específicas para o usuário
-    if (error.code === 'auth/id-token-revoked') {
-        throw new Error("Sua sessão foi encerrada. Por favor, faça login novamente.");
+    switch (error.code) {
+      case 'auth/id-token-revoked':
+        throw new Error("Sua sessão foi revogada. Por favor, faça login novamente.");
+      case 'auth/id-token-expired':
+        throw new Error("Sua sessão expirou. Por favor, faça login novamente.");
+      case 'auth/argument-error':
+        throw new Error("Ocorreu um erro com sua autenticação (token inválido). Por favor, saia e entre novamente.");
+      default:
+        throw new Error("Não foi possível verificar sua identidade. Por favor, faça login novamente.");
     }
-    if (error.code === 'auth/id-token-expired') {
-        throw new Error("Sua sessão expirou. Por favor, faça login novamente para continuar.");
-    }
-    if (error.code === 'auth/argument-error') {
-        // This error should now be caught by the check at the start of the function.
-        // It's kept as a fallback.
-        throw new Error("Ocorreu um erro com sua autenticação. Por favor, recarregue a página e tente novamente.");
-    }
-    // Erro genérico para outros casos
-    throw new Error("Não foi possível verificar sua identidade. Por favor, faça login novamente.");
   }
 }
 
