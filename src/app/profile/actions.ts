@@ -16,7 +16,7 @@ async function getVerifiedUid(): Promise<string> {
   
   const sessionCookie = (await cookies()).get('__session')?.value;
   if (!sessionCookie) {
-    throw new Error("Sessão não encontrada ou expirada. Por favor, faça login novamente.");
+    throw new Error("Cookie de sessão ('__session') não encontrado. O navegador pode não ter enviado a autenticação para o servidor. Por favor, faça login novamente.");
   }
 
   try {
@@ -31,7 +31,8 @@ async function getVerifiedUid(): Promise<string> {
     if (error.code === 'auth/session-cookie-revoked') {
         throw new Error("Sua sessão foi revogada. Por favor, faça login novamente.");
     }
-    throw new Error("Não foi possível verificar sua identidade. Por favor, faça login novamente.");
+    // Adiciona o erro original para mais detalhes na depuração
+    throw new Error(`Não foi possível verificar sua identidade. Detalhe: ${error.message}. Por favor, faça login novamente.`);
   }
 }
 
