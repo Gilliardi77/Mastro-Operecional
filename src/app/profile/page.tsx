@@ -23,7 +23,7 @@ type PersonalInfoFormValues = z.infer<typeof PersonalInfoFormSchema>;
 type CompanyInfoFormValues = z.infer<typeof CompanyInfoFormSchema>;
 
 export default function ProfilePage() {
-  const { user, isAuthenticating, logout } = useAuth();
+  const { user, isAuthenticating, isSessionReady, logout } = useAuth();
   const [profileLoading, setProfileLoading] = useState(true);
   const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [isSavingPersonal, setIsSavingPersonal] = useState(false);
@@ -52,7 +52,7 @@ export default function ProfilePage() {
   });
 
   const fetchProfile = useCallback(async () => {
-    if (!user) {
+    if (!user || !isSessionReady) { // Gated by session readiness
       if (isMountedRef.current) setProfileLoading(false);
       return;
     }
@@ -95,7 +95,7 @@ export default function ProfilePage() {
     } finally {
       if (isMountedRef.current) setProfileLoading(false);
     }
-  }, [user, companyForm, personalForm, toast]);
+  }, [user, isSessionReady, companyForm, personalForm, toast]);
 
   const onCompanySubmit = async (data: CompanyInfoFormValues) => {
     if (!user) {
@@ -165,14 +165,14 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    if (user && !isAuthenticating) {
+    if (user && !isAuthenticating && isSessionReady) { // <-- Added isSessionReady check
       fetchProfile();
     } else if (!isAuthenticating && !user && isMountedRef.current) {
       setProfileLoading(false);
       companyForm.reset(defaultCompanyValues);
       personalForm.reset({ displayName: "" });
     }
-  }, [user, isAuthenticating, fetchProfile]);
+  }, [user, isAuthenticating, isSessionReady, fetchProfile]);
 
 
   if (isAuthenticating && !user) {

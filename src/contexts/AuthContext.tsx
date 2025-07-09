@@ -32,7 +32,8 @@ type SubscriptionStatus = 'loading' | 'active' | 'inactive' | 'privileged';
 interface AuthContextType {
   user: User | null;
   isAuthenticating: boolean;
-  isLoggingIn: boolean; // Estado para rastrear o processo de login
+  isLoggingIn: boolean; 
+  isSessionReady: boolean; // Flag to indicate server session is established
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (name: string, email: string, pass: string) => Promise<void>;
   logout: (showToast?: boolean) => Promise<void>;
@@ -103,6 +104,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isSessionReady, setIsSessionReady] = useState(false);
   const [hasCompletedConsultation, setHasCompletedConsultation] = useState<boolean | null>(null);
   const [checkingConsultationStatus, setCheckingConsultationStatus] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('loading');
@@ -115,6 +117,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!authInstance) return;
     try {
       await signOut(authInstance);
+      await fetch('/api/auth/session', { method: 'DELETE' });
       if (showToast) {
         toast({ title: "Sessão encerrada", description: "Você foi desconectado." });
       }
@@ -125,6 +128,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        setUser(null);
        setSubscriptionStatus('inactive');
        setHasCompletedConsultation(null);
+       setIsSessionReady(false);
        router.push('/login');
     }
   }, [authInstance, router, toast]);
@@ -157,6 +161,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const unsubscribe = onIdTokenChanged(authInstance, async (firebaseUser) => {
       setIsAuthenticating(true);
+      setIsSessionReady(false); // Reset on every auth state change
       if (firebaseUser) {
         const token = await firebaseUser.getIdToken();
         const response = await fetch('/api/auth/session', {
@@ -171,6 +176,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             setIsAuthenticating(false);
             return;
         }
+
+        setIsSessionReady(true); // Signal that the server session is ready
 
         const { status, role, accessibleModules } = await performAccessCheck(firebaseUser.uid, firebaseUser.email, db);
         setUser({
@@ -187,6 +194,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(null);
         setSubscriptionStatus('inactive');
         setHasCompletedConsultation(null);
+        setIsSessionReady(false);
       }
       setIsAuthenticating(false);
     });
@@ -198,6 +206,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!authInstance) throw new Error("Firebase Auth não inicializado.");
     setIsLoggingIn(true);
     try {
+      // Don't await here in the same way, let onIdTokenChanged handle the post-login logic
       await signInWithEmailAndPassword(authInstance, email, pass);
     } catch (error: any) {
       console.error("Sign-in error:", error);
@@ -207,6 +216,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         errorMessage = "A chave de API do Firebase é inválida. Verifique sua configuração no arquivo .env.local.";
       } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
         errorMessage = "Email ou senha incorretos.";
+      } else if (error.code === 'auth/invalid-session-cookie') {
+        errorMessage = "Sua sessão é inválida. Por favor, tente novamente.";
       }
       
       toast({ title: "Falha no Login", description: errorMessage, variant: "destructive", duration: 7000 });
@@ -275,6 +286,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     user,
     isAuthenticating,
     isLoggingIn,
+    isSessionReady,
     signIn,
     signUp,
     logout,
